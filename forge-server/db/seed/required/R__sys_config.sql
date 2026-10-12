@@ -1,0 +1,2 @@
+-- Required seed data for sys_config.
+-- Keep this file idempotent and do not include local test or sensitive data.

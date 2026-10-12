@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.AiCrudConfigVersionMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfigVersion">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="config_id" property="configId"/>
+        <result column="config_key" property="configKey"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
+        <result column="version_no" property="versionNo"/>
+        <result column="version_type" property="versionType"/>
+        <result column="model_schema" property="modelSchema"/>
+        <result column="page_schema" property="pageSchema"/>
+        <result column="search_schema" property="searchSchema"/>
+        <result column="columns_schema" property="columnsSchema"/>
+        <result column="edit_schema" property="editSchema"/>
+        <result column="api_config" property="apiConfig"/>
+        <result column="options" property="options"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_datasource_snapshot" property="runtimeDatasourceSnapshot"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="primary_key_field" property="primaryKeyField"/>
+        <result column="primary_key_column" property="primaryKeyColumn"/>
+        <result column="primary_key_type" property="primaryKeyType"/>
+        <result column="tenant_strategy" property="tenantStrategy"/>
+        <result column="audit_strategy" property="auditStrategy"/>
+        <result column="logic_delete_strategy" property="logicDeleteStrategy"/>
+        <result column="publish_snapshot" property="publishSnapshot"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        config_id,
+        config_key,
+        domain_id,
+        domain_code,
+        object_code,
+        object_name,
+        version_no,
+        version_type,
+        model_schema,
+        page_schema,
+        search_schema,
+        columns_schema,
+        edit_schema,
+        api_config,
+        options,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_datasource_snapshot,
+        runtime_table_name,
+        primary_key_field,
+        primary_key_column,
+        primary_key_type,
+        tenant_strategy,
+        audit_strategy,
+        logic_delete_strategy,
+        publish_snapshot,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByConfigId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config_version
+        WHERE tenant_id = #{tenantId}
+          AND config_id = #{configId}
+        ORDER BY version_no DESC, id DESC
+    </select>
+
+    <select id="selectVersionById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config_version
+        WHERE tenant_id = #{tenantId}
+          AND config_id = #{configId}
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectVersionByNo" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config_version
+        WHERE tenant_id = #{tenantId}
+          AND config_id = #{configId}
+          AND version_no = #{versionNo}
+        ORDER BY id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectMaxVersionNo" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(version_no), 0)
+        FROM ai_crud_config_version
+        WHERE tenant_id = #{tenantId}
+          AND config_id = #{configId}
+    </select>
+
+</mapper>

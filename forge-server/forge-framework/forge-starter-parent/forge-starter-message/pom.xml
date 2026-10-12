@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mdframe.forge</groupId>
+        <artifactId>forge-starter-parent</artifactId>
+        <version>${revision}</version>
+    </parent>
+    <artifactId>forge-starter-message</artifactId>
+    <name>forge-starter-message</name>
+    <description>forge-starter-message</description>
+    
+    <dependencies>
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-starter-core</artifactId>
+        </dependency>
+        
+        <!-- SMS4J 短信 -->
+        <dependency>
+            <groupId>org.dromara.sms4j</groupId>
+            <artifactId>sms4j-spring-boot-starter</artifactId>
+        </dependency>
+        
+        <!-- SMS4J 邮件 (JDK17+) -->
+        <dependency>
+            <groupId>org.dromara.sms4j</groupId>
+            <artifactId>sms4j-email-jakarta-core</artifactId>
+        </dependency>
+    </dependencies>
+    
+
+</project>

@@ -1,0 +1,74 @@
+package com.mdframe.forge.starter.tenant.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 多租户配置属性
+ */
+@Data
+@ConfigurationProperties(prefix = "forge.tenant")
+public class TenantProperties {
+
+    /**
+     * 是否启用多租户
+     */
+    private Boolean enabled = true;
+
+    /**
+     * 租户字段名
+     */
+    private String column = "tenant_id";
+
+    /**
+     * 忽略租户的表名列表
+     * 这些表不会自动添加租户条件
+     */
+    private List<String> ignoreTables = new ArrayList<>();
+
+    /**
+     * 忽略租户的SQL关键字
+     * 包含这些关键字的SQL不会添加租户条件
+     */
+    private List<String> ignoreSqlKeywords = new ArrayList<>();
+
+    /**
+     * 是否在没有租户ID时抛出异常
+     * true: 抛出异常（严格模式）
+     * false: 记录警告日志（宽松模式）
+     */
+    private Boolean strictMode = true;
+
+    /**
+     * 是否自动检测租户字段
+     * true: 在应用启动时自动扫描数据库表结构，检测哪些表包含租户字段
+     *       不包含租户字段的表会自动跳过租户过滤
+     * false: 使用 ignoreTables 配置来指定忽略的表
+     * 默认: true（推荐）
+     */
+    private Boolean autoDetectTenantColumn = true;
+    
+    public TenantProperties() {
+        // 平台级表不按当前租户做 SQL 隔离，租户内授权由关联表控制。
+        ignoreTables.add("sys_tenant");
+        ignoreTables.add("sys_resource");
+        ignoreTables.add("sys_client");
+        ignoreTables.add("sys_region_code");
+        ignoreTables.add("sys_api_config");
+        ignoreTables.add("sys_config_group");
+        ignoreTables.add("sys_excel_column_config");
+        ignoreTables.add("sys_excel_export_config");
+        ignoreTables.add("sys_file_storage_config");
+        ignoreTables.add("sys_job_log");
+        ignoreTables.add("sys_job_config");
+        ignoreTables.add("gen_datasource");
+        ignoreTables.add("gen_table");
+        ignoreTables.add("gen_table_column");
+        ignoreTables.add("worker_node");
+        ignoreTables.add("sys_id_sequence");
+        ignoreTables.add("ai_page_template");
+    }
+}

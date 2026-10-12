@@ -1,0 +1,443 @@
+{
+  "presets": {
+    "minimal-admin": {
+      "description": "最小后台：系统权限、租户、文件、基础认证、代码生成和管理端前端。",
+      "roots": [
+        "admin-server",
+        "admin-ui",
+        "plugin-system",
+        "plugin-generator"
+      ]
+    },
+    "data-app": {
+      "description": "数据应用：minimal-admin + 数据资产/数据集模块。",
+      "roots": [
+        "admin-server",
+        "admin-ui",
+        "plugin-system",
+        "plugin-data"
+      ]
+    },
+    "ai-report": {
+      "description": "AI 数据大屏：data-app + AI、外部接口代理、报表服务和报表前端。",
+      "roots": [
+        "admin-server",
+        "report-server",
+        "admin-ui",
+        "report-ui",
+        "plugin-system",
+        "plugin-data",
+        "plugin-ai",
+        "plugin-external"
+      ]
+    },
+    "full": {
+      "description": "全量能力：保留当前 Forge 后端所有子模块和两个前端工程。",
+      "roots": [
+        "admin-server",
+        "report-server",
+        "app-server",
+        "business-core",
+        "flow-client",
+        "flow-server",
+        "admin-ui",
+        "report-ui",
+        "plugin-system",
+        "plugin-job",
+        "plugin-message",
+        "plugin-flow",
+        "plugin-generator",
+        "plugin-ai",
+        "plugin-external",
+        "plugin-data",
+        "starter-idempotent"
+      ]
+    }
+  },
+  "modules": {
+    "admin-server": {
+      "type": "server",
+      "artifactId": "forge-admin-server",
+      "path": "forge-server/forge-admin-server",
+      "dependencies": [
+        "plugin-system",
+        "starter-web",
+        "starter-auth",
+        "starter-excel",
+        "starter-config",
+        "starter-id",
+        "starter-crypto",
+        "starter-api-config"
+      ]
+    },
+    "report-server": {
+      "type": "server",
+      "artifactId": "forge-report-server",
+      "path": "forge-server/forge-report-server",
+      "dependencies": [
+        "starter-web",
+        "starter-auth",
+        "starter-orm",
+        "starter-tenant",
+        "starter-api-config",
+        "starter-crypto",
+        "plugin-system",
+        "plugin-ai",
+        "plugin-external",
+        "plugin-data"
+      ]
+    },
+    "app-server": {
+      "type": "server",
+      "artifactId": "forge-app-server",
+      "path": "forge-server/forge-app-server",
+      "dependencies": [
+        "plugin-system",
+        "starter-web",
+        "starter-auth",
+        "starter-config",
+        "starter-id",
+        "starter-crypto",
+        "plugin-message",
+        "starter-api-config"
+      ]
+    },
+    "business-core": {
+      "type": "business",
+      "artifactId": "forge-business-core",
+      "path": "forge-server/forge-business/forge-business-core",
+      "dependencies": [
+        "plugin-system",
+        "starter-web",
+        "starter-auth",
+        "starter-config",
+        "starter-id",
+        "starter-crypto",
+        "plugin-message",
+        "starter-api-config"
+      ]
+    },
+    "flow-client": {
+      "type": "flow",
+      "artifactId": "forge-flow-client",
+      "path": "forge-server/forge-flow/forge-flow-client",
+      "dependencies": []
+    },
+    "flow-server": {
+      "type": "flow",
+      "artifactId": "forge-flow-server",
+      "path": "forge-server/forge-flow/forge-flow-server",
+      "dependencies": [
+        "flow-client",
+        "plugin-flow",
+        "starter-orm",
+        "starter-tenant",
+        "starter-web",
+        "starter-auth",
+        "starter-id",
+        "plugin-ai"
+      ]
+    },
+    "plugin-system": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-system",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system",
+      "dependencies": [
+        "starter-core",
+        "starter-orm",
+        "starter-auth",
+        "starter-log",
+        "starter-trans",
+        "starter-excel",
+        "starter-file",
+        "starter-datascope",
+        "starter-tenant",
+        "starter-crypto",
+        "starter-social",
+        "starter-message"
+      ]
+    },
+    "plugin-job": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-job",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-job",
+      "dependencies": [
+        "starter-job",
+        "starter-crypto"
+      ]
+    },
+    "plugin-message": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-message",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-message",
+      "dependencies": [
+        "starter-message",
+        "starter-orm",
+        "starter-auth",
+        "plugin-system",
+        "starter-tenant"
+      ]
+    },
+    "plugin-flow": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-flow",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-flow",
+      "dependencies": [
+        "starter-core",
+        "plugin-message"
+      ]
+    },
+    "plugin-generator": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-generator",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator",
+      "dependencies": [
+        "starter-core",
+        "starter-web",
+        "starter-orm",
+        "starter-log",
+        "starter-datascope",
+        "starter-tenant",
+        "starter-crypto",
+        "starter-trans",
+        "starter-excel",
+        "starter-file",
+        "starter-job",
+        "starter-id",
+        "plugin-message",
+        "flow-client"
+      ]
+    },
+    "plugin-ai": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-ai",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-ai",
+      "dependencies": [
+        "starter-core",
+        "starter-orm",
+        "starter-auth",
+        "starter-tenant",
+        "plugin-system"
+      ]
+    },
+    "plugin-external": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-external",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-external",
+      "dependencies": [
+        "starter-core",
+        "starter-orm",
+        "starter-auth",
+        "starter-log",
+        "starter-tenant",
+        "starter-crypto",
+        "starter-cache"
+      ]
+    },
+    "plugin-data": {
+      "type": "plugin",
+      "artifactId": "forge-plugin-data",
+      "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-data",
+      "dependencies": [
+        "starter-core",
+        "starter-orm",
+        "starter-auth",
+        "starter-log",
+        "starter-tenant",
+        "starter-crypto",
+        "starter-cache"
+      ]
+    },
+    "starter-core": {
+      "type": "starter",
+      "artifactId": "forge-starter-core",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core",
+      "dependencies": []
+    },
+    "starter-orm": {
+      "type": "starter",
+      "artifactId": "forge-starter-orm",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-orm",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-web": {
+      "type": "starter",
+      "artifactId": "forge-starter-web",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-web",
+      "dependencies": []
+    },
+    "starter-cache": {
+      "type": "starter",
+      "artifactId": "forge-starter-cache",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-cache",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-auth": {
+      "type": "starter",
+      "artifactId": "forge-starter-auth",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-auth",
+      "dependencies": [
+        "starter-core",
+        "starter-cache",
+        "starter-tenant",
+        "starter-config",
+        "starter-websocket",
+        "starter-api-config",
+        "flow-client"
+      ]
+    },
+    "starter-log": {
+      "type": "starter",
+      "artifactId": "forge-starter-log",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-log",
+      "dependencies": [
+        "starter-core",
+        "starter-api-config"
+      ]
+    },
+    "starter-trans": {
+      "type": "starter",
+      "artifactId": "forge-starter-trans",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-trans",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-file": {
+      "type": "starter",
+      "artifactId": "forge-starter-file",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-file",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-excel": {
+      "type": "starter",
+      "artifactId": "forge-starter-excel",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-excel",
+      "dependencies": [
+        "starter-core",
+        "starter-trans"
+      ]
+    },
+    "starter-config": {
+      "type": "starter",
+      "artifactId": "forge-starter-config",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-config",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-job": {
+      "type": "starter",
+      "artifactId": "forge-starter-job",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-job",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-id": {
+      "type": "starter",
+      "artifactId": "forge-starter-id",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-id",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-datascope": {
+      "type": "starter",
+      "artifactId": "forge-starter-datascope",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-datascope",
+      "dependencies": [
+        "starter-core",
+        "starter-auth"
+      ]
+    },
+    "starter-message": {
+      "type": "starter",
+      "artifactId": "forge-starter-message",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-message",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-tenant": {
+      "type": "starter",
+      "artifactId": "forge-starter-tenant",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-tenant",
+      "dependencies": [
+        "starter-core",
+        "starter-orm",
+        "starter-cache",
+        "starter-api-config"
+      ]
+    },
+    "starter-crypto": {
+      "type": "starter",
+      "artifactId": "forge-starter-crypto",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-crypto",
+      "dependencies": [
+        "starter-core",
+        "starter-tenant",
+        "starter-cache",
+        "starter-api-config",
+        "starter-config"
+      ]
+    },
+    "starter-websocket": {
+      "type": "starter",
+      "artifactId": "forge-starter-websocket",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-websocket",
+      "dependencies": [
+        "starter-core"
+      ]
+    },
+    "starter-api-config": {
+      "type": "starter",
+      "artifactId": "forge-starter-api-config",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-api-config",
+      "dependencies": [
+        "starter-core",
+        "starter-trans",
+        "starter-cache",
+        "starter-orm"
+      ]
+    },
+    "starter-social": {
+      "type": "starter",
+      "artifactId": "forge-starter-social",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-social",
+      "dependencies": [
+        "starter-core",
+        "starter-trans",
+        "starter-cache",
+        "starter-auth",
+        "starter-file",
+        "starter-orm"
+      ]
+    },
+    "starter-idempotent": {
+      "type": "starter",
+      "artifactId": "forge-starter-idempotent",
+      "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-idempotent",
+      "dependencies": [
+        "starter-core",
+        "starter-cache"
+      ]
+    },
+    "admin-ui": {
+      "type": "frontend",
+      "path": "forge-admin-ui",
+      "dependencies": []
+    },
+    "report-ui": {
+      "type": "frontend",
+      "path": "forge-report-ui",
+      "dependencies": []
+    }
+  }
+}

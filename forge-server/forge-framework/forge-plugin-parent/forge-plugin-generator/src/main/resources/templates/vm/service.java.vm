@@ -1,0 +1,89 @@
+package ${packageName}.${moduleName}.service;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
+import ${packageName}.${moduleName}.dto.${className}DTO;
+#if(${isMasterDetailLayout})
+import ${packageName}.${moduleName}.dto.${className}MasterDetailDTO;
+#end
+import ${packageName}.${moduleName}.dto.${className}Query;
+import ${packageName}.${moduleName}.entity.${className};
+#if(${hasTreeConfig})
+#if(${tree.separateSource})
+import ${packageName}.${moduleName}.entity.${tree.className};
+#end
+#end
+import com.mdframe.forge.starter.core.domain.PageQuery;
+
+import java.util.List;
+#if(${isMasterDetailLayout})
+import java.util.Map;
+#end
+
+/**
+ * ${functionName}Service接口
+ * 
+ * @author ${author}
+ * @date ${datetime}
+ */
+public interface I${className}Service extends IService<${className}> {
+
+    /**
+     * 分页查询${functionName}列表
+     */
+    Page<${className}> select${className}Page(PageQuery pageQuery, ${className}Query query);
+
+    /**
+     * 查询${functionName}列表
+     */
+    List<${className}> select${className}List(${className}Query query);
+
+#if(${hasTreeConfig})
+    /**
+     * 查询${functionName}树形数据
+     */
+    List<${tree.className}> select${tree.className}Tree(String loadMode, String parentValue);
+
+#end
+    /**
+     * 根据ID查询${functionName}详情
+     */
+#if(${isMasterDetailLayout})
+    Map<String, Object> select${className}ById(${pkColumn.javaType} ${pkColumn.javaField});
+#else
+    ${className} select${className}ById(${pkColumn.javaType} ${pkColumn.javaField});
+#end
+
+    /**
+     * 新增${functionName}
+     */
+#if(${isMasterDetailLayout})
+    boolean insert${className}(${className}MasterDetailDTO dto);
+#else
+    boolean insert${className}(${className}DTO dto);
+#end
+
+    /**
+     * 修改${functionName}
+     */
+#if(${isMasterDetailLayout})
+    boolean update${className}(${className}MasterDetailDTO dto);
+#else
+    boolean update${className}(${className}DTO dto);
+#end
+
+    /**
+     * 删除${functionName}
+     */
+    boolean delete${className}ById(${pkColumn.javaType} ${pkColumn.javaField});
+
+    /**
+     * 批量删除${functionName}
+     */
+    boolean delete${className}ByIds(${pkColumn.javaType}[] ${pkColumn.javaField}s);
+
+    /**
+     * 批量导入${functionName}。导入解析在 Controller 完成，持久化与业务扩展在本事务入口执行。
+     */
+    boolean import${className}(List<${className}DTO> rows);
+}

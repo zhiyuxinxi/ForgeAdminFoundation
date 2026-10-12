@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.AiLowcodeModelMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiLowcodeModel">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="model_code" property="modelCode"/>
+        <result column="model_name" property="modelName"/>
+        <result column="model_desc" property="modelDesc"/>
+        <result column="status" property="status"/>
+        <result column="tenant_enabled" property="tenantEnabled"/>
+        <result column="master_data" property="masterData"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="table_mode" property="tableMode"/>
+        <result column="model_schema" property="modelSchema"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        domain_id,
+        domain_code,
+        model_code,
+        model_name,
+        model_desc,
+        status,
+        tenant_enabled,
+        master_data,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_table_name,
+        table_mode,
+        model_schema,
+        del_flag,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectModelPage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+        <if test="domainId != null">
+          AND domain_id = #{domainId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (
+            model_code LIKE CONCAT('%', #{keyword}, '%')
+            OR model_name LIKE CONCAT('%', #{keyword}, '%')
+            OR model_desc LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="status != null and status != ''">
+          AND status = #{status}
+        </if>
+        <if test="masterData != null">
+          AND master_data = #{masterData}
+        </if>
+        ORDER BY update_time DESC, id DESC
+    </select>
+
+    <select id="selectModelList" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+        <if test="domainId != null">
+          AND domain_id = #{domainId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND (
+            model_code LIKE CONCAT('%', #{keyword}, '%')
+            OR model_name LIKE CONCAT('%', #{keyword}, '%')
+            OR model_desc LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="status != null and status != ''">
+          AND status = #{status}
+        </if>
+        ORDER BY domain_id ASC, model_name ASC, id ASC
+    </select>
+
+    <select id="selectModelById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectByCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND domain_id = #{domainId}
+          AND model_code = #{modelCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectByModelCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND model_code = #{modelCode}
+        ORDER BY update_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="countByCode" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM ai_lowcode_model
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND domain_id = #{domainId}
+          AND model_code = #{modelCode}
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+</mapper>

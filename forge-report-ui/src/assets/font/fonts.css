@@ -1,0 +1,571 @@
+/* ============================================================
+ * 大屏设计器 - 字体统一声明
+ * 所有 @font-face 在此集中管理，字体文件位于同目录下
+ * ============================================================ */
+
+/* --- Noto Sans Hans 系列 --- */
+@font-face {
+  font-family: 'NotoSansHans-Black';
+  src: url('./NotoSansHans-Black.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-Bold';
+  src: url('./NotoSansHans-Bold.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-DemiLight';
+  src: url('./NotoSansHans-DemiLight.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-Light';
+  src: url('./NotoSansHans-Light.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-Medium';
+  src: url('./NotoSansHans-Medium.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-Regular';
+  src: url('./NotoSansHans-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'NotoSansHans-Thin';
+  src: url('./NotoSansHans-Thin.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 思源黑体 系列 --- */
+@font-face {
+  font-family: 'SourceHanSansCN-Bold';
+  src: url('./SourceHanSansCN-Bold.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-ExtraLight';
+  src: url('./SourceHanSansCN-ExtraLight.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-Heavy';
+  src: url('./SourceHanSansCN-Heavy.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-Light';
+  src: url('./SourceHanSansCN-Light.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-Medium';
+  src: url('./SourceHanSansCN-Medium.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-Normal';
+  src: url('./SourceHanSansCN-Normal.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'SourceHanSansCN-Regular';
+  src: url('./SourceHanSansCN-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 蒙纳 系列 --- */
+@font-face {
+  font-family: '蒙纳简中黑';
+  src: url('./蒙纳简中黑.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '蒙纳简优皮';
+  src: url('./蒙纳简优皮.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '蒙纳简正线';
+  src: url('./蒙纳简正线.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '蒙纳简粗黑';
+  src: url('./蒙纳简粗黑.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '蒙纳繁长宋';
+  src: url('./蒙纳繁长宋.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '蒙纳超刚黑';
+  src: url('./蒙纳超刚黑.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 方正 系列 --- */
+@font-face {
+  font-family: '方正俊黑简体';
+  src: url('./方正俊黑简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正楷体简体';
+  src: url('./方正楷体简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正流行体简体';
+  src: url('./方正流行体简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正瘦金书简体';
+  src: url('./方正瘦金书简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正粗活意简体';
+  src: url('./方正粗活意简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正颜宋简体';
+  src: url('./方正颜宋简体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正颜宋简体_中';
+  src: url('./方正颜宋简体_中.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正颜宋简体_大';
+  src: url('./方正颜宋简体_大.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正颜宋简体_纤';
+  src: url('./方正颜宋简体_纤.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正有猫在简体';
+  src: url('./方正有猫在简体.tff') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正字迹-仿欧简体';
+  src: url('./方正字迹-仿欧简体.tff') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正明尚简体';
+  src: url('./方正明尚简体.tff') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正行黑简体';
+  src: url('./方正行黑简体.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '方正特雅宋简体';
+  src: url('./方正特雅宋简体.TTF') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 汉仪 系列 --- */
+@font-face {
+  font-family: '汉仪PP体简';
+  src: url('./汉仪PP体简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪中圆简';
+  src: url('./汉仪中圆简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪中宋简';
+  src: url('./汉仪中宋简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪中楷简';
+  src: url('./汉仪中楷简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪中隶书简';
+  src: url('./汉仪中隶书简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪字典宋简';
+  src: url('./汉仪字典宋简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪竹节体简';
+  src: url('./汉仪竹节体简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '汉仪综艺体简';
+  src: url('./汉仪综艺体简.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 创意字体 --- */
+@font-face {
+  font-family: '不齐幻化体';
+  src: url('./不齐幻化体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '书信体';
+  src: url('./书信体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '京都和风体';
+  src: url('./京都和风体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '俏黑漂游体';
+  src: url('./俏黑漂游体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '壹心手书';
+  src: url('./壹心手书.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '布丁悠扬体';
+  src: url('./布丁悠扬体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '文宋体';
+  src: url('./文宋体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '新楷書体';
+  src: url('./新楷書体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '正文宋楷';
+  src: url('./正文宋楷.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '江汉手书';
+  src: url('./江汉手书.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '星愿涟漪体';
+  src: url('./星愿涟漪体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '机械飘旋体';
+  src: url('./机械飘旋体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '正酷海潮体';
+  src: url('./正酷海潮体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '正酷空灵体';
+  src: url('./正酷空灵体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '潮玩嬉戏体';
+  src: url('./潮玩嬉戏体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '白鹤新风体';
+  src: url('./白鹤新风体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '综艺扇影体';
+  src: url('./综艺扇影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '雅宋漂泊体';
+  src: url('./雅宋漂泊体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '飞驰标题体';
+  src: url('./飞驰标题体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '飞鸟简雅黑';
+  src: url('./飞鸟简雅黑.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '江户川招牌体';
+  src: url('./江户川招牌体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- 新增创意字体 --- */
+@font-face {
+  font-family: '新潮幻影体';
+  src: url('./新潮幻影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '梦幻童话体';
+  src: url('./梦幻童话体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '飞驰影响体';
+  src: url('./飞驰影响体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '新潮飞飞体';
+  src: url('./新潮飞飞体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '快乐空观体';
+  src: url('./快乐空观体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '创粗面影体';
+  src: url('./创粗面影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '无外漂浮体';
+  src: url('./无外漂浮体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '小恐龙影体';
+  src: url('./小恐龙影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '正酷空前体';
+  src: url('./正酷空前体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '随风手刻体';
+  src: url('./随风手刻体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '简雅虚影体';
+  src: url('./简雅虚影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '萌兔趣味体';
+  src: url('./萌兔趣味体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '星岩月影体';
+  src: url('./星岩月影体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '创中影音体';
+  src: url('./创中影音体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '镇魂手书';
+  src: url('./镇魂手书.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: '浪漫情书体';
+  src: url('./浪漫情书体.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}

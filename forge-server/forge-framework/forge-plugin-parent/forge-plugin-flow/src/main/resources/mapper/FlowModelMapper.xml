@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowModelMapper">
+
+    <resultMap id="JobFlowBindingResultMap" type="com.mdframe.forge.starter.job.flow.JobFlowBindingSnapshot">
+        <constructor>
+            <arg column="model_key" javaType="java.lang.String"/>
+            <arg column="model_version" javaType="java.lang.Integer"/>
+            <arg column="deployment_id" javaType="java.lang.String"/>
+            <arg column="process_definition_id" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <!-- 分页查询流程模型（支持父级分类查询子级数据） -->
+    <select id="selectModelPage" resultType="com.mdframe.forge.starter.flow.entity.FlowModel">
+        SELECT m.*, c.category_name AS category_name
+        FROM sys_flow_model m
+        LEFT JOIN sys_flow_category c ON c.id = m.category
+        <where>
+            m.del_flag = '0'
+            <if test="modelName != null and modelName != ''">
+                AND (
+                    m.model_name LIKE CONCAT('%', #{modelName}, '%')
+                    OR m.model_key LIKE CONCAT('%', #{modelName}, '%')
+                )
+            </if>
+            <if test="category != null and category != ''">
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
+            </if>
+            <if test="status != null">
+                AND m.status = #{status}
+            </if>
+            <if test="createBy != null and createBy != ''">
+                AND m.create_by = #{createBy}
+            </if>
+        </where>
+        ORDER BY m.create_time DESC
+    </select>
+
+    <!-- 流程模型状态统计（与分页查询保持同一筛选范围，不按状态过滤） -->
+    <select id="selectStatusStatistics" resultType="java.util.Map">
+        SELECT
+            COUNT(1) AS total,
+            COALESCE(SUM(CASE WHEN m.status = 0 THEN 1 ELSE 0 END), 0) AS designing,
+            COALESCE(SUM(CASE WHEN m.status = 1 THEN 1 ELSE 0 END), 0) AS deployed,
+            COALESCE(SUM(CASE WHEN m.status = 2 THEN 1 ELSE 0 END), 0) AS suspended,
+            COALESCE(SUM(CASE WHEN m.status = 3 THEN 1 ELSE 0 END), 0) AS disabled
+        FROM sys_flow_model m
+        <where>
+            m.del_flag = '0'
+            <if test="modelName != null and modelName != ''">
+                AND (
+                    m.model_name LIKE CONCAT('%', #{modelName}, '%')
+                    OR m.model_key LIKE CONCAT('%', #{modelName}, '%')
+                )
+            </if>
+            <if test="category != null and category != ''">
+                AND (
+                    m.category = #{category}
+                    OR EXISTS (
+                        SELECT 1
+                        FROM sys_flow_category fc
+                        JOIN sys_flow_category selected ON selected.id = #{category} OR selected.category_code = #{category}
+                        WHERE (fc.id = m.category OR fc.category_code = m.category)
+                          AND (fc.id = selected.id OR fc.ancestors LIKE CONCAT('%', selected.id, '/%'))
+                    )
+                )
+            </if>
+            <if test="createBy != null and createBy != ''">
+                AND m.create_by = #{createBy}
+            </if>
+        </where>
+    </select>
+
+    <select id="selectByModelKey" resultType="com.mdframe.forge.starter.flow.entity.FlowModel">
+        SELECT m.*
+        FROM sys_flow_model m
+        WHERE m.model_key = #{modelKey}
+          AND m.del_flag = 0
+        ORDER BY m.create_time DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledModels" resultType="com.mdframe.forge.starter.flow.entity.FlowModel">
+        SELECT m.id,
+               m.tenant_id,
+               m.model_key,
+               m.model_name,
+               m.description,
+               m.category,
+               m.flow_type,
+               m.designer_type,
+               m.form_type,
+               m.form_id,
+               m.form_json,
+               m.bpmn_xml,
+               m.version,
+               m.process_definition_id,
+               m.deployment_id,
+               m.deployment_key,
+               m.notify_type,
+               m.webhook_url,
+               m.todo_detail_url_template,
+               m.notify_config,
+               m.status,
+               m.importance_level,
+               m.deploy_time,
+               m.last_update_by,
+               m.create_by,
+               m.create_time,
+               m.update_time,
+               m.del_flag
+        FROM sys_flow_model m
+        WHERE m.tenant_id = #{tenantId}
+          AND m.status = 1
+          AND m.del_flag = 0
+        <if test="category != null and category != ''">
+            AND m.category = #{category}
+        </if>
+        ORDER BY m.create_time DESC, m.id ASC
+    </select>
+
+    <select id="selectPublishedJobBinding" resultMap="JobFlowBindingResultMap">
+        SELECT m.model_key,
+               v.version AS model_version,
+               v.deployment_id,
+               v.process_definition_id
+        FROM sys_flow_model m
+        INNER JOIN sys_flow_model_version v
+                ON v.model_id = m.id
+               AND v.tenant_id = m.tenant_id
+               AND v.del_flag = 0
+        WHERE m.tenant_id = #{tenantId}
+          AND m.model_key = #{modelKey}
+          AND m.status = 1
+          AND m.del_flag = 0
+          AND v.version = #{modelVersion}
+          AND v.publish_time IS NOT NULL
+          AND v.deployment_id IS NOT NULL
+          AND v.deployment_id &lt;&gt; ''
+          AND v.process_definition_id IS NOT NULL
+          AND v.process_definition_id &lt;&gt; ''
+        LIMIT 1
+    </select>
+
+</mapper>

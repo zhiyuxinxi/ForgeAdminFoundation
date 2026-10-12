@@ -1,0 +1,20 @@
+<template>
+  <LowcodeRuntimePage
+    class="${configKey}-page"
+#if($localeNamespace)
+    :aria-label="t('business.${localeNamespace}.title')"
+#end
+    :runtime-config="runtimeConfig"
+    :sync-document-title="false"
+  />
+</template>
+
+<script setup>
+import LowcodeRuntimePage from '@/components/lowcode-runtime/LowcodeRuntimePage.vue'
+import runtimeConfig from './runtime-config.json'
+#if($localeNamespace)
+import { t } from '@/locales'
+#end
+
+defineOptions({ name: '${componentName}' })
+</script>

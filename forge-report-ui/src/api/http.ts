@@ -1,0 +1,376 @@
+import { uiText } from '@/i18n/display'
+import axiosInstance from './axios'
+import {
+  RequestHttpEnum,
+  ContentTypeEnum,
+  RequestBodyEnum,
+  RequestDataTypeEnum,
+  RequestContentTypeEnum,
+  RequestParamsObjType
+} from '@/enums/httpEnum'
+import type { RequestGlobalConfigType, RequestConfigType } from '@/store/modules/chartEditStore/chartEditStore.d'
+import { resolveDynamicRequestParams } from '@/utils/requestDynamicParams'
+import type { DynamicPageContext, DynamicParamComponent } from '@/utils/requestDynamicParams'
+import { queryDataDataset } from './data/dataset'
+
+export const get = (url: string, params?: object) => {
+  return axiosInstance({
+    url: url,
+    method: RequestHttpEnum.GET,
+    params: params
+  })
+}
+
+export const post = (url: string, data?: object, headersType?: string) => {
+  return axiosInstance({
+    url: url,
+    method: RequestHttpEnum.POST,
+    data: data,
+    headers: {
+      'Content-Type': headersType || ContentTypeEnum.JSON
+    }
+  })
+}
+
+export const patch = (url: string, data?: object, headersType?: string) => {
+  return axiosInstance({
+    url: url,
+    method: RequestHttpEnum.PATCH,
+    data: data,
+    headers: {
+      'Content-Type': headersType || ContentTypeEnum.JSON
+    }
+  })
+}
+
+export const put = (url: string, data?: object, headersType?: ContentTypeEnum) => {
+  return axiosInstance({
+    url: url,
+    method: RequestHttpEnum.PUT,
+    data: data,
+    headers: {
+      'Content-Type': headersType || ContentTypeEnum.JSON
+    }
+  })
+}
+
+export const del = (url: string, params?: object) => {
+  return axiosInstance({
+    url: url,
+    method: RequestHttpEnum.DELETE,
+    params
+  })
+}
+
+// 获取请求函数，默认get
+export const http = (type?: RequestHttpEnum) => {
+  switch (type) {
+    case RequestHttpEnum.GET:
+      return get
+
+    case RequestHttpEnum.POST:
+      return post
+
+    case RequestHttpEnum.PATCH:
+      return patch
+
+    case RequestHttpEnum.PUT:
+      return put
+
+    case RequestHttpEnum.DELETE:
+      return del
+
+    default:
+      return get
+  }
+}
+const prefix = 'javascript:'
+const toPlainObject = (target?: Record<string, unknown>) => {
+  if (!target) return {}
+  return JSON.parse(JSON.stringify(target)) as Record<string, unknown>
+}
+
+const mergeDefinedObjects = (...items: Record<string, unknown>[]) => {
+  const result: Record<string, unknown> = {}
+  items.forEach(item => {
+    Object.keys(item).forEach(key => {
+      const value = item[key]
+      if (value !== undefined && value !== null && value !== '') {
+        result[key] = value
+      }
+    })
+  })
+  return result
+}
+
+// 对输入字符进行转义处理
+export const translateStr = (target: string | object) => {
+  if (typeof target === 'string') {
+    if (target.startsWith(prefix)) {
+      const funcStr = target.split(prefix)[1]
+      let result;
+      try {
+        result = new Function(`${funcStr}`)()
+      } catch (error) {
+        console.log(error)
+        window['$message'].error(uiText("js内容解析有误！"))
+      }
+      return result
+    } else {
+      return target
+    }
+  }
+  for (const key in target) {
+    if (Object.prototype.hasOwnProperty.call(target, key)) {
+      const subTarget = (target as any)[key];
+      (target as any)[key] = translateStr(subTarget)
+    }
+  }
+  return target
+}
+
+/**
+ * * 自定义请求
+ * @param targetParams 当前组件参数
+ * @param globalParams 全局参数
+ */
+export const customizeHttp = async (
+  targetParams: RequestConfigType,
+  globalParams: RequestGlobalConfigType,
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
+) => {
+  if (!targetParams || !globalParams) {
+    return
+  }
+
+  // 判断接口来源
+  const requestSource = targetParams.requestSource || 'internal'
+
+  // 静态数据不发起请求
+  if (targetParams.requestDataType === RequestDataTypeEnum.STATIC) return
+  
+  // 数据集模式
+  if (targetParams.requestDataType === RequestDataTypeEnum.DATASET) {
+    return datasetRequest(targetParams, componentList, pageContext)
+  }
+  
+  // 外部接口：通过代理转发
+  if (requestSource === 'external' && targetParams.externalApiId) {
+    return externalProxyRequest(targetParams, componentList, pageContext)
+  }
+
+  // 内部接口：原有逻辑
+  // 全局
+  const {
+    // 全局请求源地址
+    requestOriginUrl,
+    // 全局请求内容
+    requestParams: globalRequestParams
+  } = globalParams
+
+  // 目标组件（优先级 > 全局组件）
+  const {
+    // 请求地址
+    requestUrl,
+    // 普通 / sql
+    requestContentType,
+    // 获取数据的方式
+    requestDataType,
+    // 请求方式 get/post/del/put/patch
+    requestHttpType,
+    // 请求体类型 none / form-data / x-www-form-urlencoded / json /xml
+    requestParamsBodyType,
+    // SQL 请求对象
+    requestSQLContent,
+    // 请求内容 params / cookie / header / body: 同 requestParamsBodyType
+    requestParams: targetRequestParams
+  } = targetParams
+
+  if (!requestUrl) {
+    return
+  }
+
+  // 处理头部
+  let headers: RequestParamsObjType = {
+    ...globalRequestParams.Header,
+    ...targetRequestParams.Header
+  }
+  headers = translateStr(headers)
+  const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
+  headers = {
+    ...headers,
+    ...dynamicParams.Header
+  } as RequestParamsObjType
+
+  // data 参数
+  let data: RequestParamsObjType | FormData | string = {}
+  // params 参数
+  let params: RequestParamsObjType = { ...targetRequestParams.Params }
+  params = translateStr(params)
+  params = {
+    ...params,
+    ...dynamicParams.Params
+  } as RequestParamsObjType
+  // form 类型处理
+  let formData: FormData = new FormData()
+  // 类型处理
+
+  switch (requestParamsBodyType) {
+    case RequestBodyEnum.NONE:
+      break
+
+    case RequestBodyEnum.JSON:
+      headers['Content-Type'] = ContentTypeEnum.JSON
+      //json对象也能使用'javasctipt:'来动态拼接参数
+      data = translateStr(targetRequestParams.Body['json'])
+      if(typeof data === 'string')  data = JSON.parse(data)
+      // json 赋值给 data
+      break
+
+    case RequestBodyEnum.XML:
+      headers['Content-Type'] = ContentTypeEnum.XML
+      // xml 字符串赋值给 data
+      data = translateStr(targetRequestParams.Body['xml'])
+      break
+
+    case RequestBodyEnum.X_WWW_FORM_URLENCODED: {
+      headers['Content-Type'] = ContentTypeEnum.FORM_URLENCODED
+      const bodyFormData = targetRequestParams.Body['x-www-form-urlencoded']
+      for (const i in bodyFormData) formData.set(i, translateStr(bodyFormData[i]))
+      Object.keys(dynamicParams.Body).forEach(key => formData.set(key, dynamicParams.Body[key] as string))
+      // FormData 赋值给 data
+      data = formData
+      break
+    }
+
+    case RequestBodyEnum.FORM_DATA: {
+      headers['Content-Type'] = ContentTypeEnum.FORM_DATA
+      const bodyFormUrlencoded = targetRequestParams.Body['form-data']
+      for (const i in bodyFormUrlencoded) {
+        formData.set(i, translateStr(bodyFormUrlencoded[i]))
+      }
+      Object.keys(dynamicParams.Body).forEach(key => formData.set(key, dynamicParams.Body[key] as string))
+      // FormData 赋值给 data
+      data = formData
+      break
+    }
+  }
+
+  if (!(data instanceof FormData) && Object.keys(dynamicParams.Body).length) {
+    if (typeof data === 'string') {
+      data = data ? JSON.parse(data) : {}
+    }
+    data = {
+      ...(data as RequestParamsObjType),
+      ...dynamicParams.Body
+    } as RequestParamsObjType
+  }
+
+  // sql 处理
+  if (requestContentType === RequestContentTypeEnum.SQL) {
+    headers['Content-Type'] = ContentTypeEnum.JSON
+    data = requestSQLContent
+  }
+
+  try {
+    const url =  (new Function("return `" + `${requestOriginUrl}${requestUrl}`.trim() + "`"))();
+    return axiosInstance({
+        url,
+        method: requestHttpType,
+        data,
+        params,
+        headers
+    })
+  } catch (error) {
+    console.log(error)
+    window['$message'].error(uiText("URL地址格式有误！"))
+  }
+}
+
+/**
+ * * 外部接口代理请求
+ * @param targetParams 当前组件参数
+ */
+const externalProxyRequest = async (
+  targetParams: RequestConfigType,
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
+) => {
+  const { externalApiId } = targetParams
+  
+  if (!externalApiId) {
+    window['$message'].error(uiText("未选择外部接口"))
+    return
+  }
+
+  try {
+    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
+    const proxyParams = mergeDefinedObjects(
+      toPlainObject(dynamicParams.Params),
+      toPlainObject(dynamicParams.Header),
+      toPlainObject(dynamicParams.Body)
+    )
+    return axiosInstance({
+      url: `/forge-report-api/external/proxy/${externalApiId}`,
+      method: RequestHttpEnum.POST,
+      data: proxyParams,
+      headers: {
+        'Content-Type': ContentTypeEnum.JSON
+      }
+    })
+  } catch (error) {
+    console.log(error)
+    window['$message'].error(uiText("外部接口请求失败"))
+  }
+}
+
+/**
+ * * 数据集查询请求
+ * @param targetParams 当前组件参数
+ * @param componentList 组件列表
+ */
+const datasetRequest = async (
+  targetParams: RequestConfigType,
+  componentList: DynamicParamComponent[] = [],
+  pageContext?: DynamicPageContext
+) => {
+  const {
+    datasetId,
+    datasetFields,
+    datasetParams: baseDatasetParams,
+    datasetPageNum,
+    datasetPageSize,
+    datasetMaxRows,
+    datasetOutputMode
+  } = targetParams
+  
+  if (!datasetId) {
+    window['$message'].error(uiText("未选择数据集"))
+    return
+  }
+
+  try {
+    const dynamicParams = await resolveDynamicRequestParams(targetParams.dynamicRequestParams, componentList, pageContext)
+    const datasetParams = mergeDefinedObjects(
+      toPlainObject(baseDatasetParams),
+      toPlainObject(dynamicParams.Params),
+      toPlainObject(dynamicParams.Body)
+    )
+    
+    const result = await queryDataDataset({
+      datasetId,
+      params: datasetParams,
+      fields: datasetFields,
+      pageNum: datasetPageNum || 1,
+      pageSize: datasetPageSize || datasetMaxRows || 50,
+      maxRows: datasetMaxRows,
+      outputMode: datasetOutputMode || 'ECHARTS_DATASET'
+    })
+    
+    return result
+  } catch (error) {
+    console.log(error)
+    window['$message'].error(uiText("数据集查询失败"))
+  }
+}

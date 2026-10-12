@@ -1,0 +1,18 @@
+/**
+ * 主题样式变量
+ */
+:root {
+  --primary-color: #1677ff;
+  --primary-strong: #0958d9;
+  --accent-color: #1677ff;
+  --page-bg: #f5f6f8;
+  --surface-color: #ffffff;
+  --surface-muted: #f7f8fa;
+  --text-color: #1f2329;
+  --text-strong: #1f2329;
+  --text-muted: #86909c;
+  --border-color: #e5e6eb;
+  --radius-control: 12rpx;
+  --radius-card: 16rpx;
+  --shadow-soft: 0 8rpx 20rpx rgba(31, 35, 41, 0.04);
+}

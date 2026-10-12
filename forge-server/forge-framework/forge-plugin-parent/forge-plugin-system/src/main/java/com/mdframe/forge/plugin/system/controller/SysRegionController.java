@@ -1,0 +1,133 @@
+package com.mdframe.forge.plugin.system.controller;
+
+import com.mdframe.forge.plugin.system.dto.SysRegionDTO;
+import com.mdframe.forge.plugin.system.entity.SysRegion;
+import com.mdframe.forge.plugin.system.service.ISysRegionService;
+import com.mdframe.forge.plugin.system.vo.SysRegionTreeVO;
+import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
+import com.mdframe.forge.starter.core.annotation.crypto.ApiEncrypt;
+import com.mdframe.forge.starter.core.domain.RespInfo;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * 行政区划管理Controller
+ */
+@RestController
+@RequestMapping("/system/region")
+@RequiredArgsConstructor
+@ApiDecrypt
+@ApiEncrypt
+@ApiPermissionIgnore
+public class SysRegionController {
+
+    private final ISysRegionService regionService;
+
+    /**
+     * 获取行政区划树形结构
+     */
+    @GetMapping("/tree")
+    public RespInfo<List<SysRegionTreeVO>> tree() {
+        List<SysRegionTreeVO> tree = regionService.selectRegionTree();
+        return RespInfo.success(tree);
+    }
+
+    /**
+     * 根据code获取详情
+     */
+    @GetMapping("/{code}")
+    public RespInfo<SysRegion> getByCode(@PathVariable String code) {
+        SysRegion region = regionService.selectRegionByCode(code);
+        return RespInfo.success(region);
+    }
+
+    /**
+     * 新增行政区划
+     */
+    @PostMapping("/")
+    public RespInfo<Void> add(@RequestBody SysRegionDTO dto) {
+        assertPlatformAdmin();
+        boolean result = regionService.insertRegion(dto);
+        return result ? RespInfo.success() : RespInfo.error("新增失败");
+    }
+
+    /**
+     * 更新行政区划
+     */
+    @PutMapping("/")
+    public RespInfo<Void> edit(@RequestBody SysRegionDTO dto) {
+        assertPlatformAdmin();
+        boolean result = regionService.updateRegion(dto);
+        return result ? RespInfo.success() : RespInfo.error("更新失败");
+    }
+
+    /**
+     * 删除行政区划
+     */
+    @DeleteMapping("/{code}")
+    public RespInfo<Void> remove(@PathVariable String code) {
+        assertPlatformAdmin();
+        boolean result = regionService.deleteRegionByCode(code);
+        return result ? RespInfo.success() : RespInfo.error("删除失败");
+    }
+
+    /**
+     * 获取子级列表
+     */
+    @GetMapping("/children/{parentCode}")
+    public RespInfo<List<SysRegion>> getChildren(@PathVariable String parentCode) {
+        List<SysRegion> children = regionService.selectChildrenByParentCode(parentCode);
+        return RespInfo.success(children);
+    }
+
+    /**
+     * 获取子级VO列表（懒加载）
+     */
+    @GetMapping("/childrenVO/{parentCode}")
+    public RespInfo<List<SysRegionTreeVO>> getChildrenVO(@PathVariable String parentCode) {
+        List<SysRegionTreeVO> children = regionService.selectChildrenVOByParentCode(parentCode);
+        return RespInfo.success(children);
+    }
+
+    /**
+     * 搜索行政区划
+     */
+    @GetMapping("/search")
+    public RespInfo<List<SysRegion>> search(@RequestParam String name) {
+        List<SysRegion> regions = regionService.searchRegionByName(name);
+        return RespInfo.success(regions);
+    }
+
+    /**
+     * 根据rootCode获取完整行政区划树（含虚拟组织）
+     * 用于org.vue和user.vue页面，一次性加载指定rootCode下的完整区划树
+     *
+     * @param rootCode   根区域编码，不传时跟随当前用户行政区划/数据权限
+     * @param dataRight  是否启用数据权限过滤，默认true
+     */
+    @GetMapping("/treeAll")
+    public RespInfo<List<SysRegionTreeVO>> treeAll(
+            @RequestParam(required = false) String rootCode,
+            @RequestParam(defaultValue = "true") Boolean dataRight) {
+        List<SysRegionTreeVO> tree = regionService.selectRegionTreeAll(rootCode, dataRight);
+        return RespInfo.success(tree);
+    }
+
+    /**
+     * 刷新行政区划树缓存
+     */
+    @PostMapping("/refreshCache")
+    public RespInfo<Void> refreshCache() {
+        assertPlatformAdmin();
+        regionService.refreshRegionTreeCache();
+        return RespInfo.success();
+    }
+
+    private void assertPlatformAdmin() {
+        SessionHelper.assertAdmin("只有超级管理员可以维护行政区划");
+    }
+}

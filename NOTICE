@@ -1,0 +1,18 @@
+Forge Admin Foundation - modified public distribution
+Maintained by zhiyuxinxi and contributors.
+
+Based on Forge Admin by its original authors and contributors:
+https://github.com/yaomindong1996/forge-admin
+Original source license: Apache License, Version 2.0.
+Existing source-level copyright and author notices are retained.
+
+This repository is a modified downstream distribution containing low-code,
+workflow, internationalization, and foundation maintenance changes. Source
+files inherited from the maintained downstream baseline may differ from upstream.
+
+Changes made specifically for this public distribution: internal records and
+assistant state excluded; infrastructure examples and credentials sanitized;
+historical data removed from SQL dumps; fresh local-demo identities provided;
+public documentation added. Private Git history is not included.
+
+Third-party dependencies and bundled assets retain their respective licenses.

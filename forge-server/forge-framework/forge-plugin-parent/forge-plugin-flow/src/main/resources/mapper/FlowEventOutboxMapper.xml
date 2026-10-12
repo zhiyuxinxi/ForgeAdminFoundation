@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowEventOutboxMapper">
+    <resultMap id="outboxEntry" type="com.mdframe.forge.starter.flow.event.FlowEventOutboxEntry">
+        <constructor>
+            <idArg column="event_id" javaType="java.lang.String"/>
+            <arg column="tenant_id" javaType="java.lang.Long"/>
+            <arg column="process_instance_id" javaType="java.lang.String"/>
+            <arg column="event_type" javaType="java.lang.String"/>
+            <arg column="process_def_key" javaType="java.lang.String"/>
+            <arg column="destination_type" javaType="java.lang.String"/>
+            <arg column="destination" javaType="java.lang.String"/>
+            <arg column="payload" javaType="java.lang.String"/>
+            <arg column="created_at" javaType="java.time.LocalDateTime"/>
+        </constructor>
+    </resultMap>
+    <insert id="insert">
+        INSERT INTO sys_flow_event_outbox
+        (event_id, tenant_id, process_instance_id, event_type, process_def_key,
+         destination_type, destination, payload, created_at, delivery_status)
+        VALUES (#{eventId}, #{tenantId}, #{processInstanceId}, #{eventType}, #{processDefKey},
+                #{destinationType}, #{destination}, #{payload}, #{createdAt}, 'RECORDED')
+    </insert>
+    <select id="selectRecorded" resultMap="outboxEntry">
+        SELECT event_id, tenant_id, process_instance_id, event_type, process_def_key,
+               destination_type, destination, payload, created_at
+        FROM sys_flow_event_outbox
+        WHERE tenant_id = #{tenantId} AND event_id = #{eventId} AND delivery_status = 'RECORDED'
+    </select>
+</mapper>

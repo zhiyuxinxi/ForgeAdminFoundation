@@ -1,0 +1,46 @@
+{
+  "migrationDir": "../../db/migration",
+  "seedDir": "../../db/seed",
+  "exportDir": "../../db/community-export",
+  "allowTables": [
+    "sys_resource",
+    "sys_dict",
+    "sys_config",
+    "sys_role",
+    "sys_role_resource",
+    "ai_provider_template",
+    "ai_agent",
+    "ai_model",
+    "data_business_template",
+    "dashboard_template"
+  ],
+  "denyTables": [
+    "sys_user",
+    "sys_user_role",
+    "ai_chat_record",
+    "ai_chat_session",
+    "ai_dashboard_generate_record"
+  ],
+  "sensitiveColumns": [
+    "password",
+    "token",
+    "secret",
+    "key",
+    "phone",
+    "email",
+    "access_key",
+    "secret_key"
+  ],
+  "sensitivePatterns": [
+    "AKIA[0-9A-Z]{16}",
+    "sk-[A-Za-z0-9_-]{20,}",
+    "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}",
+    "1[3-9][0-9]{9}"
+  ],
+  "testDataFilters": [
+    "test",
+    "demo_local",
+    "mock",
+    "tmp"
+  ]
+}

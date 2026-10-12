@@ -1,0 +1,2 @@
+com.mdframe.forge.starter.cache.config.RedissonConfig
+com.mdframe.forge.starter.cache.managed.config.ManagedCacheAutoConfiguration

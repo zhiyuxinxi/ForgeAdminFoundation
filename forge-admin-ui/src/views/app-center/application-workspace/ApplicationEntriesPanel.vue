@@ -1,0 +1,373 @@
+<template>
+  <div class="entries-panel">
+    <header class="panel-heading">
+      <div>
+        <h2>{{ translateUiText("页面入口") }}</h2>
+        <p>{{ translateUiText("集中管理表单、列表、详情、外部页面和移动端等访问入口。") }}</p>
+      </div>
+      <n-button type="primary" @click="openCreate">
+        {{ translateUiText("新增访问入口") }}
+      </n-button>
+    </header>
+
+    <n-spin :show="loading">
+      <n-empty v-if="!loading && !entries.length" class="entries-empty" :description="translateUiText(&quot;当前应用还没有访问入口&quot;)">
+        <template #extra>
+          <n-button type="primary" @click="openCreate">
+            {{ translateUiText("创建第一个入口") }}
+          </n-button>
+        </template>
+      </n-empty>
+      <div v-else class="entry-table">
+        <div class="entry-row entry-row-head">
+          <span>{{ translateUiText("入口名称") }}</span>
+          <span>{{ translateUiText("类型") }}</span>
+          <span>{{ translateUiText("业务对象") }}</span>
+          <span>{{ translateUiText("状态") }}</span>
+          <span>{{ translateUiText("最近更新") }}</span>
+          <span>{{ translateUiText("操作") }}</span>
+        </div>
+        <div v-for="item in entries" :key="item.id" class="entry-row">
+          <div class="entry-name">
+            <strong :title="entryDisplayName(item)">{{ entryDisplayName(item) }}</strong>
+            <small v-if="item.description">{{ item.description }}</small>
+          </div>
+          <DictTag dict-type="ai_business_app_entry_mode" :value="item.entryMode" :bordered="false" />
+          <span>{{ item.objectName || item.objectCode || '-' }}</span>
+          <DictTag dict-type="sys_enable_disable" :value="item.status" :bordered="false" />
+          <span>{{ item.updateTime || '-' }}</span>
+          <div class="entry-actions">
+            <a class="cursor-pointer text-primary" @click="openEntry(item)">{{ translateUiText("打开") }}</a>
+            <a v-if="item.objectCode" class="cursor-pointer text-info" @click="openEntryDesigner(item)">{{ translateUiText("设计页面") }}</a>
+            <a class="cursor-pointer text-primary" @click="openEdit(item)">{{ translateUiText("编辑") }}</a>
+            <a
+              :class="item.status === 1 ? 'text-warning' : 'text-success'"
+              class="cursor-pointer"
+              @click="toggleStatus(item)"
+            >
+              {{ item.status === 1 ? translateUiText("停用") : translateUiText("启用") }}
+            </a>
+            <a class="cursor-pointer text-error" @click="confirmDelete(item)">{{ translateUiText("删除") }}</a>
+          </div>
+        </div>
+      </div>
+    </n-spin>
+
+    <AppEntryWizard
+      v-model:show="wizardVisible"
+      :app="wizardEntry"
+      :suites="workspaceSuites"
+      :application-id="application?.id"
+      :default-suite-code="application?.suiteCode"
+      :objects="applicationObjects"
+      :application-pages="applicationPages"
+      lock-suite
+      @saved="handleSaved"
+    />
+  </div>
+</template>
+
+<script setup>
+import { formatUiText } from '@/locales'
+
+import { localizeLabel as translateUiText } from '@/locales'
+
+import { useDialog, useMessage } from 'naive-ui'
+import { computed, ref, watch } from 'vue'
+import { businessAppList, deleteBusinessApp, updateBusinessAppStatus } from '@/api/business-app'
+import DictTag from '@/components/DictTag.vue'
+import { buildEntryOpenUrl } from '../components/app-entry-targets'
+import AppEntryWizard from '../components/AppEntryWizard.vue'
+import { normalizeInAppBuilder } from '../in-app-builder/in-app-builder-schema'
+
+const props = defineProps({
+  application: {
+    type: Object,
+    default: null,
+  },
+  initialEntries: {
+    type: Array,
+    default: null,
+  },
+  applicationObjects: {
+    type: Array,
+    default: () => [],
+  },
+})
+
+const emit = defineEmits(['changed', 'openDesigner'])
+const message = useMessage()
+const dialog = useDialog()
+const loading = ref(false)
+const entries = ref([])
+const wizardVisible = ref(false)
+const editingEntry = ref(null)
+
+const workspaceSuites = computed(() => props.application
+  ? [{
+      suiteCode: props.application.suiteCode,
+      suiteName: props.application.suiteName || props.application.suiteCode,
+    }]
+  : [])
+const applicationPages = computed(() => normalizeInAppBuilder(
+  props.application?.options,
+  props.application,
+  props.applicationObjects,
+).nodes)
+
+const wizardEntry = computed(() => editingEntry.value || {
+  applicationId: props.application?.id,
+  suiteCode: props.application?.suiteCode,
+})
+
+watch([
+  () => props.application?.id,
+  () => props.initialEntries,
+], ([applicationId, initialEntries]) => {
+  if (!applicationId)
+    return
+  if (Array.isArray(initialEntries)) {
+    entries.value = [...initialEntries]
+    return
+  }
+  loadEntries()
+}, { immediate: true })
+
+async function loadEntries() {
+  if (!props.application?.id)
+    return
+  loading.value = true
+  try {
+    const response = await businessAppList({ applicationId: props.application.id })
+    entries.value = response.data || []
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  editingEntry.value = null
+  wizardVisible.value = true
+}
+
+function openEdit(item) {
+  editingEntry.value = { ...item, applicationId: props.application?.id }
+  wizardVisible.value = true
+}
+
+function openEntry(item) {
+  const url = buildEntryOpenUrl(item)
+  if (!url) {
+    message.warning(translateUiText("该入口尚未关联可运行的页面配置，请先发布业务单元"))
+    return
+  }
+  const fullUrl = url.startsWith('/')
+    ? `${window.location.origin}${url}`
+    : url
+  window.open(fullUrl, '_blank', 'noopener,noreferrer')
+}
+
+function openEntryDesigner(item) {
+  const runtimeOpenMode = String(item.runtimeOpenMode || '').toUpperCase()
+  emit('openDesigner', {
+    objectCode: item.objectCode,
+    panel: runtimeOpenMode === 'LIST' ? 'list' : 'form',
+    detailTab: runtimeOpenMode === 'DETAIL' ? 'detail' : 'form',
+  })
+}
+
+async function toggleStatus(item) {
+  await updateBusinessAppStatus(item.id, item.status === 1 ? 0 : 1)
+  message.success(item.status === 1 ? '访问入口已停用' : '访问入口已启用')
+  await loadEntries()
+  emit('changed')
+}
+
+function confirmDelete(item) {
+  dialog.warning({
+    title: translateUiText("删除访问入口"),
+    content: formatUiText("确定删除入口「{0}」吗？删除后不可恢复，关联菜单会一并移除。", [entryDisplayName(item)]),
+    positiveText: translateUiText("删除"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        await deleteBusinessApp(item.id)
+        message.success(translateUiText("访问入口已删除"))
+        await loadEntries()
+        emit('changed')
+      }
+      catch (error) {
+        message.error(error?.message || '删除失败，请稍后重试')
+      }
+    },
+  })
+}
+
+async function handleSaved() {
+  await loadEntries()
+  emit('changed')
+}
+
+function entryDisplayName(item = {}) {
+  const appName = String(item.appName || '').trim()
+  const appCode = String(item.appCode || '').trim()
+  const technicalName = !appName || appName === appCode || /^[A-Z][A-Z0-9_]*$/.test(appName)
+  if (!technicalName)
+    return appName
+  if (item.objectName)
+    return `${item.objectName}入口`
+  return '业务访问入口'
+}
+</script>
+
+<style scoped>
+.entries-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-light, #e5e6eb);
+}
+
+.panel-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.panel-heading p {
+  margin: 5px 0 0;
+  color: var(--text-tertiary, #86909c);
+}
+
+.entries-empty {
+  min-height: 260px;
+  padding-top: 64px;
+  border: 1px solid var(--border-default, #c9cdd4);
+  border-radius: 7px;
+}
+
+.entry-table {
+  min-width: 0;
+  border: 1px solid var(--border-default, #c9cdd4);
+  border-radius: 7px;
+}
+
+.entry-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.35fr) 78px minmax(120px, 1fr) 68px 120px minmax(130px, 1.2fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light, #e5e6eb);
+  color: var(--text-secondary, #4e5969);
+  font-size: 12px;
+}
+
+.entry-row:last-child {
+  border-bottom: 0;
+}
+
+.entry-row-head {
+  min-height: 38px;
+  color: var(--text-tertiary, #86909c);
+  background: var(--bg-secondary, #f7f8fa);
+  font-weight: 600;
+}
+
+.entry-name {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.entry-name strong {
+  overflow: hidden;
+  color: var(--text-primary, #1d2129);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-name small {
+  overflow: hidden;
+  color: var(--text-tertiary, #86909c);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+
+.entry-row > span,
+.entry-row > :deep(.n-tag) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .entry-row-head {
+    display: none;
+  }
+
+  .entry-row:not(.entry-row-head) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    padding: 10px;
+  }
+
+  .entry-row:not(.entry-row-head) .entry-name {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(2),
+  .entry-row:not(.entry-row-head) > :nth-child(3),
+  .entry-row:not(.entry-row-head) > :nth-child(4),
+  .entry-row:not(.entry-row-head) > :nth-child(5) {
+    grid-column: 1;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(2) {
+    grid-row: 2;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(3) {
+    grid-row: 3;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(4) {
+    grid-row: 4;
+  }
+
+  .entry-row:not(.entry-row-head) > :nth-child(5) {
+    grid-row: 5;
+  }
+
+  .entry-row:not(.entry-row-head) .entry-actions {
+    grid-column: 2;
+    grid-row: 1 / span 5;
+    align-self: start;
+    justify-self: end;
+    max-width: 160px;
+    justify-content: flex-end;
+  }
+}
+</style>

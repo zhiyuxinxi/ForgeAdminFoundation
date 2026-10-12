@@ -1,0 +1,2250 @@
+<template>
+  <div class="crud-generator-page">
+    <div class="generator-sidebar" :class="[{ collapsed: sidebarCollapsed }]">
+      <div class="sidebar-header">
+        <template v-if="!sidebarCollapsed">
+          <n-button size="small" text @click="goBack">
+            <template #icon>
+              <n-icon><ArrowBackOutline /></n-icon>
+            </template>
+            {{ translateUiText("返回") }}
+          </n-button>
+          <n-button size="small" type="primary" @click="handleNewSession">
+            <template #icon>
+              <n-icon><AddOutline /></n-icon>
+            </template>
+            {{ translateUiText("新对话") }}
+          </n-button>
+        </template>
+        <template v-else>
+          <n-button size="small" quaternary circle @click="sidebarCollapsed = false">
+            <template #icon>
+              <n-icon><ChevronForwardOutline /></n-icon>
+            </template>
+          </n-button>
+        </template>
+      </div>
+      <template v-if="!sidebarCollapsed">
+        <div class="sidebar-section-title">
+          <span>{{ translateUiText("历史对话") }}</span>
+          <n-button size="tiny" quaternary circle @click="sidebarCollapsed = true">
+            <template #icon>
+              <n-icon size="14">
+                <ChevronBackOutline />
+              </n-icon>
+            </template>
+          </n-button>
+        </div>
+        <div class="session-list">
+          <div
+            v-for="session in sessionList"
+            :key="session.id"
+            class="session-item" :class="[{ active: sessionId === session.id }]"
+            @click="loadSession(session.id)"
+          >
+            <div class="session-title">
+              <span v-if="session.metadata && session.metadata.configKey" class="session-config-key">{{ session.metadata.configKey }}</span>
+              <span v-else>{{ session.sessionName || translateUiText("未命名会话") }}</span>
+            </div>
+            <div class="session-meta">
+              <span v-if="session.metadata && session.metadata.tableName" class="session-table">{{ session.metadata.tableName }}</span>
+              <span class="session-time">{{ formatTime(session.createTime) }}</span>
+            </div>
+            <n-button class="delete-btn" size="tiny" text type="error" @click.stop="deleteSession(session.id)">
+              <n-icon><CloseOutline /></n-icon>
+            </n-button>
+          </div>
+          <div v-if="sessionList.length === 0" class="empty-tip">
+            {{ translateUiText("暂无历史对话") }}
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="generator-main">
+      <div class="chat-area">
+        <!-- 生成阶段进度条 -->
+        <div v-if="generating && currentStageIndex >= 0" class="stage-progress">
+          <div
+            v-for="(stage, idx) in generateStages"
+            :key="stage.key"
+            class="stage-step" :class="[{
+              done: idx < currentStageIndex,
+              active: idx === currentStageIndex,
+            }]"
+          >
+            <div class="stage-step-dot" />
+            <span class="stage-step-label">{{ stage.label }}</span>
+          </div>
+        </div>
+
+        <div ref="messageListRef" class="message-list">
+          <div v-for="(msg, idx) in messages" :key="idx" class="message" :class="[msg.role]">
+            <div class="message-avatar">
+              <div v-if="msg.role === 'user'" class="avatar user-avatar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+              </div>
+              <div v-else class="avatar ai-avatar">
+                <n-icon size="18">
+                  <SparklesOutline />
+                </n-icon>
+              </div>
+            </div>
+            <div class="message-body">
+              <div v-if="msg.stage" class="stage-indicator">
+                <span class="stage-indicator-dot" />
+                {{ getStageLabel(msg.stage) }}
+              </div>
+              <div v-if="msg.reasoning && msg.reasoning.trim()" class="reasoning-section">
+                <div class="reasoning-header" @click="toggleReasoning(idx)">
+                  <div class="reasoning-header-left">
+                    <n-icon size="16" class="reasoning-icon">
+                      <SparklesOutline />
+                    </n-icon>
+                    <span class="reasoning-label">{{ translateUiText("思考过程") }}</span>
+                    <span v-if="msg.reasoningTime" class="reasoning-duration">{{ translateUiText("用时") }} {{ msg.reasoningTime }}s</span>
+                    <span v-else-if="msg.isReasoning" class="reasoning-duration thinking">{{ translateUiText("思考中...") }}</span>
+                  </div>
+                  <n-icon size="16" class="reasoning-toggle">
+                    <ChevronDownOutline v-if="!expandedReasonings[idx]" />
+                    <ChevronUpOutline v-else />
+                  </n-icon>
+                </div>
+                <div v-if="expandedReasonings[idx]" class="reasoning-content">
+                  {{ msg.reasoning }}
+                </div>
+              </div>
+              <div class="message-bubble">
+                <div class="message-content">
+                  {{ msg.content }}
+                </div>
+                <div v-if="msg.streaming && msg.isReasoning" class="message-typing">
+                  <span /><span /><span />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="messages.length === 0" class="empty-chat">
+            <div class="empty-chat-hero">
+              <div class="empty-chat-icon">
+                <n-icon size="32">
+                  <SparklesOutline />
+                </n-icon>
+              </div>
+              <div class="empty-chat-title">
+                {{ translateUiText("AI 辅助配置") }}
+              </div>
+              <div class="empty-chat-tip">
+                {{ translateUiText("面向技术人员生成和优化页面配置；业务人员优先使用低代码工作台完成可视化搭建和发布") }}
+              </div>
+              <n-button size="small" type="primary" class="empty-chat-action" @click="router.push('/ai/lowcode-apps')">
+                <template #icon>
+                  <n-icon><ServerOutline /></n-icon>
+                </template>
+                {{ translateUiText("进入低代码工作台") }}
+              </n-button>
+            </div>
+            <div class="example-prompts">
+              <div class="example-title">
+                {{ translateUiText("试试这些示例：") }}
+              </div>
+              <div class="example-list">
+                <div v-for="example in examplePrompts" :key="example.label" class="example-item" @click="fillExample(example)">
+                  <div class="example-icon">
+                    <n-icon size="14">
+                      <AddOutline />
+                    </n-icon>
+                  </div>
+                  <div class="example-text">
+                    <span class="example-label">{{ example.label }}</span>
+                    <span class="example-desc">{{ example.text }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="input-section">
+          <!-- 配置行 -->
+          <div class="config-bar">
+            <!-- 页面标识 -->
+            <div class="config-field" :class="[{ 'has-error': configKeyError }]">
+              <span class="field-tag">{{ translateUiText("标识") }}</span>
+              <n-input
+                v-model:value="configKey"
+                :placeholder="translateUiText(&quot;如 employee_manage&quot;)"
+                size="small"
+                :status="configKeyError ? 'error' : undefined"
+                class="field-input"
+              >
+                <template #suffix>
+                  <span class="auto-btn" @click="autoGenerateConfigKey">{{ translateUiText("自动") }}</span>
+                </template>
+              </n-input>
+              <span v-if="configKeyError" class="field-error-tip">{{ configKeyError }}</span>
+            </div>
+
+            <div class="config-divider" />
+
+            <!-- 关联表 -->
+            <div class="config-field">
+              <span class="field-tag">{{ translateUiText("关联表") }}</span>
+              <n-select
+                v-model:value="tableName"
+                :options="tableOptions"
+                :placeholder="translateUiText(&quot;选择或搜索&quot;)"
+                clearable
+                filterable
+                size="small"
+                class="field-input"
+                @update:value="handleTableSelect"
+              />
+            </div>
+
+            <div v-if="templateList.length > 0" class="config-divider" />
+
+            <!-- 页面模板 -->
+            <div v-if="templateList.length > 0" class="config-field config-field--shrink">
+              <span class="field-tag">{{ translateUiText("模板") }}</span>
+              <n-select
+                v-model:value="layoutType"
+                :options="templateList.map(t => ({ label: t.templateName, value: t.templateKey }))"
+                size="small"
+                class="field-input"
+                :consistent-menu-width="false"
+              />
+            </div>
+
+            <div class="config-divider" />
+
+            <!-- 操作按钮 -->
+            <n-button size="small" text type="primary" class="bar-action-btn" @click="showImportModal = true">
+              <template #icon>
+                <n-icon><AddOutline /></n-icon>
+              </template>
+              {{ translateUiText("导入表") }}
+            </n-button>
+          </div>
+
+          <!-- 输入框 -->
+          <div class="input-area">
+            <n-input
+              v-model:value="inputText"
+              type="textarea"
+              :rows="3"
+              :placeholder="translateUiText(&quot;详细描述你需要的管理页面功能，如：员工管理系统，包含姓名、工号、部门、职位、入职日期、手机号、邮箱、状态等字段&quot;)"
+              style="flex: 1"
+              @keydown.enter.exact.prevent="sendMessage"
+            />
+          </div>
+
+          <!-- 输入底部：模型选择 + 发送按钮 -->
+          <div class="input-footer">
+            <n-popover
+              v-model:show="showModelPanel"
+              trigger="click"
+              placement="top-start"
+              :show-arrow="false"
+              :width="320"
+              raw
+            >
+              <template #trigger>
+                <button
+                  type="button"
+                  class="model-trigger" :class="[{ active: showModelPanel, empty: !modelId }]"
+                  :title="modelId ? `${currentProviderLabel} · ${currentModelLabel}` : translateUiText(&quot;请选择对话模型&quot;)"
+                >
+                  <n-icon size="16" class="model-trigger-icon">
+                    <SparklesOutline />
+                  </n-icon>
+                  <span class="model-trigger-provider">{{ currentProviderLabel }}</span>
+                  <span class="model-trigger-divider">·</span>
+                  <span class="model-trigger-model">{{ currentModelLabel }}</span>
+                  <n-icon size="14" class="model-trigger-chevron">
+                    <ChevronDownOutline />
+                  </n-icon>
+                </button>
+              </template>
+
+              <div class="model-panel">
+                <div class="model-panel-section">
+                  <div class="model-panel-label">
+                    <span>{{ translateUiText("供应商") }}</span>
+                    <span v-if="providerOptions.length === 0" class="model-panel-empty-tip">{{ translateUiText("暂无可用供应商") }}</span>
+                  </div>
+                  <n-select
+                    v-model:value="providerId"
+                    :options="providerOptions"
+                    :placeholder="translateUiText(&quot;选择供应商&quot;)"
+                    size="small"
+                    filterable
+                  />
+                </div>
+                <div class="model-panel-section">
+                  <div class="model-panel-label">
+                    <span>{{ translateUiText("模型") }}</span>
+                    <span v-if="modelOptions.length > 0" class="model-panel-count">{{ modelOptions.length }} {{ translateUiText("个") }}</span>
+                  </div>
+                  <div v-if="modelOptions.length === 0" class="model-panel-empty">
+                    {{ providerId ? translateUiText("该供应商暂无可用模型") : translateUiText("请先选择供应商") }}
+                  </div>
+                  <div v-else class="model-list">
+                    <div
+                      v-for="m in modelOptions"
+                      :key="m.value"
+                      class="model-list-item" :class="[{ active: modelId === m.value }]"
+                      @click="modelId = m.value; showModelPanel = false"
+                    >
+                      <div class="model-list-item-main">
+                        <span class="model-list-item-name">{{ m.modelCode || m.label }}</span>
+                        <span v-if="m.isDefault === '1'" class="model-tag">{{ translateUiText("默认") }}</span>
+                      </div>
+                      <div v-if="m.label && m.label !== m.modelCode" class="model-list-item-desc">
+                        {{ m.label }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </n-popover>
+
+            <div class="input-buttons">
+              <n-button v-if="generating" type="error" @click="abortGenerate">
+                <template #icon>
+                  <n-icon><CloseOutline /></n-icon>
+                </template>
+                {{ translateUiText("停止") }}
+              </n-button>
+              <n-button
+                v-else
+                type="primary"
+                :disabled="!configKey || !inputText.trim() || !modelId"
+                @click="sendMessage"
+              >
+                <template #icon>
+                  <n-icon><PaperPlaneOutline /></n-icon>
+                </template>
+                {{ translateUiText("发送") }}
+              </n-button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="generator-preview" :class="[{ 'preview-collapsed': previewCollapsed }]">
+      <!-- 折叠状态下的竖向标签栏 -->
+      <div v-if="previewCollapsed" class="preview-collapsed-bar" @click="previewCollapsed = false">
+        <n-icon size="16">
+          <ChevronBackOutline />
+        </n-icon>
+        <span class="preview-collapsed-text">{{ translateUiText("配置面板") }}</span>
+      </div>
+
+      <template v-if="!previewCollapsed">
+        <div class="preview-header">
+          <div class="preview-header-left">
+            <n-button size="small" quaternary circle :title="translateUiText(&quot;折叠配置面板&quot;)" @click="previewCollapsed = true">
+              <template #icon>
+                <n-icon><ChevronForwardOutline /></n-icon>
+              </template>
+            </n-button>
+            <span class="preview-title">{{ translateUiText("配置面板") }}</span>
+          </div>
+          <div class="preview-actions">
+            <n-button-group size="small">
+              <n-button quaternary :title="translateUiText(&quot;复制当前配置&quot;)" @click="copyCurrentFile">
+                <template #icon>
+                  <n-icon><CopyOutline /></n-icon>
+                </template>
+              </n-button>
+              <n-button quaternary :title="translateUiText(&quot;导出全部配置&quot;)" @click="exportAllFiles">
+                <template #icon>
+                  <n-icon><DownloadOutline /></n-icon>
+                </template>
+              </n-button>
+            </n-button-group>
+            <n-button type="primary" size="small" @click="openSaveModal">
+              <template #icon>
+                <n-icon><SaveOutline /></n-icon>
+              </template>
+              {{ translateUiText("保存") }}
+            </n-button>
+            <n-dropdown
+              :options="translateUiMetadata(moreActionOptions)"
+              trigger="click"
+              @select="handleMoreAction"
+            >
+              <n-button size="small" :disabled="!configSaved">
+                {{ translateUiText("更多 ▾") }}
+              </n-button>
+            </n-dropdown>
+          </div>
+        </div>
+
+        <!-- Tab 分组：核心配置 / 高级配置 -->
+        <div class="preview-tab-group">
+          <div class="tab-group-switcher">
+            <span
+              class="group-tab" :class="[{ active: activeTabGroup === 'core' }]"
+              @click="switchTabGroup('core')"
+            >{{ translateUiText("核心配置") }}</span>
+            <span
+              class="group-tab" :class="[{ active: activeTabGroup === 'advanced' }]"
+              @click="switchTabGroup('advanced')"
+            >{{ translateUiText("高级配置") }}</span>
+            <span
+              class="group-tab" :class="[{ active: activeTabGroup === 'sql' }]"
+              @click="switchTabGroup('sql')"
+            >{{ translateUiText("SQL / 表结构") }}</span>
+          </div>
+        </div>
+
+        <div class="preview-tabs">
+          <!-- 核心配置 -->
+          <template v-if="activeTabGroup === 'core'">
+            <n-tabs v-model:value="activeFile" type="line" animated :tabs-padding="12">
+              <n-tab-pane name="searchSchema" :tab="translateUiText(&quot;搜索配置&quot;)">
+                <div class="editor-area">
+                  <SchemaFieldEditor
+                    mode="search"
+                    :value="displayContent.searchSchema"
+                    :table-structure="displayContent.tableStructure"
+                    @update:value="displayContent.searchSchema = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="columnsSchema" :tab="translateUiText(&quot;表格列&quot;)">
+                <div class="editor-area">
+                  <SchemaFieldEditor
+                    mode="columns"
+                    :value="displayContent.columnsSchema"
+                    :table-structure="displayContent.tableStructure"
+                    @update:value="displayContent.columnsSchema = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="editSchema" :tab="translateUiText(&quot;编辑表单&quot;)">
+                <div class="editor-area">
+                  <SchemaFieldEditor
+                    mode="edit"
+                    :value="displayContent.editSchema"
+                    :table-structure="displayContent.tableStructure"
+                    @update:value="displayContent.editSchema = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="apiConfig" :tab="translateUiText(&quot;接口配置&quot;)">
+                <div class="editor-area">
+                  <ApiConfigEditor
+                    :value="displayContent.apiConfig"
+                    @update:value="displayContent.apiConfig = $event"
+                  />
+                </div>
+              </n-tab-pane>
+            </n-tabs>
+          </template>
+
+          <!-- 高级配置 -->
+          <template v-if="activeTabGroup === 'advanced'">
+            <n-tabs v-model:value="activeFile" type="line" animated :tabs-padding="12">
+              <n-tab-pane name="dictConfig" :tab="translateUiText(&quot;字典&quot;)">
+                <div class="editor-area">
+                  <DictConfigPanel
+                    :search-schema="displayContent.searchSchema"
+                    :columns-schema="displayContent.columnsSchema"
+                    :edit-schema="displayContent.editSchema"
+                    :dict-config="displayContent.dictConfig"
+                    @update:value="displayContent.dictConfig = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="desensitizeConfig" :tab="translateUiText(&quot;脱敏&quot;)">
+                <div class="editor-area">
+                  <DesensitizeConfigPanel
+                    :value="displayContent.desensitizeConfig"
+                    :columns-schema="displayContent.columnsSchema"
+                    @update:value="displayContent.desensitizeConfig = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="encryptConfig" :tab="translateUiText(&quot;加解密&quot;)">
+                <div class="editor-area">
+                  <EncryptConfigPanel
+                    :value="displayContent.encryptConfig"
+                    @update:value="displayContent.encryptConfig = $event"
+                  />
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="transConfig" :tab="translateUiText(&quot;翻译&quot;)">
+                <div class="editor-area">
+                  <TransConfigPanel
+                    :value="displayContent.transConfig"
+                    :columns-schema="displayContent.columnsSchema"
+                    :edit-schema="displayContent.editSchema"
+                    @update:value="displayContent.transConfig = $event"
+                  />
+                </div>
+              </n-tab-pane>
+            </n-tabs>
+          </template>
+
+          <!-- SQL / 表结构 -->
+          <template v-if="activeTabGroup === 'sql'">
+            <n-tabs v-model:value="activeFile" type="line" animated :tabs-padding="12">
+              <n-tab-pane name="createTableSql" :tab="translateUiText(&quot;建表 SQL&quot;)">
+                <div class="editor-area sql-editor-wrap">
+                  <textarea
+                    v-model="currentFileContent"
+                    class="json-editor"
+                    :placeholder="generating ? translateUiText(&quot;正在生成...&quot;) : translateUiText(&quot;等待生成...&quot;)"
+                    spellcheck="false"
+                  />
+                  <div class="sql-actions">
+                    <n-button
+                      type="warning"
+                      size="small"
+                      :loading="executingSql"
+                      :disabled="!currentFileContent"
+                      @click="executeCreateTableSql"
+                    >
+                      {{ translateUiText("执行建表") }}
+                    </n-button>
+                  </div>
+                </div>
+              </n-tab-pane>
+              <n-tab-pane name="tableStructure" :tab="translateUiText(&quot;表结构&quot;)">
+                <div class="editor-area">
+                  <textarea
+                    v-model="currentFileContent"
+                    class="json-editor"
+                    :placeholder="generating ? translateUiText(&quot;正在生成...&quot;) : translateUiText(&quot;等待生成...&quot;)"
+                    spellcheck="false"
+                  />
+                </div>
+              </n-tab-pane>
+            </n-tabs>
+          </template>
+
+          <div v-if="generating && currentFileContent" class="typing-indicator">
+            {{ translateUiText("正在写入...") }}
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+  <ImportDbTableModal v-model:show="showImportModal" @success="handleImportSuccess" />
+  <MenuTreeSelectModal
+    v-model:show="showMenuModal"
+    @confirm="handleMenuConfirm"
+  />
+</template>
+
+<script setup>
+import { localizeMetadata as translateUiMetadata } from '@/locales/metadata'
+import { formatUiText } from '@/locales'
+
+import { localizeLabel as translateUiText } from '@/locales'
+
+import { AddOutline, ArrowBackOutline, ChevronBackOutline, ChevronDownOutline, ChevronForwardOutline, ChevronUpOutline, CloseOutline, CopyOutline, DownloadOutline, PaperPlaneOutline, SaveOutline, ServerOutline, SparklesOutline } from '@vicons/ionicons5'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useCrudGenerator } from '@/composables/useCrudGenerator'
+import { managedFetch } from '@/composables/useGlobalLoading'
+import { request } from '@/utils'
+import ApiConfigEditor from './components/ApiConfigEditor.vue'
+import DesensitizeConfigPanel from './components/DesensitizeConfigPanel.vue'
+import DictConfigPanel from './components/DictConfigPanel.vue'
+import EncryptConfigPanel from './components/EncryptConfigPanel.vue'
+import ImportDbTableModal from './components/ImportDbTableModal.vue'
+import MenuTreeSelectModal from './components/MenuTreeSelectModal.vue'
+import SchemaFieldEditor from './components/SchemaFieldEditor.vue'
+import TransConfigPanel from './components/TransConfigPanel.vue'
+
+defineOptions({ name: 'AiCrudGenerator' })
+
+const route = useRoute()
+const router = useRouter()
+
+const {
+  sessionId,
+  messages,
+  configKey,
+  tableName,
+  generating,
+  activeFile,
+  inputText,
+  sessionList,
+  displayContent,
+
+  layoutType,
+  templateList,
+
+  providerId,
+  modelId,
+  providerOptions,
+  modelOptions,
+  currentStage,
+
+  configSaved,
+  loadTemplateList,
+  loadProviderOptions,
+  loadModelOptions,
+  loadSessionList,
+  startNewSession,
+  loadSession,
+  deleteSession,
+  sendMessage,
+  abortGenerate,
+  saveConfig,
+  loadTableStructure,
+  initWithConfigKey,
+  previewCrudPage,
+  copyCurrentFile,
+  exportAllFiles,
+} = useCrudGenerator()
+
+const expandedReasonings = ref({})
+
+const messageListRef = ref(null)
+const sidebarCollapsed = ref(false)
+const previewCollapsed = ref(false)
+const activeTabGroup = ref('core')
+const showModelPanel = ref(false)
+
+const currentProviderLabel = computed(() => {
+  const item = providerOptions.value.find(p => p.value === providerId.value)
+  return item?.label || translateUiText("未选择供应商")
+})
+
+const currentModelLabel = computed(() => {
+  const item = modelOptions.value.find(m => m.value === modelId.value)
+  if (!item)
+    return translateUiText("请选择模型")
+  return item.modelCode || item.label
+})
+
+watch(providerId, async (val, old) => {
+  if (val && val !== old) {
+    await loadModelOptions(val, false)
+  }
+})
+
+const generateStages = [
+  { key: 'analyzing', label: '分析需求' },
+  { key: 'generating-meta', label: '推断元数据' },
+  { key: 'generating-search', label: '搜索配置' },
+  { key: 'generating-columns', label: '表格列' },
+  { key: 'generating-edit', label: '编辑表单' },
+  { key: 'generating-api', label: '接口配置' },
+  { key: 'generating-sql', label: '建表 SQL' },
+]
+
+const currentStageIndex = computed(() => {
+  return generateStages.findIndex(s => s.key === currentStage.value)
+})
+
+// 更多操作下拉选项
+const moreActionOptions = computed(() => [
+  { label: '预览页面', key: 'preview', disabled: !configSaved.value },
+  { label: '下载代码', key: 'download', disabled: !configSaved.value },
+])
+
+function handleMoreAction(key) {
+  if (key === 'preview')
+    previewCrudPage()
+  if (key === 'download')
+    handleDownloadCode()
+}
+
+function switchTabGroup(group) {
+  activeTabGroup.value = group
+  // 切换分组时自动选中该组第一个tab
+  const defaultTabs = {
+    core: 'searchSchema',
+    advanced: 'dictConfig',
+    sql: 'createTableSql',
+  }
+  if (defaultTabs[group]) {
+    activeFile.value = defaultTabs[group]
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    }
+  })
+}
+
+watch(() => messages.value.length, () => scrollToBottom())
+watch(generating, (val) => {
+  if (val)
+    scrollToBottom()
+})
+
+const examplePrompts = [
+  { label: '员工管理', text: '员工管理，包含姓名、工号、部门、职位、入职日期、手机号、邮箱、状态', tableName: 'sys_employee' },
+  { label: '产品目录', text: '产品管理，包含产品名称、分类、价格、库存、状态、创建时间', tableName: 'biz_product' },
+  { label: '订单系统', text: '订单管理，包含订单号、客户名称、订单金额、支付状态、下单时间、备注', tableName: 'biz_order' },
+]
+
+function fillExample(example) {
+  inputText.value = example.text
+  if (example.tableName) {
+    tableName.value = example.tableName
+  }
+  autoGenerateConfigKey()
+}
+
+const configKeyError = ref('')
+const tableNameError = ref('')
+
+function validateConfigKey(val) {
+  if (!val) {
+    configKeyError.value = ''
+    return
+  }
+  if (/[\u4E00-\u9FA5]/.test(val)) {
+    configKeyError.value = '页面标识不能包含中文'
+  }
+  else if (!/^[a-z][a-z0-9_]{1,63}$/.test(val)) {
+    configKeyError.value = '格式：小写字母开头，仅小写字母+数字+下划线，长度2-64位'
+  }
+  else {
+    configKeyError.value = ''
+  }
+}
+
+function validateTableName(val) {
+  if (!val) {
+    tableNameError.value = ''
+    return
+  }
+  if (/[\u4E00-\u9FA5]/.test(val)) {
+    tableNameError.value = '表名不能包含中文'
+  }
+  else if (!/^[a-z_]\w{0,127}$/i.test(val)) {
+    tableNameError.value = '格式：字母/下划线开头，仅字母+数字+下划线'
+  }
+  else {
+    tableNameError.value = ''
+  }
+}
+
+watch(configKey, validateConfigKey)
+watch(tableName, validateTableName)
+
+const currentFileContent = computed({
+  get: () => displayContent.value[activeFile.value] || '',
+  set: (val) => { displayContent.value[activeFile.value] = val },
+})
+
+const tableOptions = ref([])
+const showImportModal = ref(false)
+const showMenuModal = ref(false)
+
+async function loadTableOptions() {
+  try {
+    const res = await request.get('/generator/list', { params: { pageNum: 1, pageSize: 100 } })
+    if (res.code === 200) {
+      const records = res.data?.records || []
+      tableOptions.value = records.map(item => ({
+        label: `${item.tableName} (${item.tableComment || ''})`,
+        value: item.tableName,
+      }))
+    }
+  }
+  catch (e) {
+    console.error('加载表列表失败:', e)
+  }
+}
+
+function handleTableSelect(selectedTableName) {
+  tableName.value = selectedTableName
+  if (selectedTableName) {
+    loadTableStructure(selectedTableName)
+  }
+}
+
+function handleImportSuccess(importedTableName) {
+  tableName.value = importedTableName
+  loadTableOptions()
+  loadTableStructure(importedTableName)
+}
+
+watch(tableName, (val) => {
+  loadTableStructure(val)
+})
+
+function openSaveModal() {
+  if (configSaved.value) {
+    saveConfig({})
+    return
+  }
+  showMenuModal.value = true
+}
+
+async function handleMenuConfirm({ menuParentId, menuName }) {
+  showMenuModal.value = false
+  await saveConfig({ menuParentId, menuName })
+}
+
+function formatTime(time) {
+  if (!time)
+    return ''
+  const d = new Date(time)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function getStageLabel(stage) {
+  const labels = {
+    'analyzing': '分析阶段',
+    'generating-meta': '推断元数据',
+    'generating-search': '生成搜索配置',
+    'generating-columns': '生成表格列',
+    'generating-edit': '生成编辑表单',
+    'generating-api': '生成API配置',
+    'generating-sql': '生成建表SQL',
+    'complete': '完成',
+    'error': '错误',
+    'retrying': '重试中',
+  }
+  return labels[stage] || stage
+}
+
+function toggleReasoning(idx) {
+  expandedReasonings.value[idx] = !expandedReasonings.value[idx]
+}
+
+function autoGenerateConfigKey() {
+  let key = ''
+
+  if (tableName.value) {
+    key = tableName.value.toLowerCase().replace(/^sys_/, '').replace(/[^a-z0-9]/g, '_')
+  }
+  else if (inputText.value && inputText.value.trim()) {
+    const text = inputText.value.trim()
+    const keywordMap = {
+      管理: 'manage',
+      系统: 'system',
+      配置: 'config',
+      设置: 'setting',
+      列表: 'list',
+      详情: 'detail',
+      信息: 'info',
+      记录: 'record',
+      用户: 'user',
+      角色: 'role',
+      权限: 'permission',
+      菜单: 'menu',
+      部门: 'department',
+      岗位: 'position',
+      字典: 'dict',
+      日志: 'log',
+      订单: 'order',
+      产品: 'product',
+      商品: 'goods',
+      客户: 'customer',
+      员工: 'employee',
+      考勤: 'attendance',
+      薪资: 'salary',
+      招聘: 'recruit',
+    }
+    const words = []
+    for (const [cn, en] of Object.entries(keywordMap)) {
+      if (text.includes(cn)) {
+        words.push(en)
+      }
+    }
+    if (words.length > 0) {
+      key = words.slice(0, 3).join('_')
+    }
+  }
+
+  if (!key) {
+    const now = new Date()
+    key = `page_${now.getMonth() + 1}${now.getDate()}_${Math.random().toString(36).substr(2, 4)}`
+  }
+
+  key = key.replace(/_+/g, '_').replace(/^_|_$/g, '')
+  if (!key || key.length < 2) {
+    key = `page_${Math.random().toString(36).substr(2, 4)}`
+  }
+
+  configKey.value = key
+}
+
+function goBack() {
+  router.push('/ai/crud-config')
+}
+
+async function handleDownloadCode() {
+  if (!configKey.value) {
+    window.$message?.warning(translateUiText("请先输入 configKey"))
+    return
+  }
+  if (!configSaved.value) {
+    window.$message?.warning(translateUiText("请先保存配置"))
+    return
+  }
+  const { useAuthStore } = await import('@/store')
+  const authStore = useAuthStore()
+  const BASE_URL = import.meta.env.VITE_REQUEST_PREFIX || ''
+  const url = `${BASE_URL}/ai/crud-config/codegen/download/${configKey.value}`
+  const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+  try {
+    const resp = await managedFetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': authStore.accessToken ? `Bearer ${authStore.accessToken}` : '',
+        'X-Timestamp': Date.now().toString(),
+        'X-Nonce': uuid,
+      },
+    }, {
+      globalLoadingType: 'download',
+      globalLoadingText: '文件下载处理中，请稍候...',
+    })
+    if (!resp.ok) {
+      const text = await resp.text()
+      window.$message?.error(formatUiText("下载失败: {0}", [text || resp.statusText]))
+      return
+    }
+    const blob = await resp.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = `${configKey.value}-code.zip`
+    a.click()
+    URL.revokeObjectURL(blobUrl)
+    window.$message?.success(translateUiText("代码包下载成功"))
+  }
+  catch (e) {
+    window.$message?.error(formatUiText("下载失败: {0}", [e.message]))
+  }
+}
+
+function handleNewSession() {
+  startNewSession()
+}
+
+const executingSql = ref(false)
+async function executeCreateTableSql() {
+  const sql = displayContent.value.createTableSql
+  if (!sql || !sql.trim()) {
+    window.$message.warning(translateUiText("请先生成建表SQL"))
+    return
+  }
+  window.$dialog.warning({
+    title: translateUiText("执行建表"),
+    content: translateUiText("确认要执行该 CREATE TABLE 语句吗？若表已存在将会报错。"),
+    positiveText: translateUiText("执行"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        executingSql.value = true
+        await request.post('/generator/executeSql', { sql })
+        window.$message.success(translateUiText("建表成功！可将该表导入并使用。"))
+        loadTableOptions()
+      }
+      catch (e) {
+        const msg = e?.response?.data?.msg || e?.message || '执行失败'
+        window.$message.error(msg)
+      }
+      finally {
+        executingSql.value = false
+      }
+    },
+  })
+}
+
+onMounted(async () => {
+  loadTableOptions()
+  loadTemplateList()
+  loadProviderOptions()
+  const ck = route.query.configKey
+  if (ck) {
+    await initWithConfigKey(ck)
+  }
+  else {
+    await loadSessionList()
+  }
+})
+</script>
+
+<style scoped>
+/* ============================================
+   AI 页面生成器 — 浅色科技蓝 Scoped 样式
+   冰蓝基底 + 靛青/天蓝渐变 - 干净高级的科技感
+   ============================================ */
+
+.crud-generator-page {
+  display: flex;
+  height: calc(100vh - 100px);
+  background: linear-gradient(160deg, #f2f7fc 0%, #eaf3fa 30%, #f0f6fb 60%, #f4f8fd 100%);
+  overflow: hidden;
+}
+
+/* ============ 左侧历史导航 ============ */
+.generator-sidebar {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid #e2edf7;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  box-shadow: 1px 0 16px rgba(59, 130, 246, 0.04);
+}
+
+.generator-sidebar.collapsed {
+  width: 48px;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 20px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2edf7;
+  min-height: 58px;
+  position: relative;
+}
+
+.sidebar-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: linear-gradient(90deg, #06b6d4, #3b82f6, #4f46e5);
+  opacity: 0.3;
+  border-radius: 1px;
+}
+
+.sidebar-section-title {
+  padding: 10px 16px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e2edf7;
+  background: rgba(240, 247, 254, 0.5);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.session-item {
+  padding: 13px 16px;
+  margin: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+}
+
+.session-item:hover {
+  background: #ecf4fb;
+  border-color: #cde2f4;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+.session-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.session-item.active {
+  background: linear-gradient(135deg, #e0effa 0%, #e8f4fd 100%);
+  border-color: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.06);
+}
+
+.session-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  background: linear-gradient(180deg, #06b6d4, #3b82f6);
+  border-radius: 0 2px 2px 0;
+}
+
+.session-title {
+  font-size: 13px;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.session-item.active .session-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.session-config-key {
+  font-weight: 600;
+  color: #1d4ed8;
+  font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', monospace;
+  font-size: 12px;
+  background: #e0effa;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.session-table {
+  font-size: 11px;
+  color: #0d9488;
+  margin-right: 4px;
+  font-weight: 500;
+}
+
+.session-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.session-time {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.delete-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition:
+    opacity 0.2s,
+    color 0.15s,
+    background 0.15s;
+  border-radius: 6px;
+}
+
+.delete-btn:hover {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+.empty-tip {
+  padding: 48px 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* ============ 中间对话区 ============ */
+.generator-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  scroll-behavior: smooth;
+}
+
+.message {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  animation: msgUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes msgUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.12));
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  position: relative;
+}
+
+.user-avatar {
+  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #8b5cf6 100%);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.35);
+}
+
+.ai-avatar {
+  background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 40%, #6366f1 80%, #06b6d4 100%);
+  box-shadow:
+    0 2px 12px rgba(59, 130, 246, 0.35),
+    0 0 0 2px rgba(147, 204, 247, 0.2);
+}
+
+.ai-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(59, 130, 246, 0.2);
+  animation: blueRing 3s ease-in-out infinite;
+}
+
+@keyframes blueRing {
+  0%,
+  100% {
+    border-color: rgba(59, 130, 246, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.5);
+    transform: scale(1.06);
+  }
+}
+
+.message-body {
+  display: flex;
+  flex-direction: column;
+  max-width: 72%;
+  gap: 6px;
+}
+
+.message.user .message-body {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  padding: 13px 18px;
+  border-radius: 12px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+.message.user .message-bubble {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  border-radius: 14px 6px 14px 14px;
+  box-shadow: 0 3px 12px rgba(59, 130, 246, 0.3);
+}
+
+.message.assistant .message-bubble {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2edf7;
+  border-radius: 6px 14px 14px 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.stage-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #3b82f6;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.stage-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: stageSpark 1.4s infinite;
+}
+
+@keyframes stageSpark {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.06);
+  }
+}
+
+/* ============ 空状态 ============ */
+.empty-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #94a3b8;
+  padding: 24px;
+}
+
+.empty-chat-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.empty-chat .empty-chat-icon {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 50%, #6366f1 100%);
+  color: #ffffff;
+  font-size: 0;
+  opacity: 1;
+  box-shadow: 0 8px 28px rgba(59, 130, 246, 0.25);
+}
+
+.empty-chat-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.3px;
+}
+
+.empty-chat-tip {
+  font-size: 16px;
+  font-weight: 500;
+  color: #334155;
+  max-width: 520px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.empty-chat-action {
+  min-width: 148px;
+}
+
+.example-prompts {
+  margin-top: 22px;
+  text-align: center;
+  width: 100%;
+}
+
+.example-title {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 14px;
+  font-weight: 500;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.example-title::before,
+.example-title::after {
+  content: '';
+  width: 32px;
+  height: 1px;
+  background: #cde2f4;
+}
+
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.example-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid #e2edf7;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.example-item:hover {
+  border-color: #93ccf7;
+  background: rgba(255, 255, 255, 0.95);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.1);
+}
+
+.example-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #e0effa, rgba(147, 204, 247, 0.3));
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.example-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.example-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.example-desc {
+  font-size: 12px;
+  color: #475569;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.example-text .example-desc {
+  white-space: normal;
+  line-height: 1.4;
+  color: #475569;
+}
+
+/* ============ 输入区 ============ */
+.input-section {
+  padding: 16px 24px 22px;
+  border-top: 1px solid #e2edf7;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 -1px 6px rgba(59, 130, 246, 0.04);
+  position: relative;
+}
+
+.input-section::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #93ccf7, #3b82f6, #93ccf7, transparent);
+  border-radius: 1px;
+}
+
+.config-bar {
+  display: flex;
+  align-items: center;
+  background: rgba(240, 247, 254, 0.7);
+  border: 1px solid #cde2f4;
+  border-radius: 12px;
+  padding: 0 8px;
+  height: 44px;
+  gap: 0;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.config-bar:focus-within {
+  border-color: #93ccf7;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.06);
+}
+
+.config-field {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  gap: 8px;
+  position: relative;
+}
+
+.config-field--shrink {
+  flex: 0 0 auto;
+  width: 140px;
+}
+
+.config-field.has-error .field-tag {
+  color: #ef4444;
+}
+
+.field-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.3px;
+}
+
+.field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-field :deep(.n-input) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.config-field :deep(.n-input .n-input__border),
+.config-field :deep(.n-input .n-input__state-border) {
+  display: none !important;
+}
+.config-field :deep(.n-input .n-input-wrapper) {
+  padding-left: 0;
+  padding-right: 0;
+}
+.config-field :deep(.n-base-selection) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.config-field :deep(.n-base-selection .n-base-selection__border),
+.config-field :deep(.n-base-selection .n-base-selection__state-border) {
+  display: none !important;
+}
+
+.auto-btn {
+  font-size: 11px;
+  color: #3b82f6;
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 500;
+  padding: 3px 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.auto-btn:hover {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1d4ed8;
+}
+
+.field-error-tip {
+  position: absolute;
+  bottom: -18px;
+  left: 0;
+  font-size: 11px;
+  color: #ef4444;
+  white-space: nowrap;
+}
+
+.config-divider {
+  width: 1px;
+  height: 20px;
+  background: #cde2f4;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.bar-action-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+}
+
+.input-area {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.input-buttons {
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ============ 模型选择器 ============ */
+.model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #cde2f4;
+  border-radius: 18px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #334155;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  max-width: 380px;
+  backdrop-filter: blur(8px);
+}
+
+.model-trigger:hover {
+  border-color: #93ccf7;
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.08);
+}
+
+.model-trigger.active {
+  border-color: #3b82f6;
+  background: #e0effa;
+  color: #1d4ed8;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.08);
+}
+
+.model-trigger.empty {
+  color: #94a3b8;
+  border-style: dashed;
+}
+
+.model-trigger-icon {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+.model-trigger.empty .model-trigger-icon {
+  color: #c5e4fa;
+}
+
+.model-trigger-provider {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
+}
+
+.model-trigger-divider {
+  color: #c5e4fa;
+  flex-shrink: 0;
+}
+
+.model-trigger-model {
+  font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', monospace;
+  font-weight: 600;
+  color: #3b82f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.model-trigger.empty .model-trigger-model {
+  color: #94a3b8;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.model-trigger-chevron {
+  color: #94a3b8;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+.model-trigger.active .model-trigger-chevron {
+  transform: rotate(180deg);
+  color: #3b82f6;
+}
+
+/* 模型选择面板 */
+.model-panel {
+  background: #ffffff;
+  border: 1px solid #e2edf7;
+  border-radius: 14px;
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.08),
+    0 1px 4px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+}
+
+.model-panel-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2edf7;
+}
+
+.model-panel-section:last-child {
+  border-bottom: none;
+}
+
+.model-panel-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.model-panel-empty-tip,
+.model-panel-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: #94a3b8;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.model-panel-empty {
+  padding: 18px 0;
+  text-align: center;
+  font-size: 12px;
+  color: #c5e4fa;
+}
+
+.model-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.model-list-item {
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.model-list-item:hover {
+  background: #ecf4fb;
+}
+
+.model-list-item.active {
+  background: linear-gradient(135deg, #e0effa 0%, rgba(147, 204, 247, 0.2) 100%);
+}
+
+.model-list-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-list-item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+  font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', monospace;
+}
+
+.model-list-item.active .model-list-item-name {
+  color: #1d4ed8;
+}
+
+.model-tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #e0effa;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.model-list-item-desc {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============ 右侧配置面板 ============ */
+.generator-preview {
+  width: 600px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(24px);
+  border-left: 1px solid #e2edf7;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -1px 0 16px rgba(59, 130, 246, 0.04);
+}
+
+.generator-preview.preview-collapsed {
+  width: 40px;
+  overflow: hidden;
+}
+
+.preview-collapsed-bar {
+  width: 40px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  color: #94a3b8;
+  transition: all 0.2s ease;
+  padding: 16px 0;
+}
+
+.preview-collapsed-bar:hover {
+  color: #3b82f6;
+  background: #ecf4fb;
+}
+
+.preview-collapsed-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.preview-header {
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2edf7;
+  background: rgba(240, 247, 254, 0.4);
+  min-height: 58px;
+}
+
+.preview-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Tab 分组切换器 */
+.preview-tab-group {
+  padding: 10px 18px 0;
+  border-bottom: 1px solid #e2edf7;
+  background: rgba(240, 247, 254, 0.4);
+}
+
+.tab-group-switcher {
+  display: flex;
+  gap: 2px;
+  background: rgba(224, 239, 250, 0.6);
+  border-radius: 10px;
+  padding: 4px;
+  width: fit-content;
+}
+
+.group-tab {
+  padding: 6px 16px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.group-tab:hover {
+  color: #334155;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.group-tab.active {
+  background: #ffffff;
+  color: #3b82f6;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  font-weight: 600;
+}
+
+.preview-tabs {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.preview-tabs :deep(.n-tabs) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-tabs :deep(.n-tabs .n-tabs-pane-wrapper) {
+  flex: 1;
+  overflow: hidden;
+}
+
+.preview-tabs :deep(.n-tabs .n-tab-pane) {
+  height: 100%;
+}
+
+.preview-tabs :deep(.n-tabs .n-tabs-bar) {
+  background-color: #3b82f6;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.preview-tabs :deep(.n-tabs .n-tab--active .n-tabs-tab__label) {
+  color: #3b82f6;
+}
+
+.editor-area {
+  padding: 14px;
+  height: 100%;
+  overflow: auto;
+}
+
+.json-editor {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #cde2f4;
+  resize: none;
+  font-family: 'Fira Code', 'JetBrains Mono', 'Monaco', 'Menlo', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  background: rgba(240, 247, 254, 0.5);
+  color: #334155;
+  padding: 14px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.json-editor:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #93ccf7;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.05);
+}
+
+.sql-editor-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.sql-editor-wrap .json-editor {
+  flex: 1;
+  height: 0;
+}
+
+.sql-actions {
+  padding: 12px 0 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.typing-indicator {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  animation: bluePulse 1.5s infinite;
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+  z-index: 10;
+}
+
+@keyframes bluePulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 2px 16px rgba(59, 130, 246, 0.1);
+  }
+}
+
+/* ============ 阶段进度条 ============ */
+.stage-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 14px 24px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid #e2edf7;
+  flex-wrap: wrap;
+}
+
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  position: relative;
+  font-size: 11px;
+  color: #c5e4fa;
+  transition: color 0.25s ease;
+}
+
+.stage-step + .stage-step::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 1.5px;
+  background: #cde2f4;
+  border-radius: 1px;
+}
+
+.stage-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #cde2f4;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.stage-step-label {
+  white-space: nowrap;
+}
+
+.stage-step.done {
+  color: #06b6d4;
+}
+
+.stage-step.done .stage-step-dot {
+  background: #06b6d4;
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+.stage-step.active {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.stage-step.active .stage-step-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+  animation: dotPulse 1.5s infinite;
+}
+
+@keyframes dotPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0.04);
+    transform: scale(1.08);
+  }
+}
+
+/* 消息打字指示器 */
+.message-typing {
+  display: flex;
+  gap: 5px;
+  padding: 8px 0 0;
+}
+
+.message-typing span {
+  width: 7px;
+  height: 7px;
+  background: #93ccf7;
+  border-radius: 50%;
+  animation: typeBounce 1.4s infinite ease;
+}
+
+.message-typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.message-typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typeBounce {
+  0%,
+  60%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 思考过程折叠区域 */
+.reasoning-section {
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: rgba(240, 247, 254, 0.8);
+  border: 1px solid #cde2f4;
+  overflow: hidden;
+}
+
+.reasoning-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.reasoning-header:hover {
+  background: rgba(224, 239, 250, 0.8);
+}
+
+.reasoning-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reasoning-icon {
+  color: #3b82f6;
+}
+
+.reasoning-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+.reasoning-duration {
+  font-size: 11px;
+  color: #64748b;
+  padding: 2px 8px;
+  background: rgba(224, 239, 250, 0.6);
+  border-radius: 5px;
+  font-weight: 500;
+}
+
+.reasoning-duration.thinking {
+  color: #3b82f6;
+  background: #e0effa;
+  animation: pulse 1.5s infinite;
+}
+
+.reasoning-toggle {
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.reasoning-content {
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px solid #cde2f4;
+  background: #ffffff;
+}
+
+.message.assistant .message-bubble {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #e2edf7;
+  border-radius: 6px 14px 14px 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.message.assistant .reasoning-section + .message-bubble {
+  background: #ffffff;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+</style>

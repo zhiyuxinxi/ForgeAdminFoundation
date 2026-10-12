@@ -1,0 +1,151 @@
+<template>
+  <view class="ai-skeleton" :class="[`ai-skeleton--${type}`, { 'ai-skeleton--animated': animated }]">
+    <template v-if="type === 'profile'">
+      <view class="ai-skeleton__avatar" />
+      <view class="ai-skeleton__profile-main">
+        <view class="ai-skeleton__line ai-skeleton__line--title" />
+        <view class="ai-skeleton__line ai-skeleton__line--short" />
+      </view>
+    </template>
+
+    <template v-else-if="type === 'card'">
+      <view class="ai-skeleton__media" />
+      <view class="ai-skeleton__line ai-skeleton__line--title" />
+      <view
+        v-for="item in rows"
+        :key="item"
+        class="ai-skeleton__line"
+        :class="{ 'ai-skeleton__line--short': item === rows }"
+      />
+    </template>
+
+    <template v-else>
+      <view v-for="item in rows" :key="item" class="ai-skeleton__list-row">
+        <view v-if="avatar" class="ai-skeleton__avatar ai-skeleton__avatar--sm" />
+        <view class="ai-skeleton__list-main">
+          <view class="ai-skeleton__line ai-skeleton__line--title" />
+          <view class="ai-skeleton__line ai-skeleton__line--short" />
+        </view>
+      </view>
+    </template>
+  </view>
+</template>
+
+<script setup>
+defineProps({
+  type: {
+    type: String,
+    default: 'list',
+    validator: value => ['list', 'card', 'profile'].includes(value)
+  },
+  rows: {
+    type: Number,
+    default: 3
+  },
+  avatar: {
+    type: Boolean,
+    default: true
+  },
+  animated: {
+    type: Boolean,
+    default: true
+  }
+})
+</script>
+
+<style lang="scss" scoped>
+.ai-skeleton {
+  width: 100%;
+}
+
+.ai-skeleton--card {
+  padding: 28rpx;
+  border: 1rpx solid rgba(255, 255, 255, 0.86);
+  border-radius: 34rpx;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: 0 10rpx 32rpx rgba(15, 23, 42, 0.05);
+  box-sizing: border-box;
+  backdrop-filter: blur(22rpx);
+}
+
+.ai-skeleton--profile,
+.ai-skeleton__list-row {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+}
+
+.ai-skeleton__list-row {
+  min-height: 112rpx;
+  padding: 22rpx 0;
+}
+
+.ai-skeleton__list-row + .ai-skeleton__list-row {
+  border-top: 1rpx solid rgba(226, 232, 240, 0.58);
+}
+
+.ai-skeleton__avatar,
+.ai-skeleton__line,
+.ai-skeleton__media {
+  overflow: hidden;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.72), rgba(248, 250, 252, 0.92), rgba(226, 232, 240, 0.72));
+  background-size: 220% 100%;
+}
+
+.ai-skeleton--animated .ai-skeleton__avatar,
+.ai-skeleton--animated .ai-skeleton__line,
+.ai-skeleton--animated .ai-skeleton__media {
+  animation: ai-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.ai-skeleton__avatar {
+  width: 96rpx;
+  height: 96rpx;
+  flex: 0 0 96rpx;
+  border-radius: 28rpx;
+}
+
+.ai-skeleton__avatar--sm {
+  width: 76rpx;
+  height: 76rpx;
+  flex-basis: 76rpx;
+  border-radius: 24rpx;
+}
+
+.ai-skeleton__profile-main,
+.ai-skeleton__list-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.ai-skeleton__media {
+  height: 180rpx;
+  margin-bottom: 26rpx;
+  border-radius: 28rpx;
+}
+
+.ai-skeleton__line {
+  height: 24rpx;
+  margin-top: 18rpx;
+}
+
+.ai-skeleton__line--title {
+  width: 64%;
+  height: 30rpx;
+  margin-top: 0;
+}
+
+.ai-skeleton__line--short {
+  width: 42%;
+}
+
+@keyframes ai-skeleton-shimmer {
+  0% {
+    background-position: 140% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
+}
+</style>

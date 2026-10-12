@@ -1,0 +1,191 @@
+package com.mdframe.forge.starter.crypto.config;
+
+import cn.dev33.satoken.config.SaTokenConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.starter.apiconfig.service.IApiConfigManager;
+import com.mdframe.forge.starter.cache.service.ICacheService;
+import com.mdframe.forge.starter.core.context.CryptoProperties;
+import com.mdframe.forge.starter.crypto.advice.DecryptRequestBodyAdvice;
+import com.mdframe.forge.starter.crypto.advice.EncryptResponseBodyAdvice;
+import com.mdframe.forge.starter.crypto.cache.ReplayTokenCache;
+import com.mdframe.forge.starter.crypto.crypto.EncryptorFactory;
+import com.mdframe.forge.starter.crypto.crypto.impl.AESEncryptor;
+import com.mdframe.forge.starter.crypto.crypto.impl.AESGCMEncryptor;
+import com.mdframe.forge.starter.crypto.crypto.impl.SM4Encryptor;
+import com.mdframe.forge.starter.crypto.filter.ReplayAttackFilter;
+import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeStrategyFactory;
+import com.mdframe.forge.starter.crypto.keyexchange.KeyExchangeController;
+import com.mdframe.forge.starter.crypto.keyexchange.KeyExchangeService;
+import com.mdframe.forge.starter.crypto.keyexchange.RsaKeyPairHolder;
+import com.mdframe.forge.starter.crypto.keyexchange.SessionKeyStore;
+import com.mdframe.forge.starter.crypto.persistence.PersistentCryptoService;
+import com.mdframe.forge.starter.crypto.persistence.VersionedPersistentCryptoService;
+import com.mdframe.forge.starter.crypto.support.InternalCallRequestVerifier;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.util.StringUtils;
+
+/**
+ * 加密模块自动配置
+ */
+@Slf4j
+@AutoConfiguration
+@EnableConfigurationProperties(InternalCallProperties.class)
+public class CryptoAutoConfiguration {
+
+    @Bean
+    public InternalCallRequestVerifier internalCallRequestVerifier(InternalCallProperties properties) {
+        return new InternalCallRequestVerifier(properties);
+    }
+
+    @Bean
+    public CryptoConfigurationValidator cryptoConfigurationValidator(CryptoProperties properties) {
+        CryptoConfigurationValidator validator = new CryptoConfigurationValidator();
+        validator.validate(properties);
+        return validator;
+    }
+    
+    @Bean
+    public KeyExchangeController keyExchangeController(KeyExchangeService keyExchangeService,
+                                                       CryptoProperties properties) {
+        return new KeyExchangeController(keyExchangeService, properties);
+    }
+    
+    // ==================== 密钥交换相关 Bean ====================
+
+    @Bean
+    public RsaKeyPairHolder rsaKeyPairHolder(CryptoProperties properties) {
+        String publicKey = normalizeKey(properties.getRsaPublicKey());
+        String privateKey = normalizeKey(properties.getRsaPrivateKey());
+        if (Boolean.TRUE.equals(properties.getEnabled())
+            && publicKey != null
+            && privateKey != null) {
+            log.info("使用配置的 RSA 密钥对");
+            return new RsaKeyPairHolder(publicKey, privateKey);
+        }
+        log.info("自动生成 RSA 密钥对");
+        return new RsaKeyPairHolder();
+    }
+
+    /**
+     * 归一化配置的 RSA 密钥：空白或历史脏数据 "null" 字符串一律按未配置处理
+     */
+    private String normalizeKey(String key) {
+        if (!StringUtils.hasText(key) || "null".equalsIgnoreCase(key.trim())) {
+            return null;
+        }
+        return key.trim();
+    }
+
+    @Bean
+    @ConditionalOnBean(ICacheService.class)
+    public SessionKeyStore sessionKeyStore(ICacheService cacheService,SaTokenConfig saTokenConfig) {
+        log.info("会话密钥存储初始化完成, 过期时间: {}秒", saTokenConfig.getTimeout());
+        return new SessionKeyStore(cacheService, saTokenConfig.getTimeout());
+    }
+
+    @Bean
+    public KeyExchangeService keyExchangeService(RsaKeyPairHolder rsaKeyPairHolder, SessionKeyStore sessionKeyStore) {
+        log.info("密钥交换服务初始化完成");
+        return new KeyExchangeService(rsaKeyPairHolder, sessionKeyStore);
+    }
+
+    // ==================== 加密器相关 Bean ====================
+
+    @Bean
+    public SM4Encryptor sm4Encryptor(CryptoProperties properties) {
+        return new SM4Encryptor(properties);
+    }
+
+    @Bean
+    public AESEncryptor aesEncryptor(CryptoProperties properties) {
+        return new AESEncryptor(properties);
+    }
+
+    @Bean
+    public AESGCMEncryptor aesGcmEncryptor(CryptoProperties properties) {
+        return new AESGCMEncryptor(properties);
+    }
+
+    // ==================== 脱敏相关 Bean ====================
+
+    @Bean
+    public DesensitizeStrategyFactory desensitizeStrategyFactory() {
+        log.info("脱敏策略工厂初始化完成");
+        return new DesensitizeStrategyFactory();
+    }
+
+    @Bean
+    public EncryptorFactory encryptorFactory(CryptoProperties properties,
+                                             SM4Encryptor sm4Encryptor,
+                                             AESEncryptor aesEncryptor,
+                                             AESGCMEncryptor aesGcmEncryptor) {
+        EncryptorFactory factory = new EncryptorFactory(properties);
+        factory.register(sm4Encryptor);
+        factory.register(aesEncryptor);
+        factory.register(aesGcmEncryptor);
+        log.info("加密器工厂初始化完成, 已注册算法: SM4, AES, AES_GCM");
+        return factory;
+    }
+
+    @Bean
+    public PersistentCryptoService persistentCryptoService(CryptoProperties properties,
+                                                           EncryptorFactory encryptorFactory) {
+        return new VersionedPersistentCryptoService(properties, encryptorFactory);
+    }
+
+    @Bean
+    public EncryptResponseBodyAdvice encryptResponseBodyAdvice(CryptoProperties properties,
+                                                               EncryptorFactory encryptorFactory,
+                                                               ObjectMapper objectMapper,
+                                                               @Autowired(required = false) SessionKeyStore sessionKeyStore,
+                                                               IApiConfigManager apiConfigManager,
+                                                               InternalCallRequestVerifier internalCallRequestVerifier) {
+        log.info("响应加密处理器初始化完成, 动态密钥: {}", sessionKeyStore != null);
+        return new EncryptResponseBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,
+                apiConfigManager, internalCallRequestVerifier);
+    }
+
+    @Bean
+    public DecryptRequestBodyAdvice decryptRequestBodyAdvice(CryptoProperties properties,
+                                                             EncryptorFactory encryptorFactory,
+                                                             ObjectMapper objectMapper,
+                                                             @Autowired(required = false) SessionKeyStore sessionKeyStore,
+                                                             IApiConfigManager apiConfigManager,
+                                                             InternalCallRequestVerifier internalCallRequestVerifier) {
+        log.info("请求解密处理器初始化完成, 动态密钥: {}", sessionKeyStore != null);
+        return new DecryptRequestBodyAdvice(properties, encryptorFactory, objectMapper, sessionKeyStore,
+                apiConfigManager, internalCallRequestVerifier);
+    }
+
+    // ==================== 防重放相关 Bean ====================
+
+    @Bean
+    @ConditionalOnBean(ICacheService.class)
+    public ReplayTokenCache replayTokenCache(ICacheService cacheService) {
+        log.info("防重放令牌缓存初始化完成");
+        return new ReplayTokenCache(cacheService);
+    }
+
+    @Bean
+    @ConditionalOnBean(ReplayTokenCache.class)
+    public FilterRegistrationBean<ReplayAttackFilter> replayAttackFilter(
+            CryptoProperties properties,
+            ReplayTokenCache tokenCache,
+            ObjectMapper objectMapper,
+            InternalCallRequestVerifier internalCallRequestVerifier) {
+
+        FilterRegistrationBean<ReplayAttackFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new ReplayAttackFilter(properties, tokenCache, objectMapper,
+                internalCallRequestVerifier));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(1);
+        log.info("防重放攻击过滤器初始化完成");
+        return registration;
+    }
+}

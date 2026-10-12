@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowEventDeliveryMapper">
+    <resultMap id="pendingDelivery" type="com.mdframe.forge.starter.flow.event.FlowPendingDelivery">
+        <constructor>
+            <idArg column="event_id" javaType="java.lang.String"/>
+            <arg column="tenant_id" javaType="java.lang.Long"/>
+            <arg column="consumer_id" javaType="java.lang.String"/>
+            <arg column="attempt_count" javaType="_int"/>
+        </constructor>
+    </resultMap>
+    <insert id="insert">
+        INSERT INTO sys_flow_event_delivery (event_id, tenant_id, consumer_id, status, next_attempt_at)
+        VALUES (#{eventId}, #{tenantId}, #{consumerId}, 'PENDING', CURRENT_TIMESTAMP(3))
+    </insert>
+    <select id="selectStatus" resultType="java.lang.String">
+        SELECT status FROM sys_flow_event_delivery
+        WHERE event_id = #{eventId} AND tenant_id = #{tenantId} AND consumer_id = #{consumerId}
+        FOR UPDATE
+    </select>
+    <select id="selectBoundConsumer" resultType="java.lang.String">
+        SELECT consumer_id FROM sys_flow_event_delivery
+        WHERE event_id = #{eventId} AND tenant_id = #{tenantId}
+    </select>
+    <update id="acknowledge">
+        UPDATE sys_flow_event_delivery SET status = 'ACKNOWLEDGED', acknowledged_at = CURRENT_TIMESTAMP(3)
+        WHERE event_id = #{eventId} AND tenant_id = #{tenantId} AND consumer_id = #{consumerId}
+          AND status = 'PENDING'
+    </update>
+    <select id="selectDue" resultMap="pendingDelivery">
+        SELECT event_id, tenant_id, consumer_id, attempt_count
+        FROM sys_flow_event_delivery
+        WHERE status = 'PENDING' AND next_attempt_at &lt;= #{now}
+          AND (claimed_until IS NULL OR claimed_until &lt;= #{now})
+        ORDER BY next_attempt_at, event_id
+        LIMIT #{limit}
+    </select>
+    <update id="claim">
+        UPDATE sys_flow_event_delivery
+        SET claim_id = #{claimId}, claimed_until = #{until}, attempt_count = attempt_count + 1
+        WHERE event_id = #{delivery.eventId} AND tenant_id = #{delivery.tenantId}
+          AND consumer_id = #{delivery.consumerId} AND status = 'PENDING'
+          AND attempt_count = #{delivery.attemptCount} AND next_attempt_at &lt;= #{now}
+          AND (claimed_until IS NULL OR claimed_until &lt;= #{now})
+    </update>
+    <update id="reschedule">
+        UPDATE sys_flow_event_delivery
+        SET next_attempt_at = #{next}, last_error = #{error}, claim_id = NULL, claimed_until = NULL
+        WHERE event_id = #{identity.eventId} AND tenant_id = #{identity.tenantId}
+          AND consumer_id = #{identity.consumerId} AND status = 'PENDING' AND claim_id = #{claimId}
+    </update>
+</mapper>

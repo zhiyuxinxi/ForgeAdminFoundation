@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowOverdueReminderRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.starter.flow.entity.FlowOverdueReminderRecord">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="task_id" property="taskId"/>
+        <result column="process_instance_id" property="processInstanceId"/>
+        <result column="process_def_key" property="processDefKey"/>
+        <result column="task_def_key" property="taskDefKey"/>
+        <result column="reminder_key" property="reminderKey"/>
+        <result column="channel" property="channel"/>
+        <result column="template_code" property="templateCode"/>
+        <result column="receiver_user_ids" property="receiverUserIds"/>
+        <result column="message_id" property="messageId"/>
+        <result column="send_status" property="sendStatus"/>
+        <result column="send_time" property="sendTime"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, tenant_id, task_id, process_instance_id, process_def_key, task_def_key,
+        reminder_key, channel, template_code, receiver_user_ids, message_id,
+        send_status, send_time, error_message, create_by, create_time, create_dept,
+        update_by, update_time
+    </sql>
+
+    <select id="selectLatestByTaskId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_flow_overdue_reminder_record
+        WHERE tenant_id = #{tenantId}
+          AND task_id = #{taskId}
+        ORDER BY COALESCE(send_time, create_time) DESC, create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="countDistinctReminderKeysByTaskId" resultType="java.lang.Integer">
+        SELECT COUNT(DISTINCT reminder_key)
+        FROM sys_flow_overdue_reminder_record
+        WHERE tenant_id = #{tenantId}
+          AND task_id = #{taskId}
+    </select>
+
+    <select id="selectByTaskId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM sys_flow_overdue_reminder_record
+        WHERE task_id = #{taskId}
+        ORDER BY create_time DESC, id DESC
+    </select>
+</mapper>

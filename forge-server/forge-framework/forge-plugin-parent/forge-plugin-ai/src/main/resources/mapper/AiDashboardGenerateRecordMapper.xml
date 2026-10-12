@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.dashboard.mapper.AiDashboardGenerateRecordMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.ai.dashboard.domain.AiDashboardGenerateRecord">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="project_id" property="projectId"/>
+        <result column="project_name" property="projectName"/>
+        <result column="business_definition_id" property="businessDefinitionId"/>
+        <result column="business_name" property="businessName"/>
+        <result column="provider_id" property="providerId"/>
+        <result column="provider_name" property="providerName"/>
+        <result column="model_name" property="modelName"/>
+        <result column="style" property="style"/>
+        <result column="canvas_width" property="canvasWidth"/>
+        <result column="canvas_height" property="canvasHeight"/>
+        <result column="prompt" property="prompt"/>
+        <result column="request_json" property="requestJson"/>
+        <result column="generated_title" property="generatedTitle"/>
+        <result column="response_json" property="responseJson"/>
+        <result column="validation_summary_json" property="validationSummaryJson"/>
+        <result column="status" property="status"/>
+        <result column="component_count" property="componentCount"/>
+        <result column="bound_count" property="boundCount"/>
+        <result column="static_count" property="staticCount"/>
+        <result column="static_fallback_count" property="staticFallbackCount"/>
+        <result column="repaired_count" property="repairedCount"/>
+        <result column="elapsed_ms" property="elapsedMs"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="AuditResultMap" type="com.mdframe.forge.plugin.ai.dashboard.vo.AiDashboardGenerateRecordAuditVO">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="user_id" property="userId"/>
+        <result column="username" property="username"/>
+        <result column="real_name" property="realName"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="project_id" property="projectId"/>
+        <result column="project_name" property="projectName"/>
+        <result column="business_definition_id" property="businessDefinitionId"/>
+        <result column="business_name" property="businessName"/>
+        <result column="provider_name" property="providerName"/>
+        <result column="model_name" property="modelName"/>
+        <result column="style" property="style"/>
+        <result column="canvas_width" property="canvasWidth"/>
+        <result column="canvas_height" property="canvasHeight"/>
+        <result column="prompt" property="prompt"/>
+        <result column="request_json" property="requestJson"/>
+        <result column="generated_title" property="generatedTitle"/>
+        <result column="response_json" property="responseJson"/>
+        <result column="validation_summary_json" property="validationSummaryJson"/>
+        <result column="status" property="status"/>
+        <result column="component_count" property="componentCount"/>
+        <result column="bound_count" property="boundCount"/>
+        <result column="static_count" property="staticCount"/>
+        <result column="static_fallback_count" property="staticFallbackCount"/>
+        <result column="repaired_count" property="repairedCount"/>
+        <result column="elapsed_ms" property="elapsedMs"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Audit_Where">
+        r.tenant_id = #{tenantId}
+        <if test="query.projectName != null and query.projectName != ''">
+          AND r.project_name LIKE CONCAT('%', #{query.projectName}, '%')
+        </if>
+        <if test="query.businessName != null and query.businessName != ''">
+          AND r.business_name LIKE CONCAT('%', #{query.businessName}, '%')
+        </if>
+        <if test="query.userKeyword != null and query.userKeyword != ''">
+          AND (
+            u.username LIKE CONCAT('%', #{query.userKeyword}, '%')
+            OR u.real_name LIKE CONCAT('%', #{query.userKeyword}, '%')
+            OR CAST(r.user_id AS CHAR) = #{query.userKeyword}
+          )
+        </if>
+        <if test="query.providerName != null and query.providerName != ''">
+          AND r.provider_name LIKE CONCAT('%', #{query.providerName}, '%')
+        </if>
+        <if test="query.modelName != null and query.modelName != ''">
+          AND r.model_name LIKE CONCAT('%', #{query.modelName}, '%')
+        </if>
+        <if test="query.status != null and query.status != ''">
+          AND r.status = #{query.status}
+        </if>
+        <if test="query.startTime != null and query.startTime != ''">
+          AND r.create_time &gt;= #{query.startTime}
+        </if>
+        <if test="query.endTime != null and query.endTime != ''">
+          AND r.create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <select id="selectAdminPage" resultMap="AuditResultMap">
+        SELECT r.id,
+               r.tenant_id,
+               r.user_id,
+               u.username,
+               u.real_name,
+               r.session_id,
+               r.project_id,
+               r.project_name,
+               r.business_definition_id,
+               r.business_name,
+               r.provider_name,
+               r.model_name,
+               r.style,
+               r.canvas_width,
+               r.canvas_height,
+               LEFT(r.prompt, 240) AS prompt,
+               r.generated_title,
+               r.status,
+               r.component_count,
+               r.bound_count,
+               r.static_count,
+               r.static_fallback_count,
+               r.repaired_count,
+               r.elapsed_ms,
+               r.error_message,
+               r.create_time,
+               r.update_time
+        FROM ai_dashboard_generate_record r
+        LEFT JOIN sys_user u
+          ON u.tenant_id = r.tenant_id
+         AND u.id = r.user_id
+         AND u.del_flag = 0
+        <where>
+          <include refid="Audit_Where"/>
+        </where>
+        ORDER BY r.create_time DESC, r.id DESC
+    </select>
+
+    <select id="selectAdminDetail" resultMap="AuditResultMap">
+        SELECT r.id,
+               r.tenant_id,
+               r.user_id,
+               u.username,
+               u.real_name,
+               r.session_id,
+               r.project_id,
+               r.project_name,
+               r.business_definition_id,
+               r.business_name,
+               r.provider_name,
+               r.model_name,
+               r.style,
+               r.canvas_width,
+               r.canvas_height,
+               r.prompt,
+               r.request_json,
+               r.generated_title,
+               r.response_json,
+               r.validation_summary_json,
+               r.status,
+               r.component_count,
+               r.bound_count,
+               r.static_count,
+               r.static_fallback_count,
+               r.repaired_count,
+               r.elapsed_ms,
+               r.error_message,
+               r.create_time,
+               r.update_time
+        FROM ai_dashboard_generate_record r
+        LEFT JOIN sys_user u
+          ON u.tenant_id = r.tenant_id
+         AND u.id = r.user_id
+         AND u.del_flag = 0
+        WHERE r.tenant_id = #{tenantId}
+          AND r.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectRecent" resultMap="BaseResultMap">
+        SELECT id,
+               tenant_id,
+               user_id,
+               session_id,
+               project_id,
+               project_name,
+               business_definition_id,
+               business_name,
+               provider_id,
+               provider_name,
+               model_name,
+               style,
+               canvas_width,
+               canvas_height,
+               prompt,
+               request_json,
+               generated_title,
+               response_json,
+               validation_summary_json,
+               status,
+               component_count,
+               bound_count,
+               static_count,
+               static_fallback_count,
+               repaired_count,
+               elapsed_ms,
+               error_message,
+               create_by,
+               create_time,
+               create_dept,
+               update_by,
+               update_time
+        FROM ai_dashboard_generate_record
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+        <if test="businessDefinitionId != null">
+          AND business_definition_id = #{businessDefinitionId}
+        </if>
+        <if test="projectId != null">
+          AND project_id = #{projectId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <delete id="deleteOwn">
+        DELETE FROM ai_dashboard_generate_record
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND id = #{id}
+    </delete>
+</mapper>

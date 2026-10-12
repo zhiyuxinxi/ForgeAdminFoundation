@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.agenttool.mapper.AiAgentToolPermissionMapper">
+  <sql id="permColumns">
+    id, tenant_id, agent_id, tool_key, decision,
+    create_by, create_time, create_dept, update_by, update_time, del_flag
+  </sql>
+
+  <select id="selectByAgentId" resultType="com.mdframe.forge.plugin.ai.agenttool.domain.AiAgentToolPermission">
+    SELECT <include refid="permColumns" />
+    FROM ai_agent_tool_permission
+    WHERE del_flag = 0 AND agent_id = #{agentId}
+    ORDER BY create_time DESC
+  </select>
+
+  <select id="selectByAgentIdAndToolKey" resultType="com.mdframe.forge.plugin.ai.agenttool.domain.AiAgentToolPermission">
+    SELECT <include refid="permColumns" />
+    FROM ai_agent_tool_permission
+    WHERE del_flag = 0 AND agent_id = #{agentId} AND tool_key = #{toolKey}
+    ORDER BY create_time DESC
+  </select>
+
+  <!-- No cache: each tool call observes committed configuration under its original owner. -->
+  <select id="selectRuntimeDecisions" resultType="java.lang.String">
+    SELECT CASE WHEN p.id IS NULL THEN '__unconfigured__' ELSE CONCAT('configured:', COALESCE(p.decision, '')) END
+    FROM ai_agent a
+    JOIN ai_chat_session s ON s.id = #{sessionId} AND s.user_id = #{userId}
+      AND s.tenant_id = #{tenantId} AND s.status = '0'
+    LEFT JOIN ai_agent_tool_permission p ON p.agent_id = a.id AND p.tenant_id = #{tenantId}
+      AND p.tool_key = #{toolKey} AND p.del_flag = 0
+    WHERE a.id = #{agentId} AND a.tenant_id = #{tenantId} AND a.del_flag = 0
+      AND (
+        EXISTS (SELECT 1 FROM ai_agent_tool_config c
+          WHERE c.tenant_id = #{tenantId} AND c.agent_id = a.id AND c.del_flag = 0
+            AND c.enabled = '1' AND c.tool_source = #{toolSource} AND c.tool_key = #{toolKey})
+        OR (#{toolSource} = 'builtin' AND #{toolKey} = 'rag_search'
+          AND a.knowledge_ids IS NOT NULL AND TRIM(a.knowledge_ids) NOT IN ('', '[]', 'null')
+          AND (a.rag_mode IS NULL OR a.rag_mode != 'none'))
+      )
+      AND NOT EXISTS (SELECT 1 FROM ai_agent_tool_config other_tool
+        WHERE other_tool.tenant_id = #{tenantId} AND other_tool.agent_id = a.id
+          AND other_tool.del_flag = 0 AND other_tool.enabled = '1'
+          AND other_tool.tool_key = #{toolKey} AND other_tool.tool_source != #{toolSource})
+  </select>
+
+  <update id="deleteByAgentIdAndToolKey">
+    UPDATE ai_agent_tool_permission
+    SET del_flag = id
+    WHERE del_flag = 0 AND agent_id = #{agentId} AND tool_key = #{toolKey}
+  </update>
+</mapper>

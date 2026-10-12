@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessActionExecutionLogMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessActionExecutionLog">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="suite_code" property="suiteCode"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="record_id" property="recordId"/>
+        <result column="action_code" property="actionCode"/>
+        <result column="action_name" property="actionName"/>
+        <result column="action_version" property="actionVersion"/>
+        <result column="execution_mode" property="executionMode"/>
+        <result column="execute_status" property="executeStatus"/>
+        <result column="request_digest" property="requestDigest"/>
+        <result column="step_result" property="stepResult"/>
+        <result column="result_message" property="resultMessage"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="correlation_id" property="correlationId"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="duration_ms" property="durationMs"/>
+        <result column="capability_request_id" property="capabilityRequestId"/>
+        <result column="client_id" property="clientId"/>
+        <result column="service_user_id" property="serviceUserId"/>
+        <result column="actor_type" property="actorType"/>
+        <result column="audit_event_type" property="auditEventType"/>
+        <result column="status_field" property="statusField"/>
+        <result column="status_from" property="statusFrom"/>
+        <result column="status_to" property="statusTo"/>
+        <result column="change_summary" property="changeSummary"/>
+        <result column="retention_until" property="retentionUntil"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        suite_code,
+        object_code,
+        record_id,
+        action_code,
+        action_name,
+        action_version,
+        execution_mode,
+        execute_status,
+        request_digest,
+        step_result,
+        result_message,
+        error_message,
+        correlation_id,
+        idempotency_key,
+        duration_ms,
+        capability_request_id,
+        client_id,
+        service_user_id,
+        actor_type,
+        audit_event_type,
+        status_field,
+        status_from,
+        status_to,
+        change_summary,
+        retention_until,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectLogPage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_action_execution_log
+        WHERE tenant_id = #{tenantId}
+        <if test="query != null and query.suiteCode != null and query.suiteCode != ''">
+          AND suite_code = #{query.suiteCode}
+        </if>
+        <if test="query != null and query.objectCode != null and query.objectCode != ''">
+          AND object_code = #{query.objectCode}
+        </if>
+        <if test="query != null and query.recordId != null and query.recordId != ''">
+          AND record_id = #{query.recordId}
+        </if>
+        <if test="query != null and query.actionCode != null and query.actionCode != ''">
+          AND action_code = #{query.actionCode}
+        </if>
+        <if test="query != null and query.executeStatus != null and query.executeStatus != ''">
+          AND execute_status = #{query.executeStatus}
+        </if>
+        <if test="query != null and query.correlationId != null and query.correlationId != ''">
+          AND correlation_id = #{query.correlationId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="selectLatestByIdempotencyKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_action_execution_log
+        WHERE tenant_id = #{tenantId}
+          AND object_code = #{objectCode}
+          AND action_code = #{actionCode}
+          AND action_version = #{actionVersion}
+          AND idempotency_key = #{idempotencyKey}
+        <if test="recordId != null and recordId != ''">
+          AND record_id = #{recordId}
+        </if>
+        <if test="recordId == null or recordId == ''">
+          AND (record_id IS NULL OR record_id = '')
+        </if>
+        ORDER BY create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -1,0 +1,96 @@
+import { uiText } from '@/i18n/display'
+import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
+import { cryptoConfig, shouldEncrypt } from './crypto-config'
+import { aesDecrypt, aesEncrypt } from './aes'
+import { decodeKeyToHex, sm4Decrypt, sm4Encrypt } from './sm4'
+
+type EncryptedPayload = {
+  data?: string
+  algorithm?: string
+}
+
+function isKeyValid(): boolean {
+  return Boolean(cryptoConfig.secretKey)
+}
+
+function encrypt(data: string, algorithm = cryptoConfig.algorithm): string {
+  if (!cryptoConfig.secretKey) throw new Error(uiText("加密密钥未设置"))
+  if (algorithm === 'SM4') {
+    return sm4Encrypt(data, decodeKeyToHex(cryptoConfig.secretKey))
+  }
+  if (algorithm === 'AES') {
+    return aesEncrypt(data, cryptoConfig.secretKey)
+  }
+  throw new Error(uiText("不支持的加密算法: {0}", { 0: (algorithm) }))
+}
+
+function decrypt(data: string, algorithm = cryptoConfig.algorithm): string {
+  if (!cryptoConfig.secretKey) throw new Error(uiText("解密密钥未设置"))
+  if (algorithm === 'SM4') {
+    return sm4Decrypt(data, decodeKeyToHex(cryptoConfig.secretKey))
+  }
+  if (algorithm === 'AES') {
+    return aesDecrypt(data, cryptoConfig.secretKey)
+  }
+  throw new Error(uiText("不支持的加密算法: {0}", { 0: (algorithm) }))
+}
+
+export function isEncryptedPayload(payload: any): payload is Required<EncryptedPayload> {
+  return Boolean(payload && typeof payload.data === 'string' && typeof payload.algorithm === 'string')
+}
+
+export function decryptPayload<T = any>(payload: Required<EncryptedPayload>): T {
+  if (!isKeyValid()) {
+    throw new Error(uiText("解密密钥未设置"))
+  }
+
+  try {
+    const decryptedData = decrypt(payload.data, payload.algorithm)
+    return JSON.parse(decryptedData) as T
+  } catch (error: any) {
+    const decryptError = new Error('DECRYPT_ERROR') as Error & { originalError?: unknown }
+    decryptError.originalError = error
+    throw decryptError
+  }
+}
+
+function isFormDataPayload(data: unknown): data is FormData {
+  return typeof FormData !== 'undefined' && data instanceof FormData
+}
+
+export function encryptRequest(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
+  const customConfig = config as InternalAxiosRequestConfig & { encrypt?: boolean }
+  config.headers = config.headers || {}
+
+  if (customConfig.encrypt === false || !shouldEncrypt(config.url || '')) {
+    return config
+  }
+
+  if (isFormDataPayload(config.data)) {
+    return config
+  }
+
+  if (!isKeyValid()) {
+    throw new Error(uiText("安全通道未建立，已阻止明文请求"))
+  }
+
+  if (config.data && typeof config.data === 'object') {
+    const encryptedData = encrypt(JSON.stringify(config.data))
+    config.data = {
+      data: encryptedData,
+      algorithm: cryptoConfig.algorithm
+    }
+  }
+
+  return config
+}
+
+export function decryptResponse(response: AxiosResponse): AxiosResponse {
+  const payload = response.data as EncryptedPayload
+  if (!isEncryptedPayload(payload)) {
+    return response
+  }
+
+  response.data = decryptPayload(payload)
+  return response
+}

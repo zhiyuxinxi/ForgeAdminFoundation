@@ -1,0 +1,459 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.FormulaFunctionMapper">
+
+    <resultMap id="FormulaFunctionResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunction">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="function_code" property="functionCode"/>
+        <result column="display_name" property="displayName"/>
+        <result column="category" property="category"/>
+        <result column="description" property="description"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="argument_schema" property="argumentSchema"/>
+        <result column="return_type" property="returnType"/>
+        <result column="example" property="example"/>
+        <result column="status" property="status"/>
+        <result column="current_version" property="currentVersion"/>
+        <result column="latest_version" property="latestVersion"/>
+        <result column="builtin" property="builtin"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="FunctionVersionResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunctionVersion">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="function_code" property="functionCode"/>
+        <result column="version" property="version"/>
+        <result column="implementation_type" property="implementationType"/>
+        <result column="bean_name" property="beanName"/>
+        <result column="method_name" property="methodName"/>
+        <result column="argument_schema" property="argumentSchema"/>
+        <result column="return_type" property="returnType"/>
+        <result column="example" property="example"/>
+        <result column="release_note" property="releaseNote"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="FunctionInstallResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunctionInstall">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="function_code" property="functionCode"/>
+        <result column="installed_version" property="installedVersion"/>
+        <result column="install_status" property="installStatus"/>
+        <result column="enabled" property="enabled"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="installed_by" property="installedBy"/>
+        <result column="installed_time" property="installedTime"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Formula_Function_Columns">
+        id,
+        tenant_id,
+        function_code,
+        display_name,
+        category,
+        description,
+        source_type,
+        argument_schema,
+        return_type,
+        example,
+        status,
+        current_version,
+        latest_version,
+        builtin,
+        sort_order,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <sql id="Function_Version_Columns">
+        id,
+        tenant_id,
+        function_code,
+        version,
+        implementation_type,
+        bean_name,
+        method_name,
+        argument_schema,
+        return_type,
+        example,
+        release_note,
+        status,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <sql id="Function_Install_Columns">
+        id,
+        tenant_id,
+        function_code,
+        installed_version,
+        install_status,
+        enabled,
+        source_type,
+        installed_by,
+        installed_time,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectFormulaFunctionPage" resultMap="FormulaFunctionResultMap">
+        SELECT
+        <include refid="Formula_Function_Columns"/>
+        FROM ai_formula_function
+        WHERE tenant_id = #{tenantId}
+        <if test="keyword != null and keyword != ''">
+          AND (
+            function_code LIKE CONCAT('%', #{keyword}, '%')
+            OR display_name LIKE CONCAT('%', #{keyword}, '%')
+            OR description LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="category != null and category != ''">
+          AND category = #{category}
+        </if>
+        <if test="sourceType != null and sourceType != ''">
+          AND source_type = #{sourceType}
+        </if>
+        <if test="status != null and status != ''">
+          AND status = #{status}
+        </if>
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <select id="selectFormulaFunctionByCode" resultMap="FormulaFunctionResultMap">
+        SELECT
+        <include refid="Formula_Function_Columns"/>
+        FROM ai_formula_function
+        WHERE tenant_id = #{tenantId}
+          AND function_code = #{functionCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectFunctionVersions" resultMap="FunctionVersionResultMap">
+        SELECT
+        <include refid="Function_Version_Columns"/>
+        FROM ai_formula_function_version
+        WHERE tenant_id = #{tenantId}
+          AND function_code = #{functionCode}
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="selectFunctionInstall" resultMap="FunctionInstallResultMap">
+        SELECT
+        <include refid="Function_Install_Columns"/>
+        FROM ai_formula_function_install
+        WHERE tenant_id = #{tenantId}
+          AND function_code = #{functionCode}
+        LIMIT 1
+    </select>
+
+    <sql id="Formula_Function_Market_Columns">
+        f.id AS id,
+        f.tenant_id AS tenantId,
+        f.function_code AS functionCode,
+        f.display_name AS displayName,
+        f.category AS category,
+        f.description AS description,
+        f.source_type AS sourceType,
+        f.argument_schema AS argumentSchema,
+        f.return_type AS returnType,
+        f.example AS example,
+        v.implementation_type AS implementationType,
+        v.bean_name AS beanName,
+        v.method_name AS methodName,
+        v.release_note AS releaseNote,
+        f.status AS status,
+        f.current_version AS currentVersion,
+        f.latest_version AS latestVersion,
+        f.builtin AS builtin,
+        f.sort_order AS sortOrder,
+        i.installed_version AS installedVersion,
+        i.install_status AS installStatus,
+        i.enabled AS enabled,
+        i.installed_by AS installedBy,
+        i.installed_time AS installedTime
+    </sql>
+
+    <select id="selectFormulaFunctionMarketPage" resultType="com.mdframe.forge.plugin.generator.dto.formula.FormulaFunctionMarketResponse">
+        SELECT
+        <include refid="Formula_Function_Market_Columns"/>
+        FROM ai_formula_function f
+        LEFT JOIN ai_formula_function_install i
+          ON i.tenant_id = f.tenant_id
+         AND i.function_code = f.function_code
+        LEFT JOIN ai_formula_function_version v
+          ON v.tenant_id = f.tenant_id
+         AND v.function_code = f.function_code
+         AND v.version = COALESCE(i.installed_version, f.current_version, f.latest_version, '1.0.0')
+        WHERE f.tenant_id = #{tenantId}
+        <if test="query != null and query.keyword != null and query.keyword != ''">
+          AND (
+            f.function_code LIKE CONCAT('%', #{query.keyword}, '%')
+            OR f.display_name LIKE CONCAT('%', #{query.keyword}, '%')
+            OR f.description LIKE CONCAT('%', #{query.keyword}, '%')
+          )
+        </if>
+        <if test="query != null and query.category != null and query.category != ''">
+          AND f.category = #{query.category}
+        </if>
+        <if test="query != null and query.sourceType != null and query.sourceType != ''">
+          AND f.source_type = #{query.sourceType}
+        </if>
+        <if test="query != null and query.status != null and query.status != ''">
+          AND f.status = #{query.status}
+        </if>
+        <if test="query != null and query.installStatus != null and query.installStatus != ''">
+          AND i.install_status = #{query.installStatus}
+        </if>
+        <if test="query != null and query.enabled != null">
+          AND i.enabled = #{query.enabled}
+        </if>
+        ORDER BY f.sort_order ASC, f.id ASC
+    </select>
+
+    <select id="selectFormulaFunctionMarketDetail" resultType="com.mdframe.forge.plugin.generator.dto.formula.FormulaFunctionMarketResponse">
+        SELECT
+        <include refid="Formula_Function_Market_Columns"/>
+        FROM ai_formula_function f
+        LEFT JOIN ai_formula_function_install i
+          ON i.tenant_id = f.tenant_id
+         AND i.function_code = f.function_code
+        LEFT JOIN ai_formula_function_version v
+          ON v.tenant_id = f.tenant_id
+         AND v.function_code = f.function_code
+         AND v.version = COALESCE(i.installed_version, f.current_version, f.latest_version, '1.0.0')
+        WHERE f.tenant_id = #{tenantId}
+          AND f.function_code = #{functionCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectEnabledInstalledFunctions" resultType="com.mdframe.forge.plugin.generator.dto.formula.FormulaFunctionMarketResponse">
+        SELECT
+        <include refid="Formula_Function_Market_Columns"/>
+        FROM ai_formula_function f
+        INNER JOIN ai_formula_function_install i
+          ON i.tenant_id = f.tenant_id
+         AND i.function_code = f.function_code
+        LEFT JOIN ai_formula_function_version v
+          ON v.tenant_id = f.tenant_id
+         AND v.function_code = f.function_code
+         AND v.version = i.installed_version
+        WHERE f.tenant_id = #{tenantId}
+          AND f.status = 'ENABLED'
+          AND i.install_status = 'INSTALLED'
+          AND i.enabled = 1
+        ORDER BY f.sort_order ASC, f.id ASC
+    </select>
+
+    <select id="selectInstalledFunctionDefinitions" resultType="com.mdframe.forge.plugin.generator.dto.formula.FormulaFunctionMarketResponse">
+        SELECT
+        <include refid="Formula_Function_Market_Columns"/>
+        FROM ai_formula_function f
+        INNER JOIN ai_formula_function_install i
+          ON i.tenant_id = f.tenant_id
+         AND i.function_code = f.function_code
+        LEFT JOIN ai_formula_function_version v
+          ON v.tenant_id = f.tenant_id
+         AND v.function_code = f.function_code
+         AND v.version = i.installed_version
+        WHERE f.tenant_id = #{tenantId}
+          AND i.install_status = 'INSTALLED'
+        ORDER BY f.sort_order ASC, f.id ASC
+    </select>
+
+    <insert id="upsertFormulaFunction" parameterType="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunction">
+        INSERT INTO ai_formula_function (
+            id,
+            tenant_id,
+            function_code,
+            display_name,
+            category,
+            description,
+            source_type,
+            argument_schema,
+            return_type,
+            example,
+            status,
+            current_version,
+            latest_version,
+            builtin,
+            sort_order,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time
+        ) VALUES (
+            #{id},
+            #{tenantId},
+            #{functionCode},
+            #{displayName},
+            #{category},
+            #{description},
+            #{sourceType},
+            #{argumentSchema},
+            #{returnType},
+            #{example},
+            #{status},
+            #{currentVersion},
+            #{latestVersion},
+            #{builtin},
+            #{sortOrder},
+            #{remark},
+            #{createBy},
+            #{createTime},
+            #{createDept},
+            #{updateBy},
+            #{updateTime}
+        )
+        ON DUPLICATE KEY UPDATE
+            display_name = VALUES(display_name),
+            category = VALUES(category),
+            description = VALUES(description),
+            source_type = VALUES(source_type),
+            argument_schema = VALUES(argument_schema),
+            return_type = VALUES(return_type),
+            example = VALUES(example),
+            status = VALUES(status),
+            current_version = VALUES(current_version),
+            latest_version = VALUES(latest_version),
+            builtin = VALUES(builtin),
+            sort_order = VALUES(sort_order),
+            remark = VALUES(remark),
+            update_by = VALUES(update_by),
+            update_time = VALUES(update_time)
+    </insert>
+
+    <insert id="upsertFunctionVersion" parameterType="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunctionVersion">
+        INSERT INTO ai_formula_function_version (
+            id,
+            tenant_id,
+            function_code,
+            version,
+            implementation_type,
+            bean_name,
+            method_name,
+            argument_schema,
+            return_type,
+            example,
+            release_note,
+            status,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time
+        ) VALUES (
+            #{id},
+            #{tenantId},
+            #{functionCode},
+            #{version},
+            #{implementationType},
+            #{beanName},
+            #{methodName},
+            #{argumentSchema},
+            #{returnType},
+            #{example},
+            #{releaseNote},
+            #{status},
+            #{remark},
+            #{createBy},
+            #{createTime},
+            #{createDept},
+            #{updateBy},
+            #{updateTime}
+        )
+        ON DUPLICATE KEY UPDATE
+            implementation_type = VALUES(implementation_type),
+            bean_name = VALUES(bean_name),
+            method_name = VALUES(method_name),
+            argument_schema = VALUES(argument_schema),
+            return_type = VALUES(return_type),
+            example = VALUES(example),
+            release_note = VALUES(release_note),
+            status = VALUES(status),
+            remark = VALUES(remark),
+            update_by = VALUES(update_by),
+            update_time = VALUES(update_time)
+    </insert>
+
+    <insert id="upsertFunctionInstall" parameterType="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaFunctionInstall">
+        INSERT INTO ai_formula_function_install (
+            id,
+            tenant_id,
+            function_code,
+            installed_version,
+            install_status,
+            enabled,
+            source_type,
+            installed_by,
+            installed_time,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time
+        ) VALUES (
+            #{id},
+            #{tenantId},
+            #{functionCode},
+            #{installedVersion},
+            #{installStatus},
+            #{enabled},
+            #{sourceType},
+            #{installedBy},
+            #{installedTime},
+            #{remark},
+            #{createBy},
+            #{createTime},
+            #{createDept},
+            #{updateBy},
+            #{updateTime}
+        )
+        ON DUPLICATE KEY UPDATE
+            installed_version = VALUES(installed_version),
+            install_status = VALUES(install_status),
+            enabled = VALUES(enabled),
+            source_type = VALUES(source_type),
+            installed_by = VALUES(installed_by),
+            installed_time = VALUES(installed_time),
+            remark = VALUES(remark),
+            update_by = VALUES(update_by),
+            update_time = VALUES(update_time)
+    </insert>
+</mapper>

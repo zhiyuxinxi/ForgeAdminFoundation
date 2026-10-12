@@ -1,0 +1,725 @@
+/**
+ * 主题样式变量
+ * 这些变量会被 theme.config.js 动态设置
+ */
+
+:root {
+  --base-primary-color: var(--primary-600);
+  /* 字体大小配置 */
+  --font-size-base: calc(14px * var(--font-scale, 1));
+  --font-size-lg: calc(16px * var(--font-scale, 1));
+  --font-size-sm: calc(12px * var(--font-scale, 1));
+
+  /* Header 配置 */
+  --layout-header-bg-color: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
+  --layout-header-text-color: #ffffffff;
+  --brand-title-text-color: var(--layout-header-text-color);
+  --layout-header-font-size: var(--font-size-base);
+  --layout-header-height: 60px;
+  --layout-header-border-color: rgba(255, 255, 255, 0.1);
+
+  /* 顶部菜单配置 */
+  --top-menu-text-color: #ffffffff;
+  --top-menu-text-color-hover: #ffffffff;
+  --top-menu-text-color-active: #ffffffff;
+  --top-menu-text-color-active-hover: #ffffffff;
+  --top-menu-text-color-active-horizontal: #333333;
+  --top-menu-bg-color: transparent;
+  --top-menu-bg-color-hover: transparent;
+  --top-menu-bg-color-active: rgba(255, 255, 255, 0.2);
+  --top-menu-bg-color-active-hover: rgba(255, 255, 255, 0.15);
+  --top-menu-font-size: var(--font-size-base);
+  --top-menu-font-weight: 500;
+  --top-menu-icon-color: rgba(255, 255, 255, 0.75);
+  --top-menu-icon-color-active: #ffffff;
+  --n-item-text-color-child-active-horizontal: #ffffff;
+
+  /* 侧边菜单配置 */
+  --side-menu-bg-color: var(--bg-primary);
+  --side-menu-text-color: var(--text-secondary);
+  --side-menu-text-color-hover: var(--primary-600);
+  --side-menu-text-color-active: var(--primary-600);
+  --side-menu-parent-text-color-active: var(--primary-700);
+  --side-menu-bg-color-hover: var(--bg-hover);
+  --side-menu-bg-color-active: var(--primary-50);
+  --side-menu-parent-bg-color-active: var(--primary-50);
+  --side-menu-border-color: var(--border-default);
+  --side-menu-font-size: var(--font-size-base);
+  --side-menu-font-weight: 400;
+  --side-menu-icon-color: var(--gray-500);
+  --side-menu-icon-color-active: var(--primary-600);
+  --side-menu-item-padding: 12px;
+  --side-menu-collapsed-width: 56px;
+  --side-menu-width: 200px;
+}
+
+/* 应用 Header 样式 */
+.layout-header {
+  background-color: var(--layout-header-bg-color) !important;
+  color: var(--layout-header-text-color) !important;
+  /*font-size: var(--layout-header-font-size) !important;*/
+  height: var(--layout-header-height) !important;
+  border-color: var(--layout-header-border-color) !important;
+}
+/* normal layout 浅色 header 覆盖 - 直接将 layout-header 改为白色 */
+.header-glass .layout-header,
+.header-glass.layout-header {
+  background: var(--layout-header-bg-color) !important;
+  background-color: var(--layout-header-bg-color) !important;
+  color: var(--layout-header-text-color) !important;
+  border-color: var(--layout-header-border-color) !important;
+  height: 50px !important;
+  box-shadow: none !important;
+}
+.side-header {
+  background-color: var(--side-menu-bg-color) !important;
+  color: var(--side-menu-text-color) !important;
+  height: var(--layout-header-height) !important;
+}
+.layout-header * {
+  /*color: var(--layout-header-text-color);*/
+}
+
+/* 应用顶部菜单样式 */
+.top-menu-wrapper .n-menu,
+.top-menu {
+  background-color: transparent !important;
+}
+
+.top-menu-wrapper .n-menu-item-content,
+.top-menu .n-menu-item-content {
+  color: var(--top-menu-text-color) !important;
+  font-size: calc(var(--top-menu-font-size) * var(--font-scale, 1)) !important;
+  font-weight: var(--top-menu-font-weight) !important;
+}
+.top-menu-wrapper .n-menu-item-content:hover,
+.top-menu .n-menu-item-content:hover {
+  color: var(--top-menu-icon-color-active) !important;
+  background-color: var(--top-menu-bg-color-hover) !important;
+}
+
+.top-menu-wrapper .n-menu-item-content--selected,
+.top-menu .n-menu-item-content--selected:hover {
+  color: var(--top-menu-text-color-active) !important;
+  background-color: transparent !important;
+}
+.top-menu-wrapper.n-menu.n-menu--horizontal
+  .n-menu-item-content:not(.n-menu-item-content--disabled).n-menu-item-content--selected:hover
+  .n-menu-item-content-header {
+  color: var(--top-menu-text-color-active) !important;
+}
+
+.top-menu-wrapper .n-menu-item-content--selected,
+.top-menu .n-menu-item-content--selected {
+  color: var(--top-menu-text-color-active) !important;
+  background-color: transparent !important;
+  font-weight: 600 !important;
+}
+
+.top-menu-wrapper .n-menu-item-content__icon,
+.top-menu .n-menu-item-content__icon {
+  color: var(--top-menu-icon-color) !important;
+  margin-left: 0 !important;
+}
+
+.top-menu-wrapper .n-menu-item-content--selected .n-menu-item-content__icon,
+.top-menu .n-menu-item-content--selected .n-menu-item-content__icon {
+  color: var(--top-menu-icon-color-active) !important;
+}
+
+/* 应用侧边菜单样式 */
+.side-menu-wrapper,
+.side-menu-wrapper .n-menu {
+  background-color: var(--side-menu-bg-color) !important;
+  border-color: var(--side-menu-border-color) !important;
+}
+
+.side-menu-wrapper .n-menu-item-content {
+  color: var(--side-menu-text-color) !important;
+  font-size: calc(var(--side-menu-font-size) * var(--font-scale, 1)) !important;
+  font-weight: var(--side-menu-font-weight) !important;
+  padding-left: 12px !important;
+}
+
+.side-menu-wrapper .n-menu-item-content:hover {
+  color: var(--side-menu-text-color-hover) !important;
+  background-color: var(--side-menu-bg-color-hover) !important;
+}
+
+.side-menu-wrapper .n-menu-item-content--selected {
+  color: var(--side-menu-text-color-active) !important;
+  background-color: var(--side-menu-bg-color-active) !important;
+  padding-left: 12px !important;
+}
+.side-menu-wrapper .n-menu-item-content--selected:hover {
+  background-color: var(--side-menu-bg-color-active) !important;
+}
+.side-menu-wrapper .n-menu-item-content__icon {
+  color: var(--side-menu-icon-color) !important;
+}
+.side-menu-wrapper .n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content-header {
+  color: var(--side-menu-text-color-active) !important;
+}
+.layout-header
+  .n-menu.n-menu--horizontal
+  .n-menu-item-content.n-menu-item-content--selected
+  .n-menu-item-content-header {
+  color: var(--n-item-text-color-active-horizontal) !important;
+}
+.side-menu-wrapper .n-menu-item-content--selected .n-menu-item-content__icon {
+  color: var(--side-menu-icon-color-active) !important;
+}
+
+/* 侧边栏宽度 */
+.side-menu-wrapper:not(.collapsed) {
+  width: var(--side-menu-width) !important;
+}
+
+.side-menu-wrapper.collapsed {
+  width: var(--side-menu-collapsed-width) !important;
+}
+.top-menu-wrapper .n-menu-item-content--selected,
+.top-menu .n-menu-item-content--selected {
+  color: var(--top-menu-icon-color-active) !important;
+}
+.n-menu .n-menu-item-content .n-menu-item-content__icon {
+  margin-left: 8px;
+}
+.n-menu.n-menu--horizontal .n-menu-item-content.n-menu-item-content--child-active .n-menu-item-content__icon {
+  color: var(--top-menu-icon-color-active) !important;
+}
+.n-menu.n-menu--horizontal .n-menu-item-content.n-menu-item-content--child-active {
+  background: transparent !important;
+}
+.n-menu.n-menu--horizontal .n-menu-item-content.n-menu-item-content--child-active:hover {
+  background: transparent !important;
+}
+.n-dialog .n-dialog__icon {
+  color: var(--primary-500) !important;
+}
+
+/* 对话框 */
+.n-dialog .n-modal-card {
+  border-radius: var(--radius-modal) !important;
+  overflow: hidden;
+}
+
+.n-dialog__card {
+  border-radius: var(--radius-modal) !important;
+}
+
+/* ═══════════════════════════════════════
+ * Naive UI 组件全局规范 - SnowAdmin 风格
+ * ═══════════════════════════════════════ */
+
+/* 表格 */
+.n-data-table {
+  --forge-table-sticky-header-top: 0px;
+  --forge-table-sticky-header-z-index: 4;
+  --forge-table-sticky-header-fixed-z-index: 5;
+}
+
+.n-data-table .n-data-table-base-table-header {
+  position: sticky;
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-z-index);
+  background: var(--bg-secondary);
+}
+
+.n-data-table .n-data-table-thead {
+  background: var(--bg-secondary);
+}
+
+.n-data-table .n-data-table-th {
+  position: sticky;
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-z-index);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  font-size: 13px;
+  background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-th--fixed-left,
+.n-data-table .n-data-table-th--fixed-right {
+  position: sticky;
+  z-index: var(--forge-table-sticky-header-fixed-z-index);
+  background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-th--fixed-left {
+  left: 0;
+}
+
+.n-data-table .n-data-table-th--fixed-right {
+  right: 0;
+}
+
+.n-data-table .n-data-table-th.forge-table-action-column,
+.n-data-table .n-data-table-td.forge-table-action-column {
+  position: sticky;
+  right: 0;
+}
+
+.n-data-table .n-data-table-th.forge-table-action-column {
+  top: var(--forge-table-sticky-header-top);
+  z-index: var(--forge-table-sticky-header-fixed-z-index);
+  background: var(--bg-secondary) !important;
+}
+
+.n-data-table .n-data-table-td.forge-table-action-column {
+  z-index: 3;
+  background: var(--n-merged-td-color, var(--bg-primary)) !important;
+}
+
+.forge-table-scroll-enhanced .n-data-table-th {
+  cursor: default;
+}
+
+.forge-table-scroll-enhanced .n-data-table-td {
+  cursor: text;
+  user-select: text;
+}
+
+.forge-table-scroll-enhanced.is-table-dragging,
+.forge-table-scroll-enhanced .is-table-dragging {
+  cursor: grabbing !important;
+}
+
+.forge-table-scroll-enhanced .n-data-table-sorter,
+.forge-table-scroll-enhanced .n-data-table-filter {
+  cursor: pointer;
+}
+
+.forge-table-scroll-enhanced.forge-table-no-y-overflow .n-scrollbar-rail--vertical {
+  display: none;
+}
+
+.n-data-table .n-data-table-td {
+  border-color: var(--border-light);
+}
+
+.n-data-table .n-data-table-tr:hover .n-data-table-td {
+  background: var(--bg-secondary);
+}
+
+/* 模态框 */
+.n-modal {
+  border-radius: var(--radius-modal) !important;
+  box-shadow: var(--shadow-modal) !important;
+}
+
+/* 标签 */
+.n-tag {
+  border-radius: var(--radius-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+/* 通知 */
+.n-notification {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 消息 */
+.n-message {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 工具提示 */
+.n-tooltip {
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+/* 分页器 */
+.n-pagination-item {
+  border-radius: var(--radius-sm) !important;
+}
+
+.n-pagination-item--active {
+  background: var(--primary-500) !important;
+  border-color: var(--primary-500) !important;
+  color: #fff !important;
+}
+
+/* 暗色模式适配 */
+.dark .n-form-item .n-form-item-label {
+  color: var(--text-primary);
+}
+
+.dark .n-tabs .n-tabs-tab--active {
+  background: var(--primary-900);
+  color: var(--primary-100);
+}
+
+.dark .n-data-table .n-data-table-th {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dark .n-data-table .n-data-table-tr:hover .n-data-table-td {
+  background: var(--bg-tertiary);
+}
+.n-form-item .n-form-item-label {
+  font-size: calc(var(--n-label-font-size) * var(--font-scale, 1)) !important;
+}
+.n-input {
+  font-size: calc(var(--n-font-size) * var(--font-scale, 1)) !important;
+}
+.n-input .n-input__input-el {
+  height: fit-content;
+}
+.n-form-item .n-form-item-feedback-wrapper {
+  font-size: calc(var(--n-feedback-font-size) * var(--font-scale, 1)) !important;
+  min-height: calc(var(--n-feedback-height) * var(--font-scale, 1)) !important;
+}
+.n-data-table .n-data-table-th {
+  font-size: calc(var(--font-size-base - 1) * var(--font-scale, 1)) !important;
+}
+
+/* 全局分页器响应式样式 */
+.n-pagination {
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+@media (max-width: 992px) {
+  .n-pagination {
+    padding: 12px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .n-pagination {
+    justify-content: center !important;
+    padding: 16px 8px !important;
+  }
+
+  .n-pagination .n-pagination-item {
+    min-width: 32px !important;
+    height: 32px !important;
+    font-size: 13px !important;
+  }
+
+  .n-pagination .n-pagination-item__button {
+    padding: 0 6px !important;
+  }
+
+  .n-pagination-size-picker {
+    font-size: 13px !important;
+  }
+
+  .n-pagination-quick-jumper {
+    font-size: 13px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .n-pagination {
+    padding: 12px 4px !important;
+    gap: 4px !important;
+  }
+
+  .n-pagination .n-pagination-item {
+    min-width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+
+  .n-pagination .n-pagination-item__button {
+    padding: 0 4px !important;
+  }
+}
+
+/* ════════════════════════════════════
+ * Naive UI 按钮风格 - 扁平化后台操作按钮
+ * 统一收敛圆角、去除阴影和浮起动效，现有页面无需替换 n-button
+ * ═════════════════════════════════════ */
+.n-button {
+  min-width: 34px !important;
+  height: var(--n-height, 34px) !important;
+  padding: 0 14px !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  letter-spacing: 0;
+  transform: none !important;
+  transform-origin: center;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease !important;
+}
+
+.n-button::before,
+.n-button::after {
+  display: none !important;
+  content: none !important;
+}
+
+.n-button .n-button__border,
+.n-button .n-button__state-border {
+  box-shadow: none !important;
+}
+
+.n-button--small-type {
+  min-width: 32px !important;
+  height: var(--n-height, 28px) !important;
+  padding: 0 10px !important;
+  font-size: 13px !important;
+}
+
+.n-button--tiny-type {
+  min-width: 26px !important;
+  height: var(--n-height, 22px) !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+}
+
+.n-button--large-type {
+  min-width: 42px !important;
+  height: var(--n-height, 40px) !important;
+  padding: 0 16px !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+}
+
+/* InputNumber 的加减按钮是 Naive 内部按钮，不能套用全局业务按钮尺寸。 */
+.n-input-number .n-button {
+  min-width: 22px !important;
+  width: 22px !important;
+  height: 16px !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  transform: none !important;
+}
+
+.n-input-number .n-button__content,
+.n-input-number .n-button__icon {
+  min-width: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.n-button:not(.n-button--primary-type):not(.n-button--error-type):not(.n-button--success-type):not(
+    .n-button--warning-type
+  ):not(.n-button--info-type):not(.n-button--text-type):not(.n-button--quaternary-type):not(.n-button--tertiary-type) {
+  border-color: var(--border-default, #d9dde8) !important;
+  background: var(--bg-primary, #fff) !important;
+  box-shadow: none !important;
+  color: var(--text-secondary, #4e5969) !important;
+}
+
+.n-button:not(.n-button--primary-type):not(.n-button--error-type):not(.n-button--success-type):not(
+    .n-button--warning-type
+  ):not(.n-button--info-type):not(.n-button--text-type):not(.n-button--quaternary-type):not(
+    .n-button--tertiary-type
+  ):hover:not(:disabled) {
+  border-color: var(--primary-color, #4242f7) !important;
+  background: color-mix(in srgb, var(--primary-color, #4242f7) 6%, var(--bg-primary, #fff)) !important;
+  box-shadow: none !important;
+  color: var(--primary-color, #4242f7) !important;
+}
+
+.n-button:active:not(:disabled) {
+  transform: none !important;
+}
+
+.n-input-number .n-button,
+.n-input-number .n-button:hover:not(:disabled),
+.n-input-number .n-button:active:not(:disabled),
+.n-input-number .n-button:focus:not(:disabled) {
+  min-width: 22px !important;
+  width: 22px !important;
+  height: 16px !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.n-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.58 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.n-button:disabled .n-button__content,
+.n-button:disabled .n-button__icon {
+  color: currentColor !important;
+}
+
+/* Primary 默认跟随系统主题变量，纯色扁平 */
+.n-button--primary-type {
+  border: 1px solid var(--button-primary-border) !important;
+  border-radius: 3px !important;
+  background: var(--button-primary-bg) !important;
+  color: #fff !important;
+  font-weight: 500 !important;
+  text-shadow: none;
+}
+
+.n-button--primary-type:hover:not(:disabled) {
+  background: var(--button-primary-bg-hover) !important;
+  box-shadow: var(--button-primary-shadow-hover) !important;
+}
+
+.n-button--primary-type:active:not(:disabled) {
+  background: var(--button-primary-bg-active) !important;
+  box-shadow: var(--button-primary-shadow-active) !important;
+}
+
+.n-button--primary-type .n-button__content,
+.n-button--primary-type .n-button__icon {
+  color: #fff !important;
+}
+
+/* 操作类型按钮使用浅底色，避免批量删除等按钮出现白字白底 */
+.n-button--error-type {
+  border-color: rgba(248, 113, 113, 0.34) !important;
+  background: rgba(254, 242, 242, 0.9) !important;
+  color: #dc2626 !important;
+  box-shadow: none !important;
+}
+
+.n-button--error-type:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.46) !important;
+  background: rgba(254, 226, 226, 0.95) !important;
+  color: #b91c1c !important;
+  box-shadow: none !important;
+}
+
+.n-button--success-type {
+  border-color: rgba(52, 211, 153, 0.34) !important;
+  background: rgba(236, 253, 245, 0.9) !important;
+  color: #059669 !important;
+  box-shadow: none !important;
+}
+
+.n-button--success-type:hover:not(:disabled) {
+  border-color: rgba(16, 185, 129, 0.46) !important;
+  background: rgba(209, 250, 229, 0.95) !important;
+  color: #047857 !important;
+  box-shadow: none !important;
+}
+
+.n-button--warning-type {
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  background: rgba(255, 251, 235, 0.92) !important;
+  color: #d97706 !important;
+  box-shadow: none !important;
+}
+
+.n-button--warning-type:hover:not(:disabled) {
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  background: rgba(254, 243, 199, 0.96) !important;
+  color: #b45309 !important;
+  box-shadow: none !important;
+}
+
+.n-button--info-type {
+  border-color: rgba(56, 189, 248, 0.34) !important;
+  background: rgba(240, 249, 255, 0.9) !important;
+  color: #0284c7 !important;
+  box-shadow: none !important;
+}
+
+.n-button--info-type:hover:not(:disabled) {
+  border-color: rgba(14, 165, 233, 0.46) !important;
+  background: rgba(224, 242, 254, 0.95) !important;
+  color: #0369a1 !important;
+  box-shadow: none !important;
+}
+
+.n-button--error-type .n-button__content,
+.n-button--error-type .n-button__icon,
+.n-button--success-type .n-button__content,
+.n-button--success-type .n-button__icon,
+.n-button--warning-type .n-button__content,
+.n-button--warning-type .n-button__icon,
+.n-button--info-type .n-button__content,
+.n-button--info-type .n-button__icon {
+  color: currentColor !important;
+}
+
+/* Text 按钮用于表格操作，保持扁平无装饰 */
+.n-button--text-type {
+  min-width: 32px !important;
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-radius: 3px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+}
+
+.n-button--small-type.n-button--text-type {
+  height: 28px !important;
+  padding: 0 10px !important;
+}
+
+.collapse-btn.n-button--text-type {
+  padding-right: 12px !important;
+  padding-left: 12px !important;
+}
+
+.n-button--text-type:hover:not(:disabled) {
+  color: var(--primary-600) !important;
+  background: color-mix(in srgb, var(--primary-color, #4242f7) 6%, transparent) !important;
+}
+
+/* 可选样式类统一收敛为扁平按钮，避免局部类带回装饰效果 */
+.btn-spotlight.n-button {
+  border-color: var(--primary-color, #4242f7) !important;
+  border-radius: 3px !important;
+  background: var(--primary-color, #4242f7) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+.btn-magnetic.n-button:hover:not(:disabled) {
+  transform: none !important;
+}
+
+.btn-arrow-reveal.n-button .n-button__content {
+  transition: color 0.16s ease;
+}
+
+.btn-arrow-reveal.n-button:hover .n-button__content {
+  transform: none;
+}
+
+.btn-glass.n-button {
+  border-color: var(--border-default, #d9dde8) !important;
+  border-radius: 3px !important;
+  background: var(--bg-primary, #fff) !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+}
+
+.btn-glass.n-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary-color, #4242f7) 6%, var(--bg-primary, #fff)) !important;
+  transform: none !important;
+}
+
+.btn-underline.n-button {
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dark
+  .n-button:not(.n-button--primary-type):not(.n-button--error-type):not(.n-button--success-type):not(
+    .n-button--warning-type
+  ):not(.n-button--info-type):not(.n-button--text-type):not(.n-button--quaternary-type):not(.n-button--tertiary-type) {
+  border-color: rgba(71, 85, 105, 0.9) !important;
+  background: rgba(30, 41, 59, 0.72) !important;
+  box-shadow: none !important;
+}

@@ -1,0 +1,45 @@
+package com.mdframe.forge.plugin.system.dto;
+
+import com.mdframe.forge.starter.core.domain.PageQuery;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+/**
+ * 组织查询DTO
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class SysOrgQuery extends PageQuery {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 租户编号
+     */
+    private Long tenantId;
+
+    /**
+     * 组织名称（模糊查询）
+     */
+    private String orgName;
+
+    /**
+     * 父级组织ID
+     */
+    private Long parentId;
+
+    /**
+     * 组织类型（来自 sys_org_type 字典，支持数字或字符串字典值）
+     */
+    private String orgType;
+
+    /**
+     * 组织状态（0-禁用，1-正常）
+     */
+    private Integer orgStatus;
+
+    /**
+     * 行政区划编码（支持虚拟组织ALL后缀，如150000ALL）
+     */
+    private String regionCode;
+}

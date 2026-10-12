@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowEntryMapper">
+
+    <select id="selectEntryPage" resultType="com.mdframe.forge.starter.flow.entity.FlowEntry">
+        SELECT e.*
+        FROM sys_flow_entry e
+        <where>
+            e.deleted = 0
+            <if test="query != null and query.entryName != null and query.entryName != ''">
+                AND e.entry_name LIKE CONCAT('%', #{query.entryName}, '%')
+            </if>
+            <if test="query != null and query.entryCode != null and query.entryCode != ''">
+                AND e.entry_code = #{query.entryCode}
+            </if>
+            <if test="query != null and query.modelKey != null and query.modelKey != ''">
+                AND e.model_key = #{query.modelKey}
+            </if>
+            <if test="query != null and query.formKey != null and query.formKey != ''">
+                AND e.form_key = #{query.formKey}
+            </if>
+            <if test="query != null and query.dataMode != null and query.dataMode != ''">
+                AND e.data_mode = #{query.dataMode}
+            </if>
+            <if test="query != null and query.status != null">
+                AND e.status = #{query.status}
+            </if>
+        </where>
+        ORDER BY e.sort ASC, e.create_time DESC
+    </select>
+
+    <select id="selectByEntryCode" resultType="com.mdframe.forge.starter.flow.entity.FlowEntry">
+        SELECT e.*
+        FROM sys_flow_entry e
+        WHERE e.deleted = 0
+          AND e.entry_code = #{entryCode}
+        LIMIT 1
+    </select>
+
+    <select id="countByEntryCode" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_flow_entry e
+        WHERE e.deleted = 0
+          AND e.entry_code = #{entryCode}
+        <if test="excludeId != null">
+            AND e.id != #{excludeId}
+        </if>
+    </select>
+</mapper>

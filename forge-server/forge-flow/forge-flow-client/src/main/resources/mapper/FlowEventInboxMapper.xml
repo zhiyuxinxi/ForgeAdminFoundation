@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.flow.client.mapper.FlowEventInboxMapper">
+    <resultMap id="inboxEntry" type="com.mdframe.forge.flow.client.event.FlowEventInboxEntry">
+        <constructor>
+            <idArg column="tenant_id" javaType="java.lang.Long"/>
+            <arg column="consumer_id" javaType="java.lang.String"/>
+            <arg column="event_id" javaType="java.lang.String"/>
+            <arg column="callback_id" javaType="java.lang.String"/>
+            <arg column="payload_hash" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+    <insert id="reserve">
+        INSERT INTO sys_flow_event_inbox
+        (tenant_id, consumer_id, event_id, callback_id, payload_hash, status)
+        VALUES (#{tenantId}, #{consumerId}, #{eventId}, #{callbackId}, #{payloadHash}, 'PROCESSING')
+        ON DUPLICATE KEY UPDATE callback_id = callback_id
+    </insert>
+    <select id="selectForUpdate" resultMap="inboxEntry">
+        SELECT tenant_id, consumer_id, event_id, callback_id, payload_hash, status
+        FROM sys_flow_event_inbox
+        WHERE tenant_id = #{tenantId} AND consumer_id = #{consumerId}
+          AND event_id = #{eventId} AND callback_id = #{callbackId}
+        FOR UPDATE
+    </select>
+    <update id="complete">
+        UPDATE sys_flow_event_inbox SET status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP(3)
+        WHERE tenant_id = #{tenantId} AND consumer_id = #{consumerId}
+          AND event_id = #{eventId} AND callback_id = #{callbackId}
+          AND payload_hash = #{payloadHash} AND status = 'PROCESSING'
+    </update>
+</mapper>

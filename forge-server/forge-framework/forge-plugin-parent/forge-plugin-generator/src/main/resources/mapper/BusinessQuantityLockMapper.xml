@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessQuantityLockMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessQuantityLock">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="lock_code" property="lockCode"/>
+        <result column="account_code" property="accountCode"/>
+        <result column="item_code" property="itemCode"/>
+        <result column="dimension_key" property="dimensionKey"/>
+        <result column="lock_quantity" property="lockQuantity"/>
+        <result column="released_quantity" property="releasedQuantity"/>
+        <result column="committed_quantity" property="committedQuantity"/>
+        <result column="lock_status" property="lockStatus"/>
+        <result column="source_object_code" property="sourceObjectCode"/>
+        <result column="source_record_id" property="sourceRecordId"/>
+        <result column="source_detail_id" property="sourceDetailId"/>
+        <result column="correlation_id" property="correlationId"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        lock_code,
+        account_code,
+        item_code,
+        dimension_key,
+        lock_quantity,
+        released_quantity,
+        committed_quantity,
+        lock_status,
+        source_object_code,
+        source_record_id,
+        source_detail_id,
+        correlation_id,
+        idempotency_key,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByIdempotencyKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_quantity_lock
+        WHERE tenant_id = #{tenantId}
+          AND idempotency_key = #{idempotencyKey}
+        ORDER BY create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectLockPage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLockVO">
+        SELECT
+            id,
+            lock_code AS lockCode,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            lock_quantity AS lockQuantity,
+            released_quantity AS releasedQuantity,
+            committed_quantity AS committedQuantity,
+            lock_quantity - released_quantity - committed_quantity AS remainingQuantity,
+            lock_status AS lockStatus,
+            source_object_code AS sourceObjectCode,
+            source_record_id AS sourceRecordId,
+            source_detail_id AS sourceDetailId,
+            correlation_id AS correlationId,
+            remark,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM ai_business_quantity_lock
+        WHERE tenant_id = #{tenantId}
+        <if test="query.lockStatus != null and query.lockStatus != ''">
+          AND lock_status = #{query.lockStatus}
+        </if>
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.sourceObjectCode != null and query.sourceObjectCode != ''">
+          AND source_object_code = #{query.sourceObjectCode}
+        </if>
+        <if test="query.sourceRecordId != null and query.sourceRecordId != ''">
+          AND source_record_id = #{query.sourceRecordId}
+        </if>
+        <if test="query.sourceDetailId != null and query.sourceDetailId != ''">
+          AND source_detail_id = #{query.sourceDetailId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="selectByLockCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_quantity_lock
+        WHERE tenant_id = #{tenantId}
+          AND lock_code = #{lockCode}
+        ORDER BY create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectActiveBySource" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_quantity_lock
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND source_object_code = #{sourceObjectCode}
+          AND source_record_id = #{sourceRecordId}
+          AND lock_status = 'LOCKED'
+        <if test="sourceDetailId != null and sourceDetailId != ''">
+          AND source_detail_id = #{sourceDetailId}
+        </if>
+        <if test="sourceDetailId == null or sourceDetailId == ''">
+          AND source_detail_id IS NULL
+        </if>
+        ORDER BY create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <update id="releaseLockQuantity">
+        UPDATE ai_business_quantity_lock
+        SET released_quantity = released_quantity + #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{lockId}
+          AND lock_status = 'LOCKED'
+          AND lock_quantity - released_quantity - committed_quantity >= #{quantity}
+    </update>
+
+    <update id="commitLockQuantity">
+        UPDATE ai_business_quantity_lock
+        SET committed_quantity = committed_quantity + #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{lockId}
+          AND lock_status = 'LOCKED'
+          AND lock_quantity - released_quantity - committed_quantity >= #{quantity}
+    </update>
+
+    <update id="updateLockStatus">
+        UPDATE ai_business_quantity_lock
+        SET lock_status = #{lockStatus},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND id = #{lockId}
+    </update>
+
+</mapper>

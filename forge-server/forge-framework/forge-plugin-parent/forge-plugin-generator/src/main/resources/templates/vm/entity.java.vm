@@ -1,0 +1,97 @@
+package ${packageName}.${moduleName}.entity;
+
+import com.baomidou.mybatisplus.annotation.*;
+#if(${hasTenantEntity})
+import com.mdframe.forge.starter.tenant.core.TenantEntity;
+#elseif(${hasBaseEntity})
+import com.mdframe.forge.starter.core.domain.BaseEntity;
+#end
+#if(${hasDictTrans})
+import com.mdframe.forge.starter.trans.annotation.DictTrans;
+import com.mdframe.forge.starter.trans.annotation.TransField;
+#end
+#if(${hasDesensitize})
+import com.mdframe.forge.starter.crypto.desensitize.annotation.Desensitize;
+import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeType;
+#end
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+#if(${hasDate})
+import java.time.LocalDateTime;
+#end
+#if(${hasBigDecimal})
+import java.math.BigDecimal;
+#end
+#if(${hasEntityTreeFields})
+import java.util.ArrayList;
+import java.util.List;
+#end
+
+/**
+ * ${functionName}实体类
+ * 
+ * @author ${author}
+ * @date ${datetime}
+ */
+@Data
+#if(${hasBaseEntity})
+@EqualsAndHashCode(callSuper = true)
+#end
+@TableName("${tableName}")
+#if(${hasDictTrans})
+@DictTrans
+#end
+public class ${className}#if(${hasTenantEntity}) extends TenantEntity#elseif(${hasBaseEntity}) extends BaseEntity#end {
+
+    private static final long serialVersionUID = 1L;
+
+#foreach ($column in $columns)
+    /**
+     * $column.columnComment
+     */
+#if($column.isPk)
+#if($column.isIncrement == 1)
+    @TableId(value = "$column.columnName", type = IdType.AUTO)
+#elseif($column.javaType == 'Long')
+    @TableId(value = "$column.columnName", type = IdType.ASSIGN_ID)
+#else
+    @TableId(value = "$column.columnName", type = IdType.INPUT)
+#end
+#end
+#if($column.columnName == 'del_flag')
+#if($column.javaType == 'Long' && $pkColumn && $pkColumn.javaType == 'Long')
+    @TableLogic(value = "0", delval = "${pkColumn.columnName}")
+#else
+    @TableLogic
+#end
+#end
+#if($column.dictType && $column.dictType != "")
+    @TransField(dictType = "$column.dictType")
+#end
+#if($column.desensitizeType && $column.desensitizeType != "" && $column.desensitizeType != "NONE")
+    @Desensitize(type = DesensitizeType.${column.desensitizeType})
+#end
+    private $column.javaType $column.javaField;
+
+#if($column.dictType && $column.dictType != "")
+    @TableField(exist = false)
+    private String ${column.javaField}Name;
+
+#end
+#end
+#if(${hasEntityTreeFields})
+    /**
+     * 树形子节点
+     */
+    @TableField(exist = false)
+    private List<${className}> ${entityTreeChildrenField} = new ArrayList<>();
+
+    /**
+     * 懒加载树节点是否叶子节点
+     */
+    @TableField(exist = false)
+    private Boolean isLeaf;
+
+#end
+}

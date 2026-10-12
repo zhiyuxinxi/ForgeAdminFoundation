@@ -1,0 +1,75 @@
+package com.mdframe.forge.plugin.system.dto;
+
+import com.mdframe.forge.starter.core.domain.PageQuery;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+/**
+ * 用户查询DTO
+ */
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class SysUserQuery extends PageQuery {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 租户编号
+     */
+    private Long tenantId;
+
+    /**
+     * 用户名（模糊查询）
+     */
+    private String username;
+
+    /**
+     * 用户真实姓名（模糊查询）
+     */
+    private String realName;
+
+    /**
+     * 用户名/真实姓名关键字（模糊查询）
+     */
+    private String keyword;
+
+    /**
+     * 用户类型（0-系统管理员，1-租户管理员，2-普通用户）
+     */
+    private Integer userType;
+
+    /**
+     * 手机号
+     */
+    private String phone;
+
+    /**
+     * 用户状态（0-禁用，1-正常，2-锁定）
+     */
+    private Integer userStatus;
+
+    /**
+     * 创建部门
+     */
+    private Long createDept;
+
+    /**
+     * 组织ID（用于查询该组织及其子组织下的用户）
+     */
+    private Long orgId;
+
+    /**
+     * 是否只查询直接加入指定组织的用户
+     */
+    private Boolean directOrgOnly;
+
+    /**
+     * 岗位ID（用于查询绑定指定岗位的用户）
+     */
+    private Long postId;
+
+    /**
+     * 行政区划编码（支持虚拟组织ALL后缀，如150000ALL）
+     */
+    private String regionCode;
+}

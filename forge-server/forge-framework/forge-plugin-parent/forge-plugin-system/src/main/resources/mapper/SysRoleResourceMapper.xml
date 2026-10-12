@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysRoleResourceMapper">
+
+    <select id="selectRoleResourceIdsForProjection" resultType="java.lang.Long">
+        SELECT resource_id
+        FROM sys_role_resource
+        WHERE role_id = #{roleId}
+          AND tenant_id = #{tenantId}
+    </select>
+
+    <insert id="insertBatch">
+        INSERT INTO sys_role_resource (tenant_id, role_id, resource_id, create_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.tenantId}, #{item.roleId}, #{item.resourceId}, NOW())
+        </foreach>
+    </insert>
+
+    <select id="selectResourceIdsByRole" resultType="java.lang.Long">
+        SELECT resource_id
+        FROM sys_role_resource
+        WHERE tenant_id = #{tenantId}
+          AND role_id = #{roleId}
+        ORDER BY resource_id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,1161 @@
+<template>
+  <n-drawer :show="show" width="680" @update:show="value => emit('update:show', value)">
+    <n-drawer-content :title="form.id ? translateUiText(&quot;编辑访问入口&quot;) : translateUiText(&quot;新增访问入口&quot;)" closable>
+      <n-form ref="formRef" :model="form" :rules="rules" label-placement="top">
+        <n-grid :cols="2" :x-gap="12">
+          <n-form-item-gi :label="translateUiText(&quot;入口名称&quot;)" path="appName">
+            <n-input v-model:value="form.appName" :placeholder="translateUiText(&quot;例如：客户管理&quot;)" />
+          </n-form-item-gi>
+          <n-form-item-gi :label="translateUiText(&quot;入口编码&quot;)" path="appCode">
+            <n-input v-model:value="form.appCode" :placeholder="translateUiText(&quot;例如：CRM_CUSTOMER_MANAGE&quot;)" />
+          </n-form-item-gi>
+        </n-grid>
+        <n-form-item :label="translateUiText(&quot;所属业务域&quot;)" path="suiteCode">
+          <n-select
+            v-model:value="form.suiteCode"
+            filterable
+            :options="suiteOptions"
+            :placeholder="translateUiText(&quot;选择业务域&quot;)"
+            @update:value="loadObjects"
+          />
+        </n-form-item>
+
+        <n-form-item :label="translateUiText(&quot;挂载位置&quot;)" path="mountTarget">
+          <n-radio-group v-model:value="form.mountTarget" class="mount-target-grid">
+            <label v-for="item in mountTargetOptions" :key="item.value" class="mount-card">
+              <n-radio :value="item.value" />
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.description }}</small>
+              </span>
+            </label>
+          </n-radio-group>
+        </n-form-item>
+
+        <template v-if="showMenuSyncConfig && !isCodeDownloadMode">
+          <template v-if="isAdminMount">
+            <n-form-item :label="form.suiteAsMenuParent ? translateUiText(&quot;业务域目录上级&quot;) : translateUiText(&quot;父级菜单或模块&quot;)">
+              <MenuParentSelect v-model:value="form.adminMenuParentId" :placeholder="translateUiText(&quot;选择挂载在哪个管理端菜单下&quot;)" />
+            </n-form-item>
+            <n-form-item v-if="form.suiteAsMenuParent && form.suiteMenuResourceId" :label="translateUiText(&quot;实际挂载目录&quot;)">
+              <MenuParentSelect :value="form.suiteMenuResourceId" :placeholder="translateUiText(&quot;已生成业务域目录&quot;)" disabled />
+            </n-form-item>
+          </template>
+          <n-grid :cols="isAdminMount ? 3 : 2" :x-gap="12">
+            <n-form-item-gi :label="isMobileApp ? translateUiText(&quot;同步到移动端菜单&quot;) : translateUiText(&quot;同步为管理端菜单&quot;)">
+              <n-switch v-model:value="form.adminMenuSyncEnabled" />
+            </n-form-item-gi>
+            <n-form-item-gi v-if="isAdminMount" :label="translateUiText(&quot;业务域作为父级目录&quot;)">
+              <n-switch v-model:value="form.suiteAsMenuParent" />
+            </n-form-item-gi>
+            <n-form-item-gi :label="translateUiText(&quot;菜单排序&quot;)">
+              <n-input-number v-model:value="form.menuSort" :min="0" :show-button="false" :placeholder="translateUiText(&quot;排序&quot;)" />
+            </n-form-item-gi>
+          </n-grid>
+          <n-alert v-if="isMobileApp" class="runtime-mode-tip" type="info" :bordered="false">
+            {{ translateUiText("开启后会写入菜单管理的“移动端”客户端；在应用权限或角色授权中分配入口后，用户可从移动端“全部应用”打开。") }}
+          </n-alert>
+        </template>
+
+        <n-grid :cols="2" :x-gap="12">
+          <n-form-item-gi :label="translateUiText(&quot;打开方式&quot;)" path="entryMode">
+            <n-select v-model:value="form.entryMode" :options="entryModeOptions" />
+          </n-form-item-gi>
+          <n-form-item-gi :label="translateUiText(&quot;入口类型&quot;)">
+            <n-select
+              v-model:value="form.entryType"
+              :options="entryTypeOptions"
+              @update:value="handleEntryTypeChange"
+            />
+          </n-form-item-gi>
+        </n-grid>
+
+        <n-grid :cols="2" :x-gap="12">
+          <n-form-item-gi :label="translateUiText(&quot;关联业务单元&quot;)">
+            <n-select
+              v-model:value="form.objectCode"
+              clearable
+              filterable
+              :options="objectOptions"
+              :placeholder="objectPlaceholder"
+              @update:value="handleObjectCodeChange"
+            />
+          </n-form-item-gi>
+          <n-form-item-gi :label="translateUiText(&quot;入口权限码&quot;)">
+            <n-input
+              v-model:value="form.permissionCode"
+              clearable
+              :placeholder="translateUiText(&quot;例如：ai:business:customer:list&quot;)"
+            >
+              <template #suffix>
+                <n-button text type="primary" @click="applyDefaultPermissionCode">
+                  {{ translateUiText("生成") }}
+                </n-button>
+              </template>
+            </n-input>
+          </n-form-item-gi>
+        </n-grid>
+
+        <div class="mode-explain">
+          <strong>{{ entryModeExplain.title }}</strong>
+          <p>{{ entryModeExplain.description }}</p>
+        </div>
+
+        <n-form-item v-if="showConfigKey" :label="translateUiText(&quot;使用模式&quot;)" path="appMode">
+          <n-radio-group v-model:value="form.appMode" class="app-mode-grid">
+            <label v-for="item in appModeOptions" :key="item.value" class="app-mode-card">
+              <n-radio :value="item.value" />
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.description }}</small>
+              </span>
+            </label>
+          </n-radio-group>
+        </n-form-item>
+
+        <n-form-item v-if="showConfigKey && isDynamicRenderMode" :label="translateUiText(&quot;业务页面打开方式&quot;)">
+          <n-radio-group :value="form.runtimeOpenMode" class="runtime-mode-grid" @update:value="handleRuntimeOpenModeChange">
+            <label v-for="item in runtimeOpenModeOptions" :key="item.value" class="runtime-mode-card">
+              <n-radio :value="item.value" />
+              <span>
+                <strong>{{ item.label }}</strong>
+                <small>{{ item.description }}</small>
+              </span>
+            </label>
+          </n-radio-group>
+        </n-form-item>
+        <n-alert v-if="showConfigKey && isDynamicRenderMode" class="runtime-mode-tip" type="info" :bordered="false">
+          {{ runtimeModeTip }}
+        </n-alert>
+        <n-alert v-if="showConfigKey && !isDynamicRenderMode" class="runtime-mode-tip" type="info" :bordered="false">
+          {{ translateUiText("下载代码模式不会打开在线页面，保存后可在应用总览中预览和下载完整功能代码。") }}
+        </n-alert>
+        <div v-if="showConfigKey && isDynamicRenderMode" class="runtime-target-panel">
+          <n-grid :cols="2" :x-gap="12">
+            <n-form-item-gi :label="translateUiText(&quot;目标页面&quot;)">
+              <n-select
+                v-model:value="form.targetPageKey"
+                :options="runtimePageOptions"
+                :loading="objectDesignerLoading"
+                filterable
+                :placeholder="translateUiText(&quot;选择入口打开的页面&quot;)"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :label="translateUiText(&quot;目标表单&quot;)">
+              <n-select
+                v-model:value="form.targetFormKey"
+                :options="runtimeFormOptions"
+                :loading="objectDesignerLoading"
+                clearable
+                filterable
+                :placeholder="translateUiText(&quot;默认表单&quot;)"
+              />
+            </n-form-item-gi>
+          </n-grid>
+          <n-form-item :label="translateUiText(&quot;入口参数&quot;)">
+            <CrudDefaultParamsEditor
+              v-model="form.defaultParamsConfig"
+              :title="translateUiText(&quot;入口默认参数&quot;)"
+              :description="translateUiText(&quot;配置打开入口时固定带入运行页的 query/defaultParams。&quot;)"
+              :sections="entryParamSections"
+              :field-options="entryParamFieldOptions"
+            />
+          </n-form-item>
+          <div class="runtime-target-help">
+            {{ translateUiText("入口负责决定从哪个页面进入；表单只决定新增、编辑、详情或填报时使用哪套字段结构。多个入口可以指向同一个业务单元的不同页面或不同表单。") }}
+          </div>
+        </div>
+        <n-form-item v-if="showConfigKey" :label="translateUiText(&quot;业务页面配置&quot;)">
+          <n-input v-model:value="form.configKey" :placeholder="translateUiText(&quot;选择业务单元后通常会自动带出&quot;)" />
+        </n-form-item>
+        <n-form-item v-if="showEntryUrl" :label="entryUrlLabel">
+          <n-input v-model:value="form.entryUrl" :placeholder="entryUrlPlaceholder" />
+        </n-form-item>
+        <n-form-item :label="translateUiText(&quot;入口图标&quot;)">
+          <IconSelector v-model="form.icon" />
+        </n-form-item>
+
+        <template v-if="isIntegrationApp">
+          <n-form-item :label="translateUiText(&quot;集成类型&quot;)">
+            <n-select v-model:value="form.platformType" :options="platformTypeOptions" :placeholder="translateUiText(&quot;选择集成类型&quot;)" />
+          </n-form-item>
+          <n-form-item :label="translateUiText(&quot;业务资源键&quot;)">
+            <n-input v-model:value="form.integrationResource" :placeholder="translateUiText(&quot;例如：crm.customer.webhook&quot;)" />
+          </n-form-item>
+          <n-form-item :label="translateUiText(&quot;事件范围&quot;)">
+            <n-input v-model:value="form.integrationEvents" :placeholder="translateUiText(&quot;例如：created,updated,approved&quot;)" />
+          </n-form-item>
+        </template>
+        <n-form-item v-if="showSecurityFields" :label="translateUiText(&quot;域名白名单&quot;)">
+          <n-input
+            v-model:value="form.allowedDomains"
+            type="textarea"
+            :placeholder="translateUiText(&quot;example.com 或 *.example.com，多个域名换行&quot;)"
+          />
+        </n-form-item>
+        <n-form-item :label="translateUiText(&quot;业务说明&quot;)">
+          <n-input v-model:value="form.description" type="textarea" :placeholder="translateUiText(&quot;说明这个入口面向的业务场景&quot;)" />
+        </n-form-item>
+        <n-form-item :label="translateUiText(&quot;启用状态&quot;)">
+          <n-switch v-model:value="form.status" :checked-value="1" :unchecked-value="0" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="emit('update:show', false)">
+            {{ translateUiText("取消") }}
+          </n-button>
+          <n-button type="primary" :loading="saving" @click="save">
+            <template #icon>
+              <n-icon><SaveOutline /></n-icon>
+            </template>
+            {{ translateUiText("保存") }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-drawer-content>
+  </n-drawer>
+</template>
+
+<script setup>
+import { formatUiText } from '@/locales'
+
+import { localizeLabel as translateUiText } from '@/locales'
+
+import { SaveOutline } from '@vicons/ionicons5'
+import { useMessage } from 'naive-ui'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { businessObjectDesigner, businessObjectList, createBusinessApp, updateBusinessApp } from '@/api/business-app'
+import IconSelector from '@/components/IconSelector.vue'
+import CrudDefaultParamsEditor from '@/components/lowcode-builder/page/CrudDefaultParamsEditor.vue'
+import MenuParentSelect from '@/components/lowcode-builder/shared/MenuParentSelect.vue'
+import { useDict } from '@/composables/useDict'
+import { normalizeDictOptionValue } from '@/utils/dict-options'
+import { normalizeMultiFormDesignerSchema } from './designer/form-first/formDesignerSchema'
+
+const props = defineProps({
+  show: {
+    type: Boolean,
+    default: false,
+  },
+  app: {
+    type: Object,
+    default: null,
+  },
+  suites: {
+    type: Array,
+    default: () => [],
+  },
+})
+
+const emit = defineEmits(['update:show', 'saved'])
+const message = useMessage()
+const formRef = ref(null)
+const saving = ref(false)
+const objectOptions = ref([])
+const selectedObjectDesigner = ref(null)
+const objectDesignerLoading = ref(false)
+const runtimeOpenModeTouched = ref(false)
+const hydratingForm = ref(false)
+let objectDesignerRequestSeq = 0
+const { dict } = useDict(
+  'ai_business_app_entry_mode',
+  'ai_business_app_mode',
+  'ai_business_app_mount_target',
+  'ai_business_app_entry_type',
+  'ai_business_app_platform_type',
+  'ai_business_app_runtime_open_mode',
+)
+
+const form = reactive(defaultForm())
+
+const rules = {
+  appName: { required: true, message: '请输入入口名称', trigger: 'blur' },
+  appCode: { required: true, message: '请输入入口编码', trigger: 'blur' },
+  suiteCode: { required: true, message: '请选择业务域', trigger: 'change' },
+  appType: { required: true, message: '请选择应用类型', trigger: 'change' },
+  mountTarget: { required: true, message: '请选择挂载位置', trigger: 'change' },
+  entryMode: { required: true, message: '请选择打开方式', trigger: 'change' },
+  appMode: { required: true, message: '请选择使用模式', trigger: 'change' },
+}
+
+const mountTargetOptions = computed(() => (dict.value.ai_business_app_mount_target || []).map(item => ({
+  ...item,
+  description: item.remark,
+})))
+const entryModeMeta = {
+  RUNTIME: {
+    title: '业务页面',
+    description: '打开当前业务单元发布后的列表或填报页，适合客户、合同、申请单等业务。',
+    urlLabel: '入口地址',
+    urlPlaceholder: '业务页面通常由发布配置自动生成',
+  },
+  ROUTE: {
+    title: '系统已有页面',
+    description: '打开系统里已经开发好的页面，适合跳转到固定管理页或报表页。',
+    urlLabel: '页面地址',
+    urlPlaceholder: '例如：/app-center/stats 或 /system/user',
+  },
+  IFRAME: {
+    title: '内嵌页面',
+    description: '在管理端页面内嵌入外部系统页面，需要配置域名白名单。',
+    urlLabel: '内嵌页面地址',
+    urlPlaceholder: '例如：https://bi.example.com/dashboard',
+  },
+  EXTERNAL: {
+    title: '外部打开',
+    description: '点击菜单后新窗口打开外部地址，不占用管理端内容区。',
+    urlLabel: '外部链接地址',
+    urlPlaceholder: '例如：https://crm.example.com',
+  },
+  H5: {
+    title: '移动端页面',
+    description: '打开移动站点或轻应用页面。',
+    urlLabel: '移动端页面地址',
+    urlPlaceholder: '例如：https://m.example.com/customer',
+  },
+  API: {
+    title: '接口入口',
+    description: '不直接打开页面，用于登记 API、Webhook 或外部系统集成资源。',
+    urlLabel: '接口说明地址',
+    urlPlaceholder: '例如：api://crm.customer.webhook',
+  },
+}
+const entryTypeOptions = computed(() => dict.value.ai_business_app_entry_type || [])
+const entryParamSections = [
+  {
+    key: 'publicQuery',
+    label: '入口 Query 参数',
+    description: '打开运行页时追加到 URL，例如 source、status、recordId。',
+  },
+  {
+    key: 'formDefaultValues',
+    label: '表单默认值',
+    description: '打开新增或填报表单时预填字段值。',
+  },
+]
+
+const suiteOptions = computed(() => props.suites.map(item => ({
+  label: item.suiteName || item.suiteCode,
+  value: item.suiteCode,
+})))
+const isAdminMount = computed(() => form.mountTarget === 'ADMIN')
+const isMobileApp = computed(() => form.mountTarget === 'MOBILE')
+const isIntegrationApp = computed(() => form.mountTarget === 'API')
+const showMenuSyncConfig = computed(() => isAdminMount.value || isMobileApp.value)
+const showConfigKey = computed(() => form.entryMode === 'RUNTIME')
+const showEntryUrl = computed(() => !['RUNTIME', 'API'].includes(form.entryMode))
+const showSecurityFields = computed(() => ['IFRAME', 'EXTERNAL', 'H5'].includes(form.entryMode))
+const isDynamicRenderMode = computed(() => normalizeAppMode(form.appMode) === 'DYNAMIC_RENDER')
+const isCodeDownloadMode = computed(() => showConfigKey.value && normalizeAppMode(form.appMode) === 'CODE_DOWNLOAD')
+const entryModeOptions = computed(() => {
+  const allowedModes = new Set(allowedEntryModesForTarget(form.mountTarget))
+  return (dict.value.ai_business_app_entry_mode || [])
+    .filter(item => allowedModes.has(item.value))
+})
+const appModeOptions = computed(() => (dict.value.ai_business_app_mode || []).map(item => ({
+  ...item,
+  description: item.remark,
+})))
+const entryModeExplain = computed(() => entryModeMeta[form.entryMode] || entryModeMeta.ROUTE)
+const entryUrlLabel = computed(() => entryModeExplain.value.urlLabel)
+const entryUrlPlaceholder = computed(() => entryModeExplain.value.urlPlaceholder)
+const selectedObject = computed(() => objectOptions.value.find(item => item.value === form.objectCode) || null)
+const runtimePageOptions = computed(() => {
+  const pageSchema = selectedObjectDesigner.value?.pageSchema || {}
+  const pages = Array.isArray(pageSchema.pages) ? pageSchema.pages : []
+  const options = pages
+    .filter(page => page?.pageKey)
+    .map(page => ({
+      label: `${page.pageName || page.pageKey}${page.pageKey === 'list' ? '（默认）' : ''}`,
+      value: page.pageKey,
+    }))
+  const existing = new Set(options.map(item => item.value))
+  ;[
+    { label: '列表页（默认）', value: 'list' },
+    { label: '详情页', value: 'detail' },
+    { label: '新增页', value: 'create' },
+    { label: '编辑页', value: 'edit' },
+  ].forEach((item) => {
+    if (!existing.has(item.value))
+      options.push(item)
+  })
+  return options
+})
+const runtimeFormOptions = computed(() => {
+  if (!selectedObjectDesigner.value?.formDesignerSchema)
+    return []
+  const schema = normalizeMultiFormDesignerSchema(selectedObjectDesigner.value?.formDesignerSchema || {})
+  return (schema.forms || [])
+    .filter(item => item?.formKey)
+    .map(item => ({
+      label: `${item.formName || item.formKey}${item.formKey === schema.defaultFormKey ? '（默认）' : ''}`,
+      value: item.formKey,
+    }))
+})
+const entryParamFieldOptions = computed(() => {
+  const fields = selectedObjectDesigner.value?.modelSchema?.fields?.length
+    ? selectedObjectDesigner.value.modelSchema.fields
+    : selectedObjectDesigner.value?.fields || []
+  return (Array.isArray(fields) ? fields : [])
+    .map(field => ({
+      label: `${field.label || field.fieldName || field.field || field.fieldCode}（${field.field || field.fieldCode}）`,
+      value: field.field || field.fieldCode,
+    }))
+    .filter(item => item.value)
+})
+const objectPlaceholder = computed(() => {
+  if (form.entryMode === 'RUNTIME')
+    return translateUiText("业务页面必须关联已发布业务单元")
+  if (isIntegrationApp.value)
+    return translateUiText("可选，用于标识接口服务的业务单元")
+  return translateUiText("可选，关联后按业务单元归集")
+})
+const platformTypeOptions = computed(() => dict.value.ai_business_app_platform_type || [])
+const runtimeOpenModeOptions = computed(() => (dict.value.ai_business_app_runtime_open_mode || []).map(item => ({
+  ...item,
+  description: item.remark,
+})))
+const runtimeModeTip = computed(() => {
+  if (form.runtimeOpenMode === 'CREATE_FORM')
+    return '单据填报入口没有列表上下文，因此不会显示列表操作列和行操作按钮；需要自定义操作时请选择“列表管理”。'
+  if (form.runtimeOpenMode === 'DETAIL')
+    return '详情查看需要打开时带上记录 ID；普通菜单入口没有记录 ID 时会回到列表。'
+  return '列表管理会展示搜索、列表、操作列和自定义操作，适合日常管理和流程处理。'
+})
+
+watch(() => props.show, (visible) => {
+  if (!visible)
+    return
+  hydratingForm.value = true
+  runtimeOpenModeTouched.value = false
+  Object.assign(form, defaultForm(), props.app || {})
+  hydrateOptions()
+  if (!form.suiteCode && props.suites.length)
+    form.suiteCode = props.suites[0].suiteCode
+  normalizeEntryModeForMount()
+  form.appType = resolveAppType()
+  loadObjects()
+  nextTick(() => {
+    hydratingForm.value = false
+  })
+})
+
+watch(() => form.mountTarget, () => {
+  if (hydratingForm.value)
+    return
+  normalizeEntryModeForMount()
+  form.appType = resolveAppType()
+  if (isIntegrationApp.value && form.entryUrl === '/app-center/integration')
+    form.entryUrl = ''
+})
+
+watch(() => form.entryMode, () => {
+  if (hydratingForm.value)
+    return
+  form.appType = resolveAppType()
+  if (form.entryMode === 'RUNTIME' && !runtimeOpenModeTouched.value)
+    form.runtimeOpenMode = inferRuntimeOpenMode()
+  form.entryType = inferEntryType()
+  if (form.entryMode !== 'RUNTIME')
+    form.appMode = 'DYNAMIC_RENDER'
+  if (form.entryMode === 'API' && form.entryUrl === '/app-center/integration')
+    form.entryUrl = ''
+  normalizeRuntimeTargets()
+})
+
+watch(() => form.appMode, () => {
+  if (isCodeDownloadMode.value)
+    form.adminMenuSyncEnabled = false
+})
+
+watch(() => form.appName, () => {
+  if (!form.id && form.entryMode === 'RUNTIME' && !runtimeOpenModeTouched.value)
+    form.runtimeOpenMode = inferRuntimeOpenMode()
+})
+
+async function loadObjects() {
+  if (!form.suiteCode) {
+    objectOptions.value = []
+    return
+  }
+  const res = await businessObjectList({ suiteCode: form.suiteCode, status: 1 })
+  objectOptions.value = (res.data || []).map(item => ({
+    label: item.objectName || item.objectCode,
+    value: item.objectCode,
+    objectId: item.id || item.objectId,
+    objectType: item.objectType,
+    configKey: item.configKey,
+  }))
+  loadSelectedObjectDesigner()
+}
+
+async function save() {
+  await formRef.value?.validate()
+  if (form.entryMode === 'RUNTIME' && !form.objectCode) {
+    message.warning(translateUiText("业务页面需要关联业务单元"))
+    return
+  }
+  if (form.entryMode === 'RUNTIME' && normalizeAppMode(form.appMode) === 'CODE_DOWNLOAD' && !form.configKey) {
+    message.warning(translateUiText("下载代码模式需要选择业务页面配置"))
+    return
+  }
+  if (showEntryUrl.value && !String(form.entryUrl || '').trim()) {
+    message.warning(formatUiText("请输入{0}", [entryUrlLabel.value]))
+    return
+  }
+  saving.value = true
+  try {
+    const payload = { ...form, appType: resolveAppType(), options: buildOptions() }
+    delete payload.allowedDomains
+    delete payload.platformType
+    delete payload.integrationResource
+    delete payload.integrationEvents
+    delete payload.mountTarget
+    delete payload.adminMenuParentId
+    delete payload.adminMenuSyncEnabled
+    delete payload.suiteAsMenuParent
+    delete payload.menuSort
+    if (form.id)
+      await updateBusinessApp(payload)
+    else
+      await createBusinessApp(payload)
+    message.success(translateUiText("访问入口已保存"))
+    emit('saved')
+    emit('update:show', false)
+  }
+  finally {
+    saving.value = false
+  }
+}
+
+function hydrateOptions() {
+  try {
+    const options = parseOptions(form.options)
+    const adminMenu = options.adminMenu || {}
+    const allowedDomains = Array.isArray(options.allowedDomains)
+      ? options.allowedDomains
+      : options.allowedDomains
+        ? [options.allowedDomains]
+        : []
+    form.mountTarget = normalizeMountTarget(options.mountTarget || deriveMountTarget())
+    const suiteAsMenuParent = normalizeBoolean(props.app?.suiteAsMenuParent ?? adminMenu.suiteAsParent ?? options.suiteAsMenuParent, true)
+    const actualMenuParentId = normalizeMenuParentId(
+      adminMenu.actualParentId
+      ?? props.app?.adminMenuActualParentId
+      ?? null,
+    )
+    const suiteMenuResourceId = normalizeMenuParentId(
+      adminMenu.suiteMenuResourceId
+      ?? (suiteAsMenuParent ? adminMenu.actualParentId : null)
+      ?? props.app?.suiteMenuResourceId
+      ?? null,
+    )
+    form.adminMenuParentId = normalizeAdminMenuParentId(
+      props.app?.adminMenuParentId
+      ?? adminMenu.originalParentId
+      ?? adminMenu.parentId
+      ?? options.adminMenuParentId
+      ?? options.parentId
+      ?? null,
+      {
+        suiteAsMenuParent,
+        actualMenuParentId,
+        suiteMenuResourceId,
+        menuResourceId: props.app?.menuResourceId ?? adminMenu.menuResourceId ?? options.menuResourceId,
+      },
+    )
+    form.actualMenuParentId = actualMenuParentId
+    form.suiteMenuResourceId = suiteMenuResourceId
+    form.adminMenuSyncEnabled = normalizeBoolean(props.app?.adminMenuSyncEnabled ?? adminMenu.syncEnabled ?? options.adminMenuSyncEnabled, false)
+    form.suiteAsMenuParent = suiteAsMenuParent
+    form.menuSort = Number(props.app?.menuSort ?? adminMenu.sort ?? options.menuSort ?? form.sortOrder ?? 0)
+    form.runtimeOpenMode = normalizeRuntimeOpenMode(props.app?.runtimeOpenMode || options.runtimeOpenMode || inferRuntimeOpenMode())
+    form.appMode = normalizeAppMode(props.app?.appMode || options.appMode || 'DYNAMIC_RENDER')
+    form.entryType = normalizeEntryType(options.entryType || inferEntryType())
+    form.permissionCode = String(options.permissionCode || '').trim()
+    form.targetPageKey = String(options.targetPageKey || '').trim() || defaultTargetPageKey(form.runtimeOpenMode)
+    form.targetFormKey = String(options.targetFormKey || '').trim()
+    form.defaultParamsConfig = normalizeEntryDefaultParams(options.defaultParams)
+    form.allowedDomains = allowedDomains.join('\n')
+    form.platformType = options.platformType || defaultPlatformType(form.entryMode)
+    form.integrationResource = options.integrationResource || ''
+    form.integrationEvents = Array.isArray(options.integrationEvents)
+      ? options.integrationEvents.join(',')
+      : options.integrationEvents || ''
+  }
+  catch {
+    form.mountTarget = deriveMountTarget()
+    form.adminMenuParentId = null
+    form.actualMenuParentId = null
+    form.suiteMenuResourceId = null
+    form.adminMenuSyncEnabled = false
+    form.suiteAsMenuParent = true
+    form.menuSort = Number(form.sortOrder || 0)
+    form.runtimeOpenMode = inferRuntimeOpenMode()
+    form.appMode = 'DYNAMIC_RENDER'
+    form.entryType = inferEntryType()
+    form.permissionCode = ''
+    form.targetPageKey = defaultTargetPageKey(form.runtimeOpenMode)
+    form.targetFormKey = ''
+    form.defaultParamsConfig = normalizeEntryDefaultParams()
+    form.allowedDomains = ''
+    form.platformType = defaultPlatformType(form.entryMode)
+    form.integrationResource = ''
+    form.integrationEvents = ''
+  }
+  normalizeEntryModeForMount()
+  form.appType = resolveAppType()
+  if (form.entryMode !== 'RUNTIME' && form.entryMode !== 'H5')
+    form.runtimeOpenMode = 'LIST'
+  if (form.entryMode !== 'RUNTIME' && form.entryMode !== 'H5')
+    form.appMode = 'DYNAMIC_RENDER'
+  normalizeRuntimeTargets()
+  if (isCodeDownloadMode.value)
+    form.adminMenuSyncEnabled = false
+}
+
+function buildOptions() {
+  const options = parseOptions(form.options)
+  options.mountTarget = form.mountTarget
+  options.entryType = normalizeEntryType(form.entryType)
+  const permissionCode = String(form.permissionCode || '').trim()
+  if (permissionCode)
+    options.permissionCode = permissionCode
+  else
+    delete options.permissionCode
+  if (showMenuSyncConfig.value) {
+    const previousAdminMenu = options.adminMenu || {}
+    const mobileMenu = isMobileApp.value
+    const menuResourceId = props.app?.menuResourceId || previousAdminMenu.menuResourceId || options.menuResourceId
+    const actualParentId = form.actualMenuParentId || previousAdminMenu.actualParentId || props.app?.adminMenuActualParentId
+    const suiteMenuResourceId = form.suiteMenuResourceId || previousAdminMenu.suiteMenuResourceId || props.app?.suiteMenuResourceId
+    const adminMenuParentId = normalizeAdminMenuParentId(form.adminMenuParentId, {
+      suiteAsMenuParent: Boolean(form.suiteAsMenuParent),
+      actualMenuParentId: actualParentId,
+      suiteMenuResourceId,
+      menuResourceId,
+    })
+    options.adminMenu = {
+      ...previousAdminMenu,
+      parentId: mobileMenu ? null : adminMenuParentId || null,
+      originalParentId: mobileMenu ? null : adminMenuParentId || null,
+      syncEnabled: !isCodeDownloadMode.value && Boolean(form.adminMenuSyncEnabled),
+      suiteAsParent: mobileMenu ? false : Boolean(form.suiteAsMenuParent),
+      sort: Number(form.menuSort || 0),
+      clientCode: mobileMenu ? 'h5' : 'pc',
+    }
+    if (menuResourceId)
+      options.adminMenu.menuResourceId = String(menuResourceId)
+    const activeMenuKey = previousAdminMenu.activeMenuKey || props.app?.activeMenuKey || menuResourceId
+    if (activeMenuKey)
+      options.adminMenu.activeMenuKey = String(activeMenuKey)
+    if (!mobileMenu && actualParentId)
+      options.adminMenu.actualParentId = String(actualParentId)
+    else
+      delete options.adminMenu.actualParentId
+    if (!mobileMenu && suiteMenuResourceId)
+      options.adminMenu.suiteMenuResourceId = String(suiteMenuResourceId)
+    else
+      delete options.adminMenu.suiteMenuResourceId
+  }
+  else {
+    delete options.adminMenu
+    delete options.adminMenuParentId
+    delete options.adminMenuSyncEnabled
+    delete options.suiteAsMenuParent
+    delete options.menuSort
+  }
+  if (form.entryMode === 'RUNTIME' || form.entryMode === 'H5') {
+    options.runtimeOpenMode = normalizeRuntimeOpenMode(form.runtimeOpenMode)
+    options.appMode = normalizeAppMode(form.appMode)
+    if (normalizeAppMode(form.appMode) === 'DYNAMIC_RENDER') {
+      options.targetPageKey = form.targetPageKey || defaultTargetPageKey(form.runtimeOpenMode)
+      options.targetFormKey = form.targetFormKey || null
+      options.defaultParams = extractEntryDefaultParams(form.defaultParamsConfig)
+    }
+    else {
+      delete options.targetPageKey
+      delete options.targetFormKey
+      delete options.defaultParams
+    }
+  }
+  else {
+    delete options.runtimeOpenMode
+    delete options.appMode
+    delete options.targetPageKey
+    delete options.targetFormKey
+    delete options.defaultParams
+  }
+  const allowedDomains = String(form.allowedDomains || '')
+    .split(/[\n,，]/)
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean)
+  if (showSecurityFields.value && allowedDomains.length) {
+    options.allowedDomains = allowedDomains
+  }
+  else {
+    delete options.allowedDomains
+  }
+  if (!isMobileApp.value) {
+    delete options.mobileScene
+    delete options.visibleScope
+  }
+  if (isIntegrationApp.value) {
+    options.platformType = form.platformType || defaultPlatformType(form.entryMode)
+    options.integrationResource = String(form.integrationResource || '').trim() || null
+    options.integrationEvents = String(form.integrationEvents || '')
+      .split(/[,，\n]/)
+      .map(item => item.trim())
+      .filter(Boolean)
+  }
+  else {
+    delete options.platformType
+    delete options.integrationResource
+    delete options.integrationEvents
+  }
+  Object.keys(options).forEach((key) => {
+    const value = options[key]
+    if (value === null || value === undefined || value === '')
+      delete options[key]
+    if (Array.isArray(value) && !value.length)
+      delete options[key]
+  })
+  return Object.keys(options).length ? JSON.stringify(options) : null
+}
+
+function handleRuntimeOpenModeChange(value) {
+  runtimeOpenModeTouched.value = true
+  form.runtimeOpenMode = normalizeRuntimeOpenMode(value)
+  if (!form.targetPageKey || ['LIST', 'CREATE_FORM', 'DETAIL'].includes(form.runtimeOpenMode))
+    form.targetPageKey = defaultTargetPageKey(form.runtimeOpenMode)
+  form.entryType = entryTypeFromRuntimeMode(form.runtimeOpenMode)
+}
+
+function handleObjectCodeChange(value) {
+  form.objectCode = value || null
+  form.configKey = selectedObject.value?.configKey || ''
+  form.targetPageKey = defaultTargetPageKey(form.runtimeOpenMode)
+  form.targetFormKey = ''
+  if (!form.permissionCode)
+    form.permissionCode = defaultPermissionCode()
+  selectedObjectDesigner.value = null
+  loadSelectedObjectDesigner()
+  if (form.entryMode === 'RUNTIME' && !runtimeOpenModeTouched.value)
+    form.runtimeOpenMode = inferRuntimeOpenMode()
+}
+
+function handleEntryTypeChange(value) {
+  form.entryType = normalizeEntryType(value)
+  const runtimeMode = runtimeModeFromEntryType(form.entryType)
+  if (runtimeMode) {
+    runtimeOpenModeTouched.value = true
+    form.runtimeOpenMode = runtimeMode
+    form.targetPageKey = defaultTargetPageKey(runtimeMode)
+  }
+  if (!form.permissionCode)
+    form.permissionCode = defaultPermissionCode()
+}
+
+function applyDefaultPermissionCode() {
+  form.permissionCode = defaultPermissionCode()
+}
+
+async function loadSelectedObjectDesigner() {
+  const objectId = selectedObject.value?.objectId
+  const seq = ++objectDesignerRequestSeq
+  if (!objectId) {
+    selectedObjectDesigner.value = null
+    normalizeRuntimeTargets()
+    return
+  }
+  objectDesignerLoading.value = true
+  try {
+    const res = await businessObjectDesigner(objectId)
+    if (seq !== objectDesignerRequestSeq)
+      return
+    selectedObjectDesigner.value = res.data || null
+    normalizeRuntimeTargets()
+  }
+  catch (error) {
+    if (seq === objectDesignerRequestSeq) {
+      selectedObjectDesigner.value = null
+      console.warn('[AppEditorDrawer] 加载业务对象设计数据失败', error?.message || error)
+    }
+  }
+  finally {
+    if (seq === objectDesignerRequestSeq)
+      objectDesignerLoading.value = false
+  }
+}
+
+function normalizeRuntimeTargets() {
+  if (form.entryMode !== 'RUNTIME')
+    return
+  const pageValues = new Set(runtimePageOptions.value.map(item => item.value))
+  if (!form.targetPageKey || !pageValues.has(form.targetPageKey))
+    form.targetPageKey = defaultTargetPageKey(form.runtimeOpenMode)
+  const formValues = new Set(runtimeFormOptions.value.map(item => item.value))
+  if (form.targetFormKey && !formValues.has(form.targetFormKey))
+    form.targetFormKey = ''
+}
+
+function allowedEntryModesForTarget(target) {
+  if (target === 'MOBILE')
+    return ['RUNTIME', 'H5', 'ROUTE', 'EXTERNAL']
+  if (target === 'API')
+    return ['API']
+  return ['RUNTIME', 'ROUTE', 'IFRAME', 'EXTERNAL']
+}
+
+function normalizeEntryModeForMount() {
+  const availableModes = entryModeOptions.value.map(item => item.value)
+  if (availableModes.length && !availableModes.includes(form.entryMode))
+    form.entryMode = availableModes[0]
+}
+
+function deriveMountTarget() {
+  const appType = String(form.appType || '').toUpperCase()
+  const entryMode = String(form.entryMode || '').toUpperCase()
+  if (appType === 'MOBILE' || entryMode === 'H5')
+    return 'MOBILE'
+  if (appType === 'INTEGRATION' || entryMode === 'API')
+    return 'API'
+  return 'ADMIN'
+}
+
+function normalizeMountTarget(value) {
+  return ['ADMIN', 'MOBILE', 'API'].includes(value) ? value : 'ADMIN'
+}
+
+function resolveAppType() {
+  if (isMobileApp.value)
+    return 'MOBILE'
+  if (isIntegrationApp.value)
+    return 'INTEGRATION'
+  if (form.entryMode === 'RUNTIME' || form.objectCode)
+    return 'BUSINESS'
+  return 'EMBEDDED'
+}
+
+function normalizeBoolean(value, fallback) {
+  if (value === undefined || value === null)
+    return fallback
+  if (typeof value === 'boolean')
+    return value
+  return String(value) === 'true' || String(value) === '1'
+}
+
+function defaultPlatformType(entryMode) {
+  return entryMode === 'API' ? 'api' : 'external'
+}
+
+function normalizeRuntimeOpenMode(value) {
+  const mode = String(value || 'LIST').toUpperCase()
+  return ['LIST', 'CREATE_FORM', 'DETAIL'].includes(mode) ? mode : 'LIST'
+}
+
+function normalizeEntryType(value) {
+  const type = String(value || '').toUpperCase()
+  return normalizeDictOptionValue(entryTypeOptions.value, type, inferEntryType())
+}
+
+function entryTypeFromRuntimeMode(value) {
+  const mode = normalizeRuntimeOpenMode(value)
+  if (mode === 'CREATE_FORM')
+    return 'CREATE_FORM'
+  if (mode === 'DETAIL')
+    return 'DETAIL_PAGE'
+  return 'OBJECT_LIST'
+}
+
+function runtimeModeFromEntryType(value) {
+  const type = normalizeEntryType(value)
+  if (type === 'CREATE_FORM')
+    return 'CREATE_FORM'
+  if (type === 'DETAIL_PAGE' || type === 'APPROVAL_TODO')
+    return 'DETAIL'
+  if (type === 'OBJECT_LIST')
+    return 'LIST'
+  return ''
+}
+
+function defaultTargetPageKey(runtimeOpenMode) {
+  const mode = normalizeRuntimeOpenMode(runtimeOpenMode)
+  if (mode === 'DETAIL')
+    return 'detail'
+  return 'list'
+}
+
+function normalizeAppMode(value) {
+  const mode = String(value || 'DYNAMIC_RENDER').toUpperCase()
+  return ['DYNAMIC_RENDER', 'CODE_DOWNLOAD'].includes(mode) ? mode : 'DYNAMIC_RENDER'
+}
+
+function normalizeMenuParentId(value) {
+  if (value === null || value === undefined || value === '')
+    return null
+  return String(value)
+}
+
+function normalizeAdminMenuParentId(value, context = {}) {
+  const parentId = normalizeMenuParentId(value)
+  if (!parentId || parentId === '0')
+    return null
+  if (!context.suiteAsMenuParent)
+    return parentId
+  const occupiedIds = [
+    context.actualMenuParentId,
+    context.suiteMenuResourceId,
+    context.menuResourceId,
+  ].map(normalizeMenuParentId).filter(Boolean)
+  return occupiedIds.includes(parentId) ? null : parentId
+}
+
+function parseOptions(options) {
+  if (!options)
+    return {}
+  if (typeof options === 'string') {
+    try {
+      const parsed = JSON.parse(options)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    }
+    catch {
+      return {}
+    }
+  }
+  return typeof options === 'object' ? { ...options } : {}
+}
+
+function inferRuntimeOpenMode() {
+  if (form.entryMode !== 'RUNTIME')
+    return 'LIST'
+  return /填报|申请|提交|录入|上报|登记/.test(String(form.appName || '')) ? 'CREATE_FORM' : 'LIST'
+}
+
+function inferEntryType() {
+  if (form.entryMode === 'API')
+    return 'EXTERNAL_OR_API'
+  if (['IFRAME', 'EXTERNAL', 'H5', 'ROUTE'].includes(form.entryMode))
+    return 'EXTERNAL_OR_API'
+  return entryTypeFromRuntimeMode(form.runtimeOpenMode)
+}
+
+function defaultPermissionCode() {
+  const objectCode = String(form.objectCode || '').trim()
+  if (!objectCode)
+    return ''
+  const prefix = `ai:business:${objectCode}`
+  const entryType = normalizeEntryType(form.entryType)
+  if (entryType === 'CREATE_FORM')
+    return `${prefix}:add`
+  if (entryType === 'DETAIL_PAGE' || entryType === 'APPROVAL_TODO')
+    return `${prefix}:query`
+  if (entryType === 'REPORT_DASHBOARD')
+    return 'ai:businessStats:view'
+  return `${prefix}:list`
+}
+
+function normalizeEntryDefaultParams(value = {}) {
+  if (value?.publicQuery || value?.formDefaultValues)
+    return value
+  return {
+    publicQuery: value && typeof value === 'object' && !Array.isArray(value) ? value : {},
+    formDefaultValues: {},
+  }
+}
+
+function extractEntryDefaultParams(config = {}) {
+  const query = config?.publicQuery && typeof config.publicQuery === 'object' ? config.publicQuery : {}
+  const formValues = config?.formDefaultValues && typeof config.formDefaultValues === 'object' ? config.formDefaultValues : {}
+  return {
+    ...query,
+    ...(Object.keys(formValues).length ? { formDefaultValues: formValues } : {}),
+  }
+}
+
+function defaultForm() {
+  return {
+    id: null,
+    applicationId: null,
+    appName: '',
+    appCode: '',
+    appType: 'BUSINESS',
+    mountTarget: 'ADMIN',
+    suiteCode: null,
+    objectCode: null,
+    entryMode: 'RUNTIME',
+    entryType: 'OBJECT_LIST',
+    appMode: 'DYNAMIC_RENDER',
+    runtimeOpenMode: 'LIST',
+    entryUrl: '',
+    configKey: '',
+    icon: '',
+    description: '',
+    status: 1,
+    sortOrder: 0,
+    options: '',
+    adminMenuParentId: null,
+    actualMenuParentId: null,
+    suiteMenuResourceId: null,
+    adminMenuSyncEnabled: false,
+    suiteAsMenuParent: true,
+    menuSort: 0,
+    allowedDomains: '',
+    platformType: 'api',
+    integrationResource: '',
+    integrationEvents: '',
+    permissionCode: '',
+    targetPageKey: 'list',
+    targetFormKey: '',
+    defaultParamsConfig: normalizeEntryDefaultParams(),
+  }
+}
+</script>
+
+<style scoped>
+.mount-target-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.runtime-mode-grid,
+.app-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.app-mode-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runtime-mode-tip {
+  margin-top: -6px;
+  margin-bottom: 12px;
+}
+
+.runtime-target-panel {
+  margin: -2px 0 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 12px;
+}
+
+.runtime-target-panel :deep(.n-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.runtime-target-help {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.mount-card {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 86px;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.mount-card:hover {
+  border-color: #2f6feb;
+  background: #f8fbff;
+}
+
+.runtime-mode-card,
+.app-mode-card {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  min-height: 74px;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.runtime-mode-card:hover,
+.app-mode-card:hover {
+  border-color: #2f6feb;
+  background: #f8fbff;
+}
+
+.mount-card strong,
+.mount-card small,
+.runtime-mode-card strong,
+.runtime-mode-card small,
+.app-mode-card strong,
+.app-mode-card small {
+  display: block;
+}
+
+.mount-card strong,
+.runtime-mode-card strong,
+.app-mode-card strong {
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.mount-card small,
+.runtime-mode-card small,
+.app-mode-card small {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mode-explain {
+  margin: -2px 0 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+  padding: 10px 12px;
+}
+
+.mode-explain strong,
+.mode-explain p {
+  display: block;
+}
+
+.mode-explain strong {
+  color: #1d4ed8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.mode-explain p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .mount-target-grid,
+  .runtime-mode-grid,
+  .app-mode-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

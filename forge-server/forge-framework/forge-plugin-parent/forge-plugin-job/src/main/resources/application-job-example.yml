@@ -1,0 +1,88 @@
+# 任务调度配置示例
+spring:
+  quartz:
+    # 使用数据库持久化任务
+    job-store-type: jdbc
+    # 启动时覆盖已存在的任务
+    overwrite-existing-jobs: true
+    properties:
+      org:
+        quartz:
+          scheduler:
+            # 调度器实例名称
+            instanceName: ForgeScheduler
+            # 实例ID自动生成
+            instanceId: AUTO
+          jobStore:
+            # 使用JDBC存储
+            class: org.quartz.impl.jdbcjobstore.JobStoreTx
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.StdJDBCDelegate
+            # 表前缀
+            tablePrefix: QRTZ_
+            # 集群模式
+            isClustered: true
+            # 集群检查间隔(ms)
+            clusterCheckinInterval: 10000
+            # 使用属性文件配置数据源
+            useProperties: false
+          threadPool:
+            # 线程池类
+            class: org.quartz.simpl.SimpleThreadPool
+            # 线程数量
+            threadCount: 10
+            # 线程优先级
+            threadPriority: 5
+
+# 任务调度模块配置
+forge:
+  job:
+    # 是否启用
+    enabled: true
+    # 部署模式：STANDALONE-单体模式 DISTRIBUTED-分布式模式
+    deploy-mode: STANDALONE
+    # 是否启用REST API
+    enable-api: true
+    # 是否启用执行器端点（默认关闭，分布式执行节点显式开启）
+    executor-enabled: false
+    # 调度中心和执行节点必须配置同一至少32位随机Token，禁止提交真实值
+    executor-token: ${FORGE_JOB_EXECUTOR_TOKEN:}
+    # 运行中任务心跳与节点崩溃恢复阈值
+    execution-heartbeat-interval: 30s
+    execution-recovery-timeout: 15m
+    # 同一Quartz任务配置同步的分布式锁等待时间
+    schedule-sync-lock-wait-millis: 5000
+    # 是否自动加载数据库任务配置
+    auto-load: true
+    # 线程池大小
+    thread-pool-size: 10
+    # 是否持久化
+    persistent: true
+    # 集群模式（分布式下建议开启）
+    clustered: true
+    # Quartz表前缀
+    table-prefix: QRTZ_
+    # Quartz集群节点检查间隔(ms)
+    cluster-checkin-interval: 15000
+    # Quartz misfire阈值(ms)
+    misfire-threshold: 12000
+    # 独立服务账号开放 API
+    open-api:
+      enabled: true
+      # 必须通过环境变量配置至少32位随机Pepper，禁止提交真实值
+      token-pepper: ${FORGE_JOB_OPEN_API_TOKEN_PEPPER:}
+      idempotency-ttl: 24h
+      last-used-touch-interval: 1m
+      read-rate-limit-per-minute: 120
+      trigger-rate-limit-per-minute: 20
+      idempotency-lock-wait-millis: 2000
+      idempotency-lock-lease-millis: 30000
+    # 分布式模式配置
+    distributed:
+      # 服务注册中心类型
+      registry-type: nacos
+      # 执行器服务名列表（逗号分隔）
+      executor-services: service-a,service-b
+      # RPC调用超时时间（毫秒）
+      timeout: 30000
+      # 失败重试次数
+      retry-count: 3

@@ -1,0 +1,376 @@
+<template>
+  <div class="login-log-page">
+    <AiCrudPage
+      ref="crudRef"
+      :api-config="{
+        list: 'get@/system/loginLog/page',
+        detail: 'get@/system/loginLog/{id}',
+      }"
+      :search-schema="searchSchema"
+      :columns="tableColumns"
+      row-key="id"
+      :hide-add="true"
+      :hide-selection="true"
+      :hide-batch-delete="true"
+      :before-search="handleBeforeSearch"
+    />
+
+    <!-- 详情弹窗 -->
+    <n-modal
+      v-model:show="detailVisible"
+      :title="localizeLabel('登录日志详情')"
+      preset="card"
+      style="width: 700px"
+    >
+      <div v-if="currentLog" class="log-detail">
+        <div class="detail-section">
+          <h4 class="section-title">
+            {{ localizeLabel('用户信息') }}
+          </h4>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('用户名：') }}</span>
+            <span class="value">{{ currentLog.username || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('用户ID：') }}</span>
+            <span class="value">{{ currentLog.userId || '-' }}</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">
+            {{ localizeLabel('登录信息') }}
+          </h4>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('登录类型：') }}</span>
+            <DictTag :options="loginTypeOptions" :value="currentLog.loginType" size="small" />
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('登录状态：') }}</span>
+            <DictTag :options="loginStatusOptions" :value="String(currentLog.loginStatus)" size="small" />
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('登录时间：') }}</span>
+            <span class="value">{{ currentLog.loginTime }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('客户端：') }}</span>
+            <DictTag :options="clientTypeOptions" :value="currentLog.clientCode" size="small" />
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('登录IP：') }}</span>
+            <span class="value">{{ currentLog.loginIp || '-' }}</span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h4 class="section-title">
+            {{ localizeLabel('环境信息') }}
+          </h4>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('登录地点：') }}</span>
+            <span class="value">{{ currentLog.loginLocation || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('浏览器：') }}</span>
+            <span class="value">{{ currentLog.browser || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">{{ localizeLabel('操作系统：') }}</span>
+            <span class="value">{{ currentLog.os || '-' }}</span>
+          </div>
+          <div class="detail-row full">
+            <span class="label">User-Agent：</span>
+            <pre class="user-agent">{{ currentLog.userAgent || '-' }}</pre>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="detailVisible = false">
+            {{ localizeLabel('关闭') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+  </div>
+</template>
+
+<script setup>
+import { computed, h, ref } from 'vue'
+
+import { AiCrudPage } from '@/components/ai-form'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables'
+import { localizeLabel } from '@/locales'
+import { formatDateTime, request } from '@/utils'
+
+defineOptions({ name: 'LoginLog' })
+
+const { dict } = useDict('sys_login_type', 'sys_common_status', 'sys_client_type')
+
+const loginTypeOptions = computed(() => dict.value.sys_login_type || [])
+const loginStatusOptions = computed(() => dict.value.sys_common_status || [])
+const clientTypeOptions = computed(() => dict.value.sys_client_type || [])
+
+const crudRef = ref(null)
+const detailVisible = ref(false)
+const currentLog = ref(null)
+
+// 搜索前处理 - 转换时间范围参数
+function handleBeforeSearch(params) {
+  const result = { ...params }
+
+  // 处理时间范围转换
+  if (params.timeRange && params.timeRange.length === 2) {
+    result.startTime = formatDateTime(params.timeRange[0])
+    result.endTime = formatDateTime(params.timeRange[1])
+    delete result.timeRange
+  }
+
+  return result
+}
+
+// 搜索表单配置
+const searchSchema = computed(() => [
+  {
+    field: 'username',
+    get label() { return localizeLabel('用户名') },
+    type: 'input',
+    props: {
+      get placeholder() { return localizeLabel('请输入用户名') },
+    },
+  },
+  {
+    field: 'loginType',
+    get label() { return localizeLabel('登录类型') },
+    type: 'select',
+    props: {
+      get placeholder() { return localizeLabel('请选择登录类型') },
+      clearable: true,
+      options: loginTypeOptions.value,
+    },
+  },
+  {
+    field: 'loginStatus',
+    get label() { return localizeLabel('登录状态') },
+    type: 'select',
+    props: {
+      get placeholder() { return localizeLabel('请选择状态') },
+      clearable: true,
+      options: loginStatusOptions.value,
+    },
+  },
+  {
+    field: 'loginIp',
+    get label() { return localizeLabel('登录IP') },
+    type: 'input',
+    props: {
+      get placeholder() { return localizeLabel('请输入IP地址') },
+    },
+  },
+  {
+    field: 'clientCode',
+    get label() { return localizeLabel('客户端') },
+    type: 'select',
+    props: {
+      get placeholder() { return localizeLabel('请选择客户端') },
+      clearable: true,
+      options: clientTypeOptions.value,
+    },
+  },
+  {
+    field: 'timeRange',
+    get label() { return localizeLabel('登录时间') },
+    type: 'daterange',
+    startPlaceholder: localizeLabel('开始时间'),
+    endPlaceholder: localizeLabel('结束时间'),
+    clearable: true,
+    format: 'yyyy-MM-dd HH:mm:ss',
+    valueFormat: 'yyyy-MM-dd HH:mm:ss',
+    props: {
+      type: 'datetimerange',
+    },
+    transform: (value) => {
+      if (value && value.length === 2) {
+        return {
+          startTime: value[0],
+          endTime: value[1],
+        }
+      }
+      return {}
+    },
+  },
+])
+
+// 表格列配置
+const tableColumns = computed(() => [
+  {
+    prop: 'username',
+    get label() { return localizeLabel('用户名') },
+    width: 120,
+  },
+  {
+    prop: 'loginType',
+    get label() { return localizeLabel('登录类型') },
+    width: 100,
+    render: (row) => {
+      return h(DictTag, {
+        options: loginTypeOptions.value,
+        value: row.loginType,
+        size: 'small',
+      })
+    },
+  },
+  {
+    prop: 'loginStatus',
+    get label() { return localizeLabel('登录状态') },
+    width: 100,
+    render: (row) => {
+      return h(DictTag, {
+        options: loginStatusOptions.value,
+        value: String(row.loginStatus),
+        size: 'small',
+      })
+    },
+  },
+  {
+    prop: 'clientCode',
+    get label() { return localizeLabel('客户端') },
+    width: 100,
+    render: (row) => {
+      return h(DictTag, {
+        options: clientTypeOptions.value,
+        value: row.clientCode,
+        size: 'small',
+      })
+    },
+  },
+  {
+    prop: 'loginIp',
+    get label() { return localizeLabel('登录IP') },
+    width: 140,
+    ellipsis: { tooltip: true },
+  },
+  {
+    prop: 'loginLocation',
+    get label() { return localizeLabel('登录地点') },
+    width: 150,
+    ellipsis: { tooltip: true },
+    render: row => row.loginLocation || '-',
+  },
+  {
+    prop: 'browser',
+    get label() { return localizeLabel('浏览器') },
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: row => row.browser || '-',
+  },
+  {
+    prop: 'os',
+    get label() { return localizeLabel('操作系统') },
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: row => row.os || '-',
+  },
+  {
+    prop: 'loginTime',
+    get label() { return localizeLabel('登录时间') },
+    width: 160,
+  },
+  {
+    prop: 'loginMessage',
+    get label() { return localizeLabel('登录信息') },
+    minWidth: 150,
+    ellipsis: { tooltip: true },
+    render: row => row.loginMessage || '-',
+  },
+  {
+    prop: 'action',
+    get label() { return localizeLabel('操作') },
+    width: 80,
+    fixed: 'right',
+    actions: [
+      { get label() { return localizeLabel('详情') }, key: 'detail', onClick: handleViewDetail },
+    ],
+  },
+])
+
+// 查看详情
+async function handleViewDetail(row) {
+  try {
+    const res = await request.get(`/system/loginLog/${row.id}`)
+    if (res.code === 200) {
+      currentLog.value = res.data
+      detailVisible.value = true
+    }
+  }
+  catch (error) {
+    console.error('获取详情失败:', error)
+  }
+}
+</script>
+
+<style scoped>
+.login-log-page {
+  height: 100%;
+}
+
+.log-detail {
+  padding: 8px 0;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #262626;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.detail-row.full {
+  flex-direction: column;
+}
+
+.detail-row .label {
+  font-weight: 500;
+  color: #666;
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.detail-row .value {
+  color: #262626;
+  word-break: break-all;
+}
+
+.user-agent {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 12px;
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 4px;
+  margin: 8px 0 0 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+}
+</style>

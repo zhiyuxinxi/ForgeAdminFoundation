@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.message.mapper.SysMessageSendRecordMapper">
+    <select id="selectForMessage" resultType="com.mdframe.forge.plugin.message.domain.entity.SysMessageSendRecord">
+        SELECT * FROM sys_message_send_record WHERE tenant_id = #{tenantId} AND message_id = #{messageId}
+    </select>
+</mapper>

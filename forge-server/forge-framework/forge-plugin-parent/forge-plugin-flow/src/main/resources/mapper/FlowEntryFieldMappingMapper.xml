@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowEntryFieldMappingMapper">
+
+    <select id="selectByEntryId" resultType="com.mdframe.forge.starter.flow.entity.FlowEntryFieldMapping">
+        SELECT m.*
+        FROM sys_flow_entry_field_mapping m
+        WHERE m.deleted = 0
+          AND m.entry_id = #{entryId}
+        ORDER BY m.sort ASC, m.create_time ASC
+    </select>
+
+    <update id="deleteByEntryId">
+        UPDATE sys_flow_entry_field_mapping
+        SET deleted = 1,
+            update_time = NOW()
+        WHERE entry_id = #{entryId}
+          AND deleted = 0
+    </update>
+</mapper>

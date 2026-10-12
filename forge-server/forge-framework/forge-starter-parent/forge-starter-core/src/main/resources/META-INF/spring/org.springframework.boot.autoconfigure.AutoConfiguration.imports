@@ -1,0 +1,3 @@
+com.mdframe.forge.starter.core.config.JacksonConfig
+com.mdframe.forge.starter.core.config.ExceptionAutoConfiguration
+com.mdframe.forge.starter.core.config.UiLocaleAutoConfiguration

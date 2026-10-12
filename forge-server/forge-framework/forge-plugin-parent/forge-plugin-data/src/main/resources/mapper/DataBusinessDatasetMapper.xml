@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.data.mapper.DataBusinessDatasetMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.data.entity.DataBusinessDataset">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="business_id" property="businessId"/>
+        <result column="dataset_id" property="datasetId"/>
+        <result column="is_primary" property="isPrimary"/>
+        <result column="sort" property="sort"/>
+        <result column="usage_remark" property="usageRemark"/>
+        <result column="dataset_code" property="datasetCode"/>
+        <result column="dataset_name" property="datasetName"/>
+        <result column="dataset_type" property="datasetType"/>
+        <result column="dataset_description" property="datasetDescription"/>
+        <result column="param_schema_json" property="paramSchemaJson"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectByBusinessId" resultMap="BaseResultMap">
+        SELECT bd.*,
+               ds.dataset_code,
+               ds.dataset_name,
+               ds.dataset_type,
+               ds.description AS dataset_description,
+               ds.param_schema_json
+        FROM ai_report_data_business_dataset bd
+        INNER JOIN ai_report_data_dataset ds
+            ON bd.dataset_id = ds.id
+            AND ds.tenant_id = #{tenantId}
+            AND ds.del_flag = '0'
+            AND ds.status = 1
+            AND ds.publish_status = 1
+        WHERE bd.tenant_id = #{tenantId}
+          AND bd.business_id = #{businessId}
+        ORDER BY bd.is_primary DESC, bd.sort ASC, bd.id ASC
+    </select>
+
+    <delete id="deleteByBusinessId">
+        DELETE FROM ai_report_data_business_dataset
+        WHERE tenant_id = #{tenantId}
+          AND business_id = #{businessId}
+    </delete>
+</mapper>

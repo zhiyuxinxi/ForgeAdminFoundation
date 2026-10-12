@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessQuantityBalanceMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessQuantityBalance">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="account_code" property="accountCode"/>
+        <result column="item_code" property="itemCode"/>
+        <result column="dimension_key" property="dimensionKey"/>
+        <result column="quantity" property="quantity"/>
+        <result column="locked_quantity" property="lockedQuantity"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        account_code,
+        item_code,
+        dimension_key,
+        quantity,
+        locked_quantity,
+        status,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_quantity_balance
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+        LIMIT 1
+    </select>
+
+    <select id="selectBalancePage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityBalanceVO">
+        SELECT
+            id,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            quantity,
+            locked_quantity AS lockedQuantity,
+            quantity - locked_quantity AS availableQuantity,
+            status,
+            remark,
+            create_time AS createTime,
+            update_time AS updateTime
+        FROM ai_business_quantity_balance
+        WHERE tenant_id = #{tenantId}
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.status != null">
+          AND status = #{query.status}
+        </if>
+        ORDER BY update_time DESC, id DESC
+    </select>
+
+    <update id="increaseQuantity">
+        UPDATE ai_business_quantity_balance
+        SET quantity = quantity + #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND status = 1
+    </update>
+
+    <update id="decreaseAvailableQuantity">
+        UPDATE ai_business_quantity_balance
+        SET quantity = quantity - #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND status = 1
+          AND quantity - locked_quantity >= #{quantity}
+    </update>
+
+    <update id="lockQuantity">
+        UPDATE ai_business_quantity_balance
+        SET locked_quantity = locked_quantity + #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND status = 1
+          AND quantity - locked_quantity >= #{quantity}
+    </update>
+
+    <update id="releaseLockedQuantity">
+        UPDATE ai_business_quantity_balance
+        SET locked_quantity = locked_quantity - #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND status = 1
+          AND locked_quantity >= #{quantity}
+    </update>
+
+    <update id="commitLockedQuantity">
+        UPDATE ai_business_quantity_balance
+        SET quantity = quantity - #{quantity},
+            locked_quantity = locked_quantity - #{quantity},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND account_code = #{accountCode}
+          AND item_code = #{itemCode}
+          AND dimension_key = #{dimensionKey}
+          AND status = 1
+          AND quantity >= #{quantity}
+          AND locked_quantity >= #{quantity}
+    </update>
+
+</mapper>

@@ -1,0 +1,286 @@
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
+import { routes as autoRoutes } from 'vue-router/auto-routes'
+import { SSO_BRIDGE_ROUTE } from '@/utils/sso-target'
+import { setupRouterGuards } from './guards'
+
+export function redirectLegacyDataScopeAdapter(to) {
+  if (String(to.query?.panel || '') !== 'permission')
+    return true
+  const returnTo = String(to.query?.returnTo || '').trim()
+  const [returnPath, returnSearch = ''] = returnTo.split('?', 2)
+  if (!/^\/app-center\/application\/[^/]+$/.test(returnPath))
+    return true
+  return {
+    path: returnPath,
+    query: {
+      ...Object.fromEntries(new URLSearchParams(returnSearch).entries()),
+      section: 'permissions',
+      dataScopeObjectId: to.query?.objectId || undefined,
+    },
+    replace: true,
+  }
+}
+
+// 手动定义的路由（登录页、SSO、带参数的路由等）
+export const manualRoutes = [
+  // 白名单页面
+  {
+    name: 'Login',
+    path: '/login',
+    component: () => import('@/views/login/index.vue'),
+    meta: { title: '登录页', layout: 'empty' },
+  },
+  {
+    name: 'SocialCallback',
+    path: '/login/callback',
+    component: () => import('@/views/login/callback.vue'),
+    meta: { title: '社交登录回调', layout: 'empty' },
+  },
+  {
+    name: 'McpAuthorize',
+    path: '/mcp-authorize',
+    component: () => import('@/views/ai/mcp-authorize.vue'),
+    meta: { title: 'MCP 访问授权', layout: 'empty', skipTab: true },
+  },
+  {
+    name: '404',
+    path: '/404',
+    component: () => import('@/views/error-page/404.vue'),
+    meta: { title: '页面飞走了', layout: 'empty' },
+  },
+  {
+    name: '403',
+    path: '/403',
+    component: () => import('@/views/error-page/403.vue'),
+    meta: { title: '没有权限', layout: 'empty' },
+  },
+  // 首页重定向
+  {
+    path: '/',
+    redirect: '/home',
+    meta: { title: '首页' },
+  },
+  // iframe 页面
+  {
+    name: 'iframe',
+    path: '/iframe',
+    component: () => import('@/views/iframe/index.vue'),
+    meta: { title: 'iframe' },
+  },
+  // 通知公告
+  {
+    name: 'NoticeList',
+    path: '/system/notice-list',
+    component: () => import('@/views/system/notice-list.vue'),
+    meta: { title: '通知公告' },
+  },
+  // 消息模板管理
+  {
+    name: 'MessageTemplate',
+    path: '/message/template',
+    component: () => import('@/views/message/template-list.vue'),
+    meta: { title: '消息模板管理' },
+  },
+  // 消息管理
+  {
+    name: 'MessageManage',
+    path: '/message/manage',
+    component: () => import('@/views/message/manage.vue'),
+    meta: { title: '消息管理' },
+  },
+  // 消息业务类型管理
+  {
+    name: 'MessageBizType',
+    path: '/message/biz-type',
+    component: () => import('@/views/message/biz-type.vue'),
+    meta: { title: '消息业务类型管理' },
+  },
+  // 个人中心
+  {
+    name: 'UserProfile',
+    path: '/profile',
+    component: () => import('@/views/system/profile.vue'),
+    meta: { title: '个人中心' },
+  },
+  // AI 动态业务页面（path 参数形式，兼容菜单注册的 /ai/crud-page/:configKey 格式）
+  {
+    name: 'AiCrudPageDynamic',
+    path: '/ai/crud-page/:configKey',
+    component: () => import('@/views/ai/crud-page.vue'),
+    meta: { title: '业务页面' },
+  },
+  {
+    name: 'AiLowcodeBuilderDynamic',
+    path: '/ai/lowcode-builder/:id?',
+    component: () => import('@/views/ai/lowcode-builder.vue'),
+    meta: { title: '业务页面设计器（存量）', deprecated: true },
+  },
+  {
+    name: 'BusinessObjectDesigner',
+    path: '/app-center/object/:objectCode/designer',
+    component: () => import('@/views/app-center/object-designer.[objectCode].vue'),
+    beforeEnter: redirectLegacyDataScopeAdapter,
+    meta: { title: '业务单元设计', skipTab: true, preserveOnQuery: true },
+  },
+  {
+    name: 'BusinessApplicationRuntime',
+    path: '/app-center/application/:applicationCode/runtime',
+    component: () => import('@/views/app-center/application-runtime.[applicationCode].vue'),
+    meta: { title: '运行应用', layout: 'empty', skipTab: true, preserveOnQuery: true },
+  },
+  {
+    name: 'ApplicationPortal',
+    path: '/app/:applicationCodeOrSlug',
+    component: () => import('@/views/app-center/application-portal.vue'),
+    meta: {
+      title: '应用门户',
+      layout: 'app-portal',
+      skipTab: true,
+      preserveOnQuery: true,
+    },
+  },
+
+  {
+    name: 'BusinessApplicationWorkspace',
+    path: '/app-center/application/:applicationCode',
+    redirect: (to) => {
+      const applicationCode = String(to.params?.applicationCode || '').trim()
+      if (!applicationCode)
+        return { path: '/app-center' }
+      return { name: 'BusinessApplicationRuntime', params: { applicationCode } }
+    },
+    meta: { title: '页面管理', skipTab: true, preserveOnQuery: true },
+  },
+  {
+    name: 'BusinessApplicationSettings',
+    path: '/app-center/application/:applicationCode/settings',
+    redirect: to => ({
+      name: 'BusinessApplicationRuntime',
+      params: { applicationCode: to.params.applicationCode },
+      query: { ...(to.query || {}), view: 'settings' },
+    }),
+    meta: { title: '应用设置', layout: 'empty', skipTab: true, preserveOnQuery: true, deprecated: true },
+  },
+  {
+    name: 'BusinessApplicationPublish',
+    path: '/app-center/application/:applicationCode/publish',
+    redirect: to => ({
+      name: 'BusinessApplicationRuntime',
+      params: { applicationCode: to.params.applicationCode },
+      query: { ...(to.query || {}), view: 'publish' },
+    }),
+    meta: { title: '应用发布', layout: 'empty', skipTab: true, preserveOnQuery: true, deprecated: true },
+  },
+  {
+    name: 'BusinessProcessDesigner',
+    path: '/app-center/business-process/:processId',
+    component: () => import('@/views/app-center/business-process.[processId].vue'),
+    meta: { title: '业务流程设计', layout: 'empty', skipTab: true, preserveOnQuery: true },
+  },
+  {
+    name: 'BusinessApplicationPreview',
+    path: '/app-center/application/:applicationCode/preview',
+    component: () => import('@/views/app-center/application-preview.[applicationCode].vue'),
+    meta: { title: '预览应用', skipTab: true, preserveOnQuery: true },
+  },
+  {
+    name: 'BusinessAppEntry',
+    path: '/app-center/app/:appId',
+    component: () => import('@/views/app-center/app-entry.vue'),
+    meta: { title: '访问入口', skipTab: true },
+  },
+  {
+    name: 'BusinessTriggerConfig',
+    path: '/app-center/trigger',
+    component: () => import('@/views/app-center/trigger.vue'),
+    meta: { title: '触发器配置' },
+  },
+  {
+    name: 'BusinessStatsDashboard',
+    path: '/app-center/stats',
+    component: () => import('@/views/app-center/stats-dashboard.vue'),
+    meta: { title: '数据统计看板' },
+  },
+  {
+    name: 'Workspace',
+    path: '/workspace',
+    component: () => import('@/views/workspace/index.vue'),
+    redirect: '/workspace/summary',
+    meta: { title: '我的工作台' },
+    children: [
+      {
+        name: 'WorkspaceSummary',
+        path: 'summary',
+        component: () => import('@/views/workspace/summary.vue'),
+        meta: { title: '工作台首页' },
+      },
+      {
+        name: 'WorkspaceTodo',
+        path: 'todo',
+        component: () => import('@/views/workspace/todo.vue'),
+        meta: { title: '我的待办' },
+      },
+      {
+        name: 'WorkspaceDone',
+        path: 'done',
+        component: () => import('@/views/workspace/done.vue'),
+        meta: { title: '我的已办' },
+      },
+      {
+        name: 'WorkspaceStarted',
+        path: 'started',
+        component: () => import('@/views/workspace/started.vue'),
+        meta: { title: '我发起的' },
+      },
+      {
+        name: 'WorkspaceCc',
+        path: 'cc',
+        component: () => import('@/views/workspace/cc.vue'),
+        meta: { title: '抄送我' },
+      },
+    ],
+  },
+  {
+    name: 'ReportSsoBridge',
+    path: SSO_BRIDGE_ROUTE,
+    component: () => import('@/views/report/design.vue'),
+    meta: { title: '子系统跳转' },
+  },
+  // Nexus 布局演示页面
+  {
+    name: 'NexusRoleManagement',
+    path: '/nexus/role-management',
+    component: () => import('@/views/nexus/role-management.vue'),
+    meta: { title: 'Nexus 角色管理', layout: 'nexus' },
+  },
+]
+
+// 开发环境打印所有路由
+if (import.meta.env.DEV) {
+  console.warn('📋 所有注册的路由:', autoRoutes)
+}
+
+// 合并路由：手动路由 + 自动生成路由 + 兜底路由
+const routes = [
+  ...manualRoutes,
+  ...autoRoutes,
+  // 兜底路由
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/404',
+  },
+]
+
+export const router = createRouter({
+  history:
+      import.meta.env.VITE_USE_HASH === 'true'
+        ? createWebHashHistory(import.meta.env.VITE_PUBLIC_PATH || '/')
+        : createWebHistory(import.meta.env.VITE_PUBLIC_PATH || '/'),
+  routes,
+  scrollBehavior: () => ({ left: 0, top: 0 }),
+})
+
+export async function setupRouter(app) {
+  app.use(router)
+  setupRouterGuards(router)
+}

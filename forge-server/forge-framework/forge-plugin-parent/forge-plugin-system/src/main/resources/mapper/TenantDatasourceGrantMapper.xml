@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.TenantDatasourceGrantMapper">
+    <resultMap id="Option" type="com.mdframe.forge.plugin.system.datasource.TenantDatasourceOption">
+        <id column="datasource_id" property="datasourceId"/>
+        <result column="datasource_code" property="datasourceCode"/>
+        <result column="datasource_name" property="datasourceName"/>
+        <result column="usage_scope" property="usageScope"/>
+        <result column="is_enabled" property="isEnabled"/>
+        <result column="readonly" property="readonly"/>
+        <result column="allow_runtime_write" property="allowRuntimeWrite"/>
+        <result column="granted" property="granted"/>
+    </resultMap>
+    <sql id="Metadata">
+        SELECT d.datasource_id, d.datasource_code, d.datasource_name, d.usage_scope,
+               d.is_enabled, d.readonly, d.allow_runtime_write,
+               CASE WHEN g.datasource_id IS NULL THEN 0 ELSE 1 END AS granted
+        FROM gen_datasource d
+        LEFT JOIN sys_tenant_datasource_grant g
+          ON g.datasource_id = d.datasource_id AND g.tenant_id = #{tenantId}
+    </sql>
+    <select id="selectOptions" resultMap="Option" useCache="false" flushCache="true">
+        <include refid="Metadata"/>
+        ORDER BY d.datasource_id
+    </select>
+    <select id="selectDatasource" resultMap="Option" useCache="false" flushCache="true">
+        <include refid="Metadata"/>
+        WHERE d.datasource_id = #{datasourceId}
+    </select>
+    <insert id="grant">
+        INSERT INTO sys_tenant_datasource_grant (tenant_id, datasource_id, granted_by)
+        VALUES (#{tenantId}, #{datasourceId}, #{userId})
+        ON DUPLICATE KEY UPDATE granted_by = VALUES(granted_by), granted_at = CURRENT_TIMESTAMP
+    </insert>
+    <delete id="revoke">
+        DELETE FROM sys_tenant_datasource_grant
+        WHERE tenant_id = #{tenantId} AND datasource_id = #{datasourceId}
+    </delete>
+</mapper>

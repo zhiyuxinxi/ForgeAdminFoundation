@@ -1,0 +1,262 @@
+<script setup>
+import { localizeLabel as translateUiText } from '@/locales'
+
+/**
+ * FlowCanvas — 钉钉样式画布容器
+ *
+ * 职责：
+ * - 提供 transform 缩放 / 平移容器
+ * - 鼠标滚轮 + Ctrl/Cmd → 以鼠标为锚点缩放
+ * - 鼠标滚轮（无修饰键）→ 垂直滚动平移
+ * - 按住空格 + 鼠标拖拽 → 平移画布（鼠标变 grab）
+ * - 中键拖拽 → 平移
+ * - 双击空白 → resetView
+ *
+ * 暴露给父组件的方法（defineExpose）：
+ * - resetView / fitToScreen / zoomIn / zoomOut / setScale
+ * - screenToCanvas / canvasToScreen
+ * - viewport：完整 useCanvasViewport 返回值
+ *
+ * Slots：
+ * - edges  → SVG 连线层（建议 absolute + pointer-events: none）
+ * - nodes  → HTML 节点层（建议 absolute）
+ * - toolbar → 不受 transform 影响的覆盖工具栏（自定义）
+ */
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useCanvasViewport } from '../composables/useCanvasViewport.js'
+
+const props = defineProps({
+  minScale: { type: Number, default: 0.3 },
+  maxScale: { type: Number, default: 2.0 },
+  initialScale: { type: Number, default: 1 },
+  readonly: { type: Boolean, default: false },
+  allowNavigation: { type: Boolean, default: false },
+})
+
+const emit = defineEmits(['canvasClick', 'canvasDblclick'])
+
+const containerRef = ref(null)
+const isPanning = ref(false)
+const isSpaceDown = ref(false)
+const lastPan = ref({ x: 0, y: 0 })
+const navigationEnabled = computed(() => !props.readonly || props.allowNavigation)
+
+const viewport = useCanvasViewport({
+  minScale: props.minScale,
+  maxScale: props.maxScale,
+  initialScale: props.initialScale,
+})
+
+const {
+  transformStyle,
+  scalePercent,
+  zoomIn,
+  zoomOut,
+  setScale,
+  pan,
+  resetView,
+  fitToScreen,
+  screenToCanvas,
+  canvasToScreen,
+} = viewport
+
+/* ---- 滚轮缩放 / 滚动 ---- */
+
+function handleWheel(event) {
+  if (!navigationEnabled.value)
+    return
+  // Ctrl/Cmd + 滚轮 → 以鼠标位置为锚点缩放
+  if (event.ctrlKey || event.metaKey) {
+    event.preventDefault()
+    const rect = containerRef.value.getBoundingClientRect()
+    const cx = event.clientX - rect.left
+    const cy = event.clientY - rect.top
+    if (event.deltaY < 0)
+      zoomIn(cx, cy)
+    else
+      zoomOut(cx, cy)
+    return
+  }
+  // 普通滚轮 → 垂直滚动（含横向 deltaX）
+  event.preventDefault()
+  pan(-event.deltaX, -event.deltaY)
+}
+
+/* ---- 拖拽平移 ---- */
+
+function handleMouseDown(event) {
+  if (!navigationEnabled.value)
+    return
+  // 中键 → 平移；空格 + 左键 → 平移；左键点击空白处 → 平移
+  // 左键点击节点/按钮时不拦截（让子组件处理 click）
+  const isBackground = event.target === containerRef.value
+    || event.target?.classList?.contains('canvas-transform')
+  const isPanTrigger = event.button === 1
+    || (event.button === 0 && (isSpaceDown.value || isBackground))
+  if (!isPanTrigger)
+    return
+  event.preventDefault()
+  isPanning.value = true
+  lastPan.value = { x: event.clientX, y: event.clientY }
+  window.addEventListener('mousemove', handleMouseMove)
+  window.addEventListener('mouseup', handleMouseUp)
+}
+
+function handleMouseMove(event) {
+  if (!isPanning.value)
+    return
+  const dx = event.clientX - lastPan.value.x
+  const dy = event.clientY - lastPan.value.y
+  lastPan.value = { x: event.clientX, y: event.clientY }
+  pan(dx, dy)
+}
+
+function handleMouseUp() {
+  isPanning.value = false
+  window.removeEventListener('mousemove', handleMouseMove)
+  window.removeEventListener('mouseup', handleMouseUp)
+}
+
+/* ---- 空格键检测 ---- */
+
+function handleKeyDown(event) {
+  if (event.code === 'Space' && !isSpaceDown.value) {
+    isSpaceDown.value = true
+  }
+}
+
+function handleKeyUp(event) {
+  if (event.code === 'Space')
+    isSpaceDown.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
+  window.removeEventListener('mousemove', handleMouseMove)
+  window.removeEventListener('mouseup', handleMouseUp)
+})
+
+/* ---- 双击空白重置 ---- */
+
+function handleDblClick(event) {
+  emit('canvasDblclick', event)
+}
+
+function handleClick(event) {
+  emit('canvasClick', event)
+}
+
+defineExpose({
+  resetView,
+  fitToScreen,
+  zoomIn,
+  zoomOut,
+  setScale,
+  screenToCanvas,
+  canvasToScreen,
+  viewport,
+  containerRef,
+})
+</script>
+
+<template>
+  <div
+    ref="containerRef"
+    class="flow-canvas relative h-full w-full select-none overflow-hidden"
+    :class="{ 'cursor-grab': navigationEnabled && isSpaceDown && !isPanning, 'cursor-grabbing': isPanning }"
+    @wheel="handleWheel"
+    @mousedown="handleMouseDown"
+    @click="handleClick"
+    @dblclick="handleDblClick"
+    @contextmenu.prevent
+  >
+    <div class="canvas-transform absolute left-0 top-0" :style="transformStyle">
+      <slot name="edges" />
+      <slot name="nodes" />
+    </div>
+    <div class="canvas-toolbar absolute bottom-4 left-4 z-10 flex items-center gap-1 bg-white/95 p-1 shadow-md">
+      <button class="canvas-tool-btn" :aria-label="translateUiText(&quot;缩小&quot;)" :disabled="!navigationEnabled" @click="zoomOut()">
+        <i class="i-mdi-minus" />
+      </button>
+      <span class="canvas-zoom-text text-sm min-w-12 text-center">{{ scalePercent }}%</span>
+      <button class="canvas-tool-btn" :aria-label="translateUiText(&quot;放大&quot;)" :disabled="!navigationEnabled" @click="zoomIn()">
+        <i class="i-mdi-plus" />
+      </button>
+      <span class="canvas-toolbar-divider" />
+      <button class="canvas-tool-btn" :aria-label="translateUiText(&quot;适应画布&quot;)" :disabled="!navigationEnabled" @click="resetView()">
+        <i class="i-mdi-fit-to-page-outline" />
+      </button>
+      <slot name="toolbar" />
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.flow-canvas {
+  outline: none;
+  background-color: #f7f9fa;
+  background-image:
+    radial-gradient(circle, rgba(148, 163, 184, 0.32) 1px, transparent 1.2px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 248, 250, 0.9));
+  background-position:
+    0 0,
+    0 0;
+  background-size:
+    18px 18px,
+    auto;
+}
+
+.canvas-toolbar {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.canvas-tool-btn {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #64748b;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.canvas-tool-btn:hover:not(:disabled) {
+  background: rgba(22, 93, 255, 0.08);
+  color: var(--primary-600, #165dff);
+}
+
+.canvas-tool-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.canvas-zoom-text {
+  color: #475569;
+  font-weight: 500;
+}
+
+.canvas-toolbar-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-tool-btn {
+    transition: none;
+  }
+}
+</style>

@@ -1,0 +1,107 @@
+{
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^u--(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^up-(.*)": "uview-plus/components/u-$1/u-$1.vue",
+			"^u-([^-].*)": "uview-plus/components/u-$1/u-$1.vue"
+		}
+	},
+	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationBarTitleText": "登录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "Forge H5",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/message/index",
+			"style": {
+				"navigationBarTitleText": "消息中心",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/todo",
+			"style": {
+				"navigationBarTitleText": "待办",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/todo-detail",
+			"style": {
+				"navigationBarTitleText": "审批详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/mine/index",
+			"style": {
+				"navigationBarTitleText": "我的",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/demo/loading/index",
+			"style": {
+				"navigationBarTitleText": "组件演示",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/app-entry",
+			"style": {
+				"navigationBarTitleText": "应用功能",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/lowcode-runtime",
+			"style": {
+				"navigationBarTitleText": "低代码应用",
+				"navigationStyle": "custom"
+			}
+		}
+	],
+	"tabBar": {
+		"color": "#8A93A3",
+		"selectedColor": "#0891B2",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "white",
+		"list": [
+			{
+				"pagePath": "pages/index/index",
+				"text": "首页",
+				"iconPath": "static/icons/ai-icon/home.svg",
+				"selectedIconPath": "static/icons/ai-icon/home.svg"
+			},
+			{
+				"pagePath": "pages/todo",
+				"text": "待办",
+				"iconPath": "static/icons/ai-icon/check-square.svg",
+				"selectedIconPath": "static/icons/ai-icon/check-square.svg"
+			},
+			{
+				"pagePath": "pages/mine/index",
+				"text": "我的",
+				"iconPath": "static/icons/ai-icon/user.svg",
+				"selectedIconPath": "static/icons/ai-icon/user.svg"
+			}
+		]
+	},
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "Forge H5",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	}
+}

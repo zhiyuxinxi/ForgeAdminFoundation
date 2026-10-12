@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.data.mapper.DataDatasetCategoryMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.data.entity.DataDatasetCategory">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="parent_id" property="parentId"/>
+        <result column="level" property="level"/>
+        <result column="ancestors" property="ancestors"/>
+        <result column="category_code" property="categoryCode"/>
+        <result column="category_name" property="categoryName"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="description" property="description"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectCategoryList" resultMap="BaseResultMap">
+        SELECT *
+        FROM ai_report_data_dataset_category
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+        <if test="categoryName != null and categoryName != ''">
+            AND category_name LIKE CONCAT('%', #{categoryName}, '%')
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY sort_order ASC, create_time ASC
+    </select>
+
+    <select id="selectCategoryByCode" resultMap="BaseResultMap">
+        SELECT *
+        FROM ai_report_data_dataset_category
+        WHERE tenant_id = #{tenantId}
+          AND category_code = #{categoryCode}
+          AND del_flag = '0'
+        LIMIT 1
+    </select>
+
+    <select id="selectChildCount" resultType="int">
+        SELECT COUNT(1)
+        FROM ai_report_data_dataset_category
+        WHERE tenant_id = #{tenantId}
+          AND parent_id = #{parentId}
+          AND del_flag = '0'
+    </select>
+</mapper>

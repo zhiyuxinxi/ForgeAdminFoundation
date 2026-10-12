@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysExcelColumnConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.system.entity.SysExcelColumnConfig">
+        <id column="id" property="id"/>
+        <result column="config_key" property="configKey"/>
+        <result column="field_name" property="fieldName"/>
+        <result column="column_name" property="columnName"/>
+        <result column="column_name_en" property="columnNameEn"/>
+        <result column="width" property="width"/>
+        <result column="order_num" property="orderNum"/>
+        <result column="export" property="export"/>
+        <result column="date_format" property="dateFormat"/>
+        <result column="number_format" property="numberFormat"/>
+        <result column="dict_type" property="dictType"/>
+        <result column="importable" property="importable"/>
+        <result column="required" property="required"/>
+        <result column="example_value" property="exampleValue"/>
+        <result column="validation_rule" property="validationRule"/>
+        <result column="validation_message" property="validationMessage"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        config_key,
+        field_name,
+        column_name,
+        column_name_en,
+        width,
+        order_num,
+        export,
+        date_format,
+        number_format,
+        dict_type,
+        importable,
+        required,
+        example_value,
+        validation_rule,
+        validation_message,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM sys_excel_column_config
+        WHERE config_key = #{configKey}
+        ORDER BY order_num ASC, id ASC
+    </select>
+
+    <delete id="deleteByConfigKey">
+        DELETE FROM sys_excel_column_config
+        WHERE config_key = #{configKey}
+    </delete>
+
+</mapper>

@@ -1,0 +1,6615 @@
+<!--
+  eslint-disable vue/component-name-in-template-casing
+  CRUD 页面组件
+  基于 Naive UI 的完整 CRUD 解决方案
+  参考 LxBasePage 设计，集成搜索、表格、新增、编辑、删除、导入导出等功能
+
+  @author AI Form Team
+  @version 1.0.0
+-->
+
+<template>
+  <div ref="crudRootRef" class="ai-crud-page" :class="{ 'is-form-only': formOnly }" :style="pageHeightStyle">
+    <div v-if="flowStartPageLoading" class="ai-crud-page-loading-mask">
+      <n-spin size="large">
+        <template #description>
+          {{ localizeLabel('正在发起流程...') }}
+        </template>
+      </n-spin>
+    </div>
+
+    <n-alert
+      v-if="offlineDraftNotice"
+      type="info"
+      :bordered="false"
+      class="offline-draft-notice"
+    >
+      {{ offlineDraftNotice }}
+      <template #action>
+        <n-button
+          v-if="offlineReplayAvailable"
+          size="small"
+          secondary
+          :loading="offlineReplayLoading"
+          @click="confirmOfflineReplay"
+        >
+          {{ localizeLabel('检查并重放') }}
+        </n-button>
+      </template>
+    </n-alert>
+
+    <div v-if="formOnlySubmitted" class="ai-crud-form-only-result">
+      <n-result
+        status="success"
+        :title="localizeLabel(formOnlySuccessTitle)"
+        :description="localizeLabel(formOnlySuccessDescription)"
+      >
+        <template #footer>
+          <n-button type="primary" @click="resetFormOnly">
+            {{ localizeLabel('继续填报') }}
+          </n-button>
+        </template>
+      </n-result>
+    </div>
+
+    <div v-else-if="formOnly" class="ai-crud-form-only">
+      <header class="form-only-head">
+        <h2>{{ localizeLabel(resolvedFormOnlyTitle) }}</h2>
+      </header>
+      <div class="form-only-body">
+        <AiForm
+          v-if="showDefaultDetailContent"
+          ref="formRef"
+          v-model:value="formData"
+          :class="resolvedEditFormClass"
+          :style="editFormStyle"
+          :schema="modalFormSchema"
+          :grid-cols="editGridCols"
+          :label-width="editLabelWidth"
+          :label-placement="editLabelPlacement"
+          :label-align="editLabelAlign"
+          :size="editSize"
+          :x-gap="editXGap"
+          :y-gap="editYGap"
+          :show-feedback="editShowFeedback"
+          :show-actions="false"
+          :context="formContext"
+          :form-assets="formAssets"
+          @update:value="handleFormValueUpdate"
+        >
+          <template v-for="slotName in formSlots" #[slotName]="slotProps">
+            <slot :name="`form-${slotName}`" v-bind="slotProps" />
+          </template>
+        </AiForm>
+        <ChildTableEditor
+          v-if="hasChildrenConfig"
+          ref="childFormRef"
+          v-model:value="childFormData"
+          :children-config="visibleChildrenConfig"
+          :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
+          :row-action-visible="isChildRowActionVisible"
+          :row-action-loading="isChildRowActionLoading"
+          @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
+        />
+      </div>
+      <footer class="form-only-footer">
+        <n-button secondary @click="resetFormOnly">
+          {{ localizeLabel('重置') }}
+        </n-button>
+        <n-button type="primary" :loading="confirmLoading" @click="handleModalConfirm">
+          {{ localizeLabel(formOnlySubmitText) }}
+        </n-button>
+      </footer>
+    </div>
+
+    <!-- 搜索表单区域 -->
+    <div v-if="!formOnly && showInlineListPane && hasSearchSchema && searchPanelVisible" class="ai-crud-search">
+      <AiSearch
+        ref="searchRef"
+        v-model="searchParams"
+        :schema="normalizedSearchSchema"
+        :grid-cols="searchGridCols"
+        :label-width="searchLabelWidth"
+        :enable-collapse="searchEnableCollapse"
+        :max-visible-fields="searchMaxVisibleFields"
+        :y-gap="searchYGap"
+        :before-reset="beforeRenderReset"
+        @search="handleSearch"
+        @reset="handleReset"
+      >
+        <!-- 透传搜索表单插槽 -->
+        <template v-for="slotName in searchSlots" #[slotName]="slotProps">
+          <slot :name="`search-${slotName}`" v-bind="slotProps" />
+        </template>
+
+        <!-- 搜索表单额外操作按钮 -->
+        <template #extra-actions="{ formData: searchFormData }">
+          <slot name="search-extra-actions" :form-data="searchFormData" />
+        </template>
+      </AiSearch>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div
+      v-if="!formOnly"
+      class="ai-crud-main"
+      :class="{
+        'has-inline-workspace': inlineWorkspaceVisible,
+        'is-tab-workspace': isTabWorkspaceMode,
+        'is-form-workspace-active': showInlineFormWorkspacePane,
+      }"
+    >
+      <div
+        v-if="isTabWorkspaceMode && inlineWorkspaceVisible"
+        class="ai-crud-workspace-tabs"
+        role="tablist"
+      >
+        <button
+          type="button"
+          class="inline-form-tab inline-form-tab--list"
+          :class="{ active: activeInlineWorkspaceKey === INLINE_WORKSPACE_LIST_KEY }"
+          role="tab"
+          :aria-selected="activeInlineWorkspaceKey === INLINE_WORKSPACE_LIST_KEY"
+          @click="handleInlineWorkspaceListTab"
+        >
+          <span class="inline-form-tab__title">{{ localizeLabel('列表') }}</span>
+        </button>
+        <button
+          v-for="tab in inlineFormTabs"
+          :key="tab.key"
+          type="button"
+          class="inline-form-tab"
+          :class="{ active: tab.key === activeInlineWorkspaceKey }"
+          role="tab"
+          :aria-selected="tab.key === activeInlineWorkspaceKey"
+          @click="handleInlineFormTabChange(tab.key)"
+        >
+          <span class="inline-form-tab__title">{{ inlineFormTabTitle(tab) }}</span>
+          <span
+            v-if="resolvedTabWorkspace.showDirtyMark && tab.dirty"
+            class="inline-form-tab__dirty"
+            :aria-label="localizeLabel('未保存')"
+          />
+          <span
+            class="inline-form-tab__close"
+            :title="localizeLabel('关闭')"
+            @click.stop="closeInlineFormTab(tab.key)"
+          >
+            <n-icon size="13"><CloseOutline /></n-icon>
+          </span>
+        </button>
+      </div>
+
+      <!-- 数据表格区域 -->
+      <div v-show="showInlineListPane" class="ai-crud-table">
+        <AiTable
+          ref="tableRef"
+          v-model:checked-row-keys="selectedKeys"
+          v-model:expanded-row-keys="expandedRowKeys"
+          :columns="tableColumns"
+          :data-source="dataSource"
+          :loading="tableLoading"
+          :pagination="paginationConfig"
+          :row-key="rowKeyFn"
+          :hide-selection="hideSelection"
+          :striped="striped"
+          :bordered="bordered"
+          :size="tableSize"
+          :table-row-gap="tableRowGap"
+          :render-mode="activeRenderMode"
+          :card-props="cardProps"
+          :show-render-mode-switch="showRenderModeSwitch"
+          :show-search-toggle="hasSearchSchema"
+          :search-visible="searchPanelVisible"
+          :max-height="computedMaxHeight"
+          :scroll-x="computedScrollX"
+          :resizable="resolvedResizable"
+          :empty-title="localizeLabel(resolvedEmptyTitle)"
+          :empty-description="resolvedEmptyDescription"
+          v-bind="tableProps"
+          @page-change="handlePageChange"
+          @page-size-change="handlePageSizeChange"
+          @refresh="handleRefresh"
+          @search-toggle="handleSearchToggle"
+          @render-mode-change="handleRenderModeChange"
+        >
+          <template #toolbar-left>
+            <!-- 工具栏区域 -->
+            <div v-if="!hideToolbar" class="ai-crud-toolbar">
+              <slot name="toolbar">
+                <div class="toolbar-left">
+                  <slot name="toolbar-start" />
+                  <!-- 新增按钮 -->
+                  <n-button
+                    v-if="!hideAdd && hasActionPermission('add')"
+                    type="primary"
+                    size="small"
+                    @click="handleAdd()"
+                  >
+                    <template #icon>
+                      <n-icon><Add /></n-icon>
+                    </template>
+                    {{ localizeLabel(addButtonText) }}
+                  </n-button>
+                  <n-button
+                    v-if="toolbarOverflowOptions.length === 1"
+                    size="small"
+                    :type="toolbarOverflowOptions[0].buttonType"
+                    :secondary="toolbarOverflowOptions[0].secondary"
+                    :disabled="toolbarOverflowOptions[0].disabled"
+                    :loading="toolbarOverflowOptions[0].loading"
+                    @click="handleToolbarOverflowSelect(toolbarOverflowOptions[0].key)"
+                  >
+                    <template #icon>
+                      <n-icon><component :is="toolbarOverflowOptions[0].iconComponent" /></n-icon>
+                    </template>
+                    {{ toolbarOverflowOptions[0].label }}
+                  </n-button>
+                  <n-dropdown
+                    v-else-if="toolbarOverflowOptions.length > 1"
+                    trigger="click"
+                    placement="bottom-start"
+                    :options="toolbarDropdownOptions"
+                    @select="handleToolbarOverflowSelect"
+                  >
+                    <n-button size="small" secondary class="ai-crud-more-button">
+                      <template #icon>
+                        <n-icon><EllipsisVertical /></n-icon>
+                      </template>
+                      {{ localizeLabel('更多') }}
+                    </n-button>
+                  </n-dropdown>
+
+                  <AiCustomQuery
+                    v-if="enableCustomQuery && resolvedCustomQueryConfigKey"
+                    :config-key="resolvedCustomQueryConfigKey"
+                    :columns="props.columns"
+                    :search-schema="searchSchema"
+                    :edit-schema="editSchema"
+                    :render-mode="activeRenderMode"
+                    @apply="handleApplyCustomQuery"
+                    @clear="handleClearCustomQuery"
+                  />
+
+                  <n-button
+                    v-for="action in visibleToolbarActions"
+                    :key="action.key || action.label"
+                    size="small"
+                    :type="resolveButtonType(action)"
+                    @click="handleActionClick(action, null)"
+                  >
+                    {{ localizeLabel(action.label, action.labelI18n) }}
+                  </n-button>
+
+                  <slot name="toolbar-end" />
+                </div>
+
+                <!-- 右侧操作按钮 -->
+                <div class="toolbar-right">
+                  <slot name="toolbar-right-start" />
+                  <slot name="toolbar-right-end" />
+                </div>
+              </slot>
+            </div>
+          </template>
+          <!-- 透传表格插槽 -->
+          <template v-for="slotName in tableSlots" #[slotName]="slotProps">
+            <slot :name="`table-${slotName}`" v-bind="slotProps" />
+          </template>
+          <template v-if="$slots['table-card']" #card="slotProps">
+            <slot name="table-card" v-bind="slotProps" />
+          </template>
+        </AiTable>
+      </div>
+
+      <div
+        v-if="showInlineFormWorkspacePane"
+        class="ai-crud-inline-workspace"
+        :class="{ 'is-tab-workspace': isTabWorkspaceMode }"
+      >
+        <section class="ai-crud-inline-form-panel">
+          <header class="inline-form-panel-head">
+            <div>
+              <strong>{{ localizeLabel(activeInlineFormTitle) }}</strong>
+              <span>{{ inlineFormModeLabel }}</span>
+            </div>
+            <n-button
+              quaternary
+              :circle="isTabWorkspaceMode"
+              size="small"
+              @click="handleCloseActiveInlineFormTab"
+            >
+              <template #icon>
+                <n-icon><CloseOutline /></n-icon>
+              </template>
+              <template v-if="!isTabWorkspaceMode">
+                {{ localizeLabel('返回列表') }}
+              </template>
+            </n-button>
+          </header>
+
+          <div class="inline-form-panel-body">
+            <n-tabs
+              v-if="showDetailFlowTabs"
+              v-model:value="detailActiveTab"
+              type="line"
+              animated
+              class="ai-crud-detail-tabs"
+            >
+              <n-tab-pane name="business" :tab="localizeLabel('业务数据')">
+                <AiForm
+                  v-if="showDefaultDetailContent"
+                  ref="formRef"
+                  v-model:value="formData"
+                  :class="resolvedEditFormClass"
+                  :style="editFormStyle"
+                  :schema="modalFormSchema"
+                  :grid-cols="editGridCols"
+                  :label-width="editLabelWidth"
+                  :label-placement="editLabelPlacement"
+                  :label-align="editLabelAlign"
+                  :size="editSize"
+                  :x-gap="editXGap"
+                  :y-gap="editYGap"
+                  :show-feedback="editShowFeedback"
+                  :show-actions="false"
+                  :context="formContext"
+                  :form-assets="formAssets"
+                  @update:value="handleFormValueUpdate"
+                >
+                  <template v-for="slotName in formSlots" #[slotName]="slotProps">
+                    <slot :name="`form-${slotName}`" v-bind="slotProps" />
+                  </template>
+                </AiForm>
+                <ChildTableEditor
+                  v-if="showDefaultDetailChildren"
+                  ref="childFormRef"
+                  v-model:value="childFormData"
+                  :children-config="visibleChildrenConfig"
+                  :readonly="isDetailMode"
+                  :parent-form-data="formData"
+                  :context="formContext"
+                  :row-action-visible="isChildRowActionVisible"
+                  :row-action-loading="isChildRowActionLoading"
+                  @row-action="handleChildRowAction"
+                  @toolbar-action="handleChildToolbarAction"
+                />
+                <AiCrudRowExpand
+                  v-if="showDetailPanels"
+                  class="ai-crud-detail-panels"
+                  :config="normalizedDetailPanelConfig"
+                  :row="formData"
+                  :row-key-value="detailPanelRowKeyValue"
+                  :context="formContext"
+                />
+              </n-tab-pane>
+              <n-tab-pane name="flow" :tab="localizeLabel('流程进度')" display-directive="show:lazy">
+                <AiCrudFlowDetail
+                  :runtime="detailRuntime"
+                  :loading="detailRuntimeLoading"
+                  :show-timeline="detailFlowTimelineVisible"
+                  :show-diagram="detailFlowDiagramVisible"
+                />
+              </n-tab-pane>
+            </n-tabs>
+            <template v-else>
+              <AiForm
+                v-if="showDefaultDetailContent"
+                ref="formRef"
+                v-model:value="formData"
+                :class="resolvedEditFormClass"
+                :style="editFormStyle"
+                :schema="modalFormSchema"
+                :grid-cols="editGridCols"
+                :label-width="editLabelWidth"
+                :label-placement="editLabelPlacement"
+                :label-align="editLabelAlign"
+                :size="editSize"
+                :x-gap="editXGap"
+                :y-gap="editYGap"
+                :show-feedback="editShowFeedback"
+                :show-actions="false"
+                :context="formContext"
+                :form-assets="formAssets"
+                @update:value="handleFormValueUpdate"
+              >
+                <template v-for="slotName in formSlots" #[slotName]="slotProps">
+                  <slot :name="`form-${slotName}`" v-bind="slotProps" />
+                </template>
+              </AiForm>
+              <ChildTableEditor
+                v-if="showDefaultDetailChildren"
+                ref="childFormRef"
+                v-model:value="childFormData"
+                :children-config="visibleChildrenConfig"
+                :readonly="isDetailMode"
+                :parent-form-data="formData"
+                :context="formContext"
+                :row-action-visible="isChildRowActionVisible"
+                :row-action-loading="isChildRowActionLoading"
+                @row-action="handleChildRowAction"
+                @toolbar-action="handleChildToolbarAction"
+              />
+              <AiCrudRowExpand
+                v-if="showDetailPanels"
+                class="ai-crud-detail-panels"
+                :config="normalizedDetailPanelConfig"
+                :row="formData"
+                :row-key-value="detailPanelRowKeyValue"
+                :context="formContext"
+              />
+            </template>
+          </div>
+
+          <footer v-if="!hideModalFooter && (!isDetailMode || visibleDetailActions.length || visibleFormActions.length)" class="inline-form-panel-footer">
+            <template v-if="!isDetailMode">
+              <n-button @click="handleInlineFormCancel">
+                {{ localizeLabel('取消') }}
+              </n-button>
+              <n-button
+                type="primary"
+                :loading="confirmLoading"
+                @click="handleModalConfirm"
+              >
+                {{ localizeLabel('确定') }}
+              </n-button>
+              <n-button
+                v-for="action in visibleFormActions"
+                :key="action.key || action.label"
+                :type="resolveButtonType(action)"
+                :loading="isActionLoading(action, formData)"
+                :disabled="isActionDisabled(action, formData) || isActionLoading(action, formData)"
+                @click="handleActionClick(action, formData)"
+              >
+                {{ resolveActionDisplayLabel(action, formData) }}
+              </n-button>
+            </template>
+            <template v-else>
+              <n-button
+                v-for="action in visibleDetailActions"
+                :key="action.key || action.label"
+                :type="resolveButtonType(action)"
+                :loading="isActionLoading(action, formData)"
+                :disabled="isActionDisabled(action, formData) || isActionLoading(action, formData)"
+                @click="handleActionClick(action, formData)"
+              >
+                {{ resolveActionDisplayLabel(action, formData) }}
+              </n-button>
+            </template>
+          </footer>
+        </section>
+      </div>
+    </div>
+
+    <!-- 新增/编辑/详情弹窗 - Modal 模式。详情默认使用弹窗，避免动态页详情占用右侧抽屉。 -->
+    <n-modal
+      v-if="!formOnly && !usesInlineFormWorkspace && (resolvedFormOpenMode === 'modal' || isDetailMode)"
+      v-model:show="modalVisible"
+      :title="localizeLabel(modalTitle)"
+      preset="card"
+      :style="{ width: activeModalWidth }"
+      :segmented="{ content: 'soft', footer: 'soft' }"
+      :closable="true"
+      :mask-closable="false"
+      @after-leave="handleModalClose"
+    >
+      <n-tabs
+        v-if="showDetailFlowTabs"
+        v-model:value="detailActiveTab"
+        type="line"
+        animated
+        class="ai-crud-detail-tabs"
+      >
+        <n-tab-pane name="business" :tab="localizeLabel('业务数据')">
+          <AiForm
+            v-if="showDefaultDetailContent"
+            ref="formRef"
+            v-model:value="formData"
+            :class="resolvedEditFormClass"
+            :style="editFormStyle"
+            :schema="modalFormSchema"
+            :grid-cols="editGridCols"
+            :label-width="editLabelWidth"
+            :label-placement="editLabelPlacement"
+            :label-align="editLabelAlign"
+            :size="editSize"
+            :x-gap="editXGap"
+            :y-gap="editYGap"
+            :show-feedback="editShowFeedback"
+            :show-actions="false"
+            :context="formContext"
+            :form-assets="formAssets"
+            @update:value="handleFormValueUpdate"
+          >
+            <template v-for="slotName in formSlots" #[slotName]="slotProps">
+              <slot :name="`form-${slotName}`" v-bind="slotProps" />
+            </template>
+          </AiForm>
+          <ChildTableEditor
+            v-if="showDefaultDetailChildren"
+            ref="childFormRef"
+            v-model:value="childFormData"
+            :children-config="visibleChildrenConfig"
+            :readonly="isDetailMode"
+            :parent-form-data="formData"
+            :context="formContext"
+            :row-action-visible="isChildRowActionVisible"
+            :row-action-loading="isChildRowActionLoading"
+            @row-action="handleChildRowAction"
+            @toolbar-action="handleChildToolbarAction"
+          />
+          <AiCrudRowExpand
+            v-if="showDetailPanels"
+            class="ai-crud-detail-panels"
+            :config="normalizedDetailPanelConfig"
+            :row="formData"
+            :row-key-value="detailPanelRowKeyValue"
+            :context="formContext"
+          />
+        </n-tab-pane>
+        <n-tab-pane name="flow" :tab="localizeLabel('流程进度')" display-directive="show:lazy">
+          <AiCrudFlowDetail
+            :runtime="detailRuntime"
+            :loading="detailRuntimeLoading"
+            :show-timeline="detailFlowTimelineVisible"
+            :show-diagram="detailFlowDiagramVisible"
+          />
+        </n-tab-pane>
+      </n-tabs>
+      <template v-else>
+        <AiForm
+          v-if="showDefaultDetailContent"
+          ref="formRef"
+          v-model:value="formData"
+          :class="resolvedEditFormClass"
+          :style="editFormStyle"
+          :schema="modalFormSchema"
+          :grid-cols="editGridCols"
+          :label-width="editLabelWidth"
+          :label-placement="editLabelPlacement"
+          :label-align="editLabelAlign"
+          :size="editSize"
+          :x-gap="editXGap"
+          :y-gap="editYGap"
+          :show-feedback="editShowFeedback"
+          :show-actions="false"
+          :context="formContext"
+          :form-assets="formAssets"
+          @update:value="handleFormValueUpdate"
+        >
+          <!-- 透传表单插槽 -->
+          <template v-for="slotName in formSlots" #[slotName]="slotProps">
+            <slot :name="`form-${slotName}`" v-bind="slotProps" />
+          </template>
+        </AiForm>
+        <ChildTableEditor
+          v-if="showDefaultDetailChildren"
+          ref="childFormRef"
+          v-model:value="childFormData"
+          :children-config="visibleChildrenConfig"
+          :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
+          :row-action-visible="isChildRowActionVisible"
+          :row-action-loading="isChildRowActionLoading"
+          @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
+        />
+        <AiCrudRowExpand
+          v-if="showDetailPanels"
+          class="ai-crud-detail-panels"
+          :config="normalizedDetailPanelConfig"
+          :row="formData"
+          :row-key-value="detailPanelRowKeyValue"
+          :context="formContext"
+        />
+      </template>
+
+      <!-- 弹窗底部按钮 -->
+      <template v-if="!hideModalFooter && (!isDetailMode || visibleDetailActions.length || visibleFormActions.length)" #footer>
+        <n-space justify="end">
+          <template v-if="!isDetailMode">
+            <n-button @click="handleModalCancel">
+              {{ localizeLabel('取消') }}
+            </n-button>
+            <n-button
+              type="primary"
+              :loading="confirmLoading"
+              @click="handleModalConfirm"
+            >
+              {{ localizeLabel('确定') }}
+            </n-button>
+            <n-button
+              v-for="action in visibleFormActions"
+              :key="action.key || action.label"
+              :type="resolveButtonType(action)"
+              :loading="isActionLoading(action, formData)"
+              :disabled="isActionDisabled(action, formData) || isActionLoading(action, formData)"
+              @click="handleActionClick(action, formData)"
+            >
+              {{ resolveActionDisplayLabel(action, formData) }}
+            </n-button>
+          </template>
+          <template v-else>
+            <n-button
+              v-for="action in visibleDetailActions"
+              :key="action.key || action.label"
+              :type="resolveButtonType(action)"
+              :loading="isActionLoading(action, formData)"
+              :disabled="isActionDisabled(action, formData) || isActionLoading(action, formData)"
+              @click="handleActionClick(action, formData)"
+            >
+              {{ resolveActionDisplayLabel(action, formData) }}
+            </n-button>
+          </template>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 新增/编辑抽屉 - Drawer 模式 -->
+    <n-drawer
+      v-else-if="!formOnly && !usesInlineFormWorkspace && !isDetailMode && resolvedFormOpenMode === 'drawer'"
+      v-model:show="modalVisible"
+      :width="modalWidth"
+      :placement="drawerPlacement"
+      :mask-closable="false"
+      @after-leave="handleModalClose"
+    >
+      <n-drawer-content :title="localizeLabel(modalTitle)" :closable="true">
+        <AiForm
+          ref="formRef"
+          v-model:value="formData"
+          :class="resolvedEditFormClass"
+          :style="editFormStyle"
+          :schema="modalFormSchema"
+          :grid-cols="editGridCols"
+          :label-width="editLabelWidth"
+          :label-placement="editLabelPlacement"
+          :label-align="editLabelAlign"
+          :size="editSize"
+          :x-gap="editXGap"
+          :y-gap="editYGap"
+          :show-feedback="editShowFeedback"
+          :show-actions="false"
+          :context="formContext"
+          :form-assets="formAssets"
+          @update:value="handleFormValueUpdate"
+        >
+          <!-- 透传表单插槽 -->
+          <template v-for="slotName in formSlots" #[slotName]="slotProps">
+            <slot :name="`form-${slotName}`" v-bind="slotProps" />
+          </template>
+        </AiForm>
+        <ChildTableEditor
+          v-if="hasChildrenConfig"
+          ref="childFormRef"
+          v-model:value="childFormData"
+          :children-config="visibleChildrenConfig"
+          :readonly="isDetailMode"
+          :parent-form-data="formData"
+          :context="formContext"
+          :row-action-visible="isChildRowActionVisible"
+          :row-action-loading="isChildRowActionLoading"
+          @row-action="handleChildRowAction"
+          @toolbar-action="handleChildToolbarAction"
+        />
+
+        <!-- 抽屉底部按钮 -->
+        <template v-if="!hideModalFooter && !isDetailMode" #footer>
+          <n-space justify="end">
+            <n-button @click="handleModalCancel">
+              {{ localizeLabel('取消') }}
+            </n-button>
+            <n-button
+              type="primary"
+              :loading="confirmLoading"
+              @click="handleModalConfirm"
+            >
+              {{ localizeLabel('确定') }}
+            </n-button>
+            <n-button
+              v-for="action in visibleFormActions"
+              :key="action.key || action.label"
+              :type="resolveButtonType(action)"
+              :loading="isActionLoading(action, formData)"
+              :disabled="isActionDisabled(action, formData) || isActionLoading(action, formData)"
+              @click="handleActionClick(action, formData)"
+            >
+              {{ resolveActionDisplayLabel(action, formData) }}
+            </n-button>
+          </n-space>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+
+    <AiCrudImportModal
+      v-model:show="importModalVisible"
+      :importer="executeImport"
+      :template-downloader="hasImportTemplate ? handleDownloadTemplate : null"
+      :has-template="hasImportTemplate"
+      @success="handleImportSuccess"
+    />
+
+    <n-modal
+      v-model:show="commandActionModalVisible"
+      :title="commandActionTitle"
+      preset="card"
+      style="width: min(720px, calc(100vw - 32px))"
+      :mask-closable="false"
+    >
+      <AiForm
+        ref="commandActionFormRef"
+        v-model:value="commandActionFormData"
+        :schema="commandActionFormSchema"
+        :grid-cols="2"
+        :show-actions="false"
+        :context="commandActionFormContext"
+      />
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button :disabled="commandActionSubmitting" @click="closeCommandActionModal">
+            {{ localizeLabel('取消') }}
+          </n-button>
+          <n-button type="primary" :loading="commandActionSubmitting" @click="submitCommandAction">
+            {{ localizeLabel('确定') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 子表工具栏动作弹窗（登记提货/登记退货） -->
+    <n-modal
+      v-model:show="childToolbarActionModalVisible"
+      :title="childToolbarActionTitle"
+      preset="card"
+      style="width: min(520px, calc(100vw - 32px))"
+      :mask-closable="false"
+    >
+      <n-form label-placement="left" :show-feedback="true">
+        <n-form-item :label="localizeLabel('商品')" required>
+          <n-select
+            v-model:value="childToolbarItemSelected"
+            :options="childToolbarItemOptions"
+            :placeholder="localizeLabel('请选择商品')"
+            clearable
+            filterable
+          />
+        </n-form-item>
+        <n-form-item :label="childToolbarQuantityLabel" required>
+          <n-input-number
+            v-model:value="childToolbarQuantity"
+            :min="1"
+            :max="childToolbarQuantityMax"
+            style="width: 100%"
+          />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-space justify="end">
+          <n-button :disabled="childToolbarActionSubmitting" @click="closeChildToolbarActionModal">
+            {{ localizeLabel('取消') }}
+          </n-button>
+          <n-button type="primary" :loading="childToolbarActionSubmitting" @click="submitChildToolbarAction">
+            {{ localizeLabel('确定') }}
+          </n-button>
+        </n-space>
+      </template>
+    </n-modal>
+
+    <!-- 导出任务抽屉 -->
+    <n-drawer
+      v-model:show="exportTaskDrawerVisible"
+      :width="exportTaskDrawerWidth"
+      placement="right"
+    >
+      <n-drawer-content :title="localizeLabel('导出任务')" :closable="true">
+        <template #header-extra>
+          <n-button
+            size="small"
+            quaternary
+            :aria-label="localizeLabel('刷新导出任务')"
+            :title="localizeLabel('刷新')"
+            :loading="exportTaskLoading"
+            @click="loadExportTasks"
+          >
+            <template #icon>
+              <n-icon><RefreshOutline /></n-icon>
+            </template>
+          </n-button>
+        </template>
+
+        <div v-if="activeExportTask" class="export-task-current">
+          <div class="export-task-current__main">
+            <span class="export-task-current__title">{{ activeExportTask.fileName || localizeLabel('导出任务') }}</span>
+            <n-tag size="small" :type="resolveExportTaskTagType(activeExportTask.status)">
+              {{ resolveExportTaskStatusText(activeExportTask.status) }}
+            </n-tag>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="activeExportTask.progress || 0"
+            :processing="isExportTaskRunning(activeExportTask)"
+            indicator-placement="inside"
+          />
+        </div>
+
+        <n-data-table
+          remote
+          size="small"
+          :bordered="false"
+          :columns="translateUiMetadata(exportTaskColumns)"
+          :data="exportTasks"
+          :loading="exportTaskLoading"
+          :pagination="exportTaskPaginationConfig"
+          :row-key="row => row.id"
+          :scroll-x="720"
+        />
+      </n-drawer-content>
+    </n-drawer>
+  </div>
+</template>
+
+<script setup>
+import {
+  Add,
+  CloseOutline,
+  CloudUploadOutline,
+  DownloadOutline,
+  EllipsisVertical,
+  RefreshOutline,
+  TimeOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
+
+import { NButton, NDropdown, NIcon, NProgress, NTag } from 'naive-ui'
+
+/* eslint-disable vue/custom-event-name-casing */
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, useSlots, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { crudConfigRender, customQueryExecute } from '@/api/ai'
+import { businessDocumentRuntimeBatch, executeBusinessAction } from '@/api/business-app'
+import { startBusinessProcess } from '@/api/business-process'
+import { previewFormula } from '@/api/formula'
+import AuthImage from '@/components/common/AuthImage.vue'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
+import DictTag from '@/components/DictTag.vue'
+import ChildTableEditor from '@/components/page-templates/ChildTableEditor.vue'
+import { localizeLabel, t } from '@/locales'
+import { localizeMetadata as translateUiMetadata } from '@/locales/metadata'
+import { useUserStore } from '@/store'
+import { downloadFile, request } from '@/utils'
+import { postEncrypt } from '@/utils/encrypt-request'
+import { isAuthErrorCode, resolveResError } from '@/utils/http/helpers'
+import AiCrudFlowDetail from './AiCrudFlowDetail.vue'
+import AiCrudImportModal from './AiCrudImportModal.vue'
+import { aiCrudPageProps } from './AiCrudPageProps'
+import AiCrudRowExpand from './AiCrudRowExpand.vue'
+import AiCustomQuery from './AiCustomQuery.vue'
+import AiForm from './AiForm.vue'
+import AiSearch from './AiSearch.vue'
+import AiTable from './AiTable.vue'
+import {
+  buildBusinessActionExecutePayload,
+  buildBusinessActionInitialData,
+  buildBusinessActionInputFormSchema,
+  buildChildRowActionContext,
+  createBusinessActionIdempotencyKey,
+  isRuntimeActionForPosition,
+  matchesRuntimeDisplayCondition,
+  resolveBusinessActionAttempt,
+  shouldHideProcessStartAction,
+  shouldShowDetailFlowHistory,
+  unwrapBusinessActionResult,
+} from './business-action-runtime'
+import { normalizeExpandConfig, shouldExpandRow } from './expand-utils'
+import { isNumberFieldType } from './field-type-utils'
+import { isImageFileName, resolveFileRenderItems } from './file-render-utils'
+import {
+  createOfflineFormRuntime,
+  createOfflinePublishedSnapshot,
+} from './offline-form-runtime'
+import { DEFAULT_VISIBLE_ROW_ACTIONS, resolveSemanticCell, resolveVisibleRowActions } from './table-presentation'
+
+/**
+ * ==================== Props 定义 ====================
+ */
+const props = defineProps(aiCrudPageProps)
+
+/**
+ * ==================== Emits 定义 ====================
+ */
+const emit = defineEmits([
+  'load-list-success', // 列表加载成功
+  'load-list-error', // 列表加载失败
+  'add', // 点击新增
+  'edit', // 点击编辑
+  'detail', // 点击查看详情
+  'delete', // 删除成功
+  'submit-success', // 提交成功
+  'submit-error', // 提交失败
+  'selection-change', // 选中项变化
+  'modal-open', // 弹窗打开
+  'modal-close', // 弹窗关闭
+  'render-mode-change', // 列表/卡片模式切换
+  'custom-action', // 自定义按钮点击
+])
+const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
+const slots = useSlots()
+
+/**
+ * ==================== Refs ====================
+ */
+const searchRef = ref(null)
+const tableRef = ref(null)
+const formRef = ref(null)
+const childFormRef = ref(null)
+const commandActionFormRef = ref(null)
+
+/**
+ * ==================== 响应式数据 ====================
+ */
+// 搜索参数
+const searchParams = ref({})
+
+// 表格数据
+const dataSource = ref([])
+const tableLoading = ref(false)
+const selectedKeys = ref([])
+const expandedRowKeys = ref([])
+const customQueryPayload = ref(null)
+const customQueryFields = ref([])
+const activeRenderMode = ref(props.renderMode || 'table')
+const searchPanelVisible = ref(props.showSearch !== false)
+
+// 分页
+const pagination = ref({
+  page: props.pageNum,
+  pageSize: props.pageSize,
+  itemCount: 0,
+})
+
+// 弹窗
+const modalVisible = ref(false)
+const modalTitle = ref('')
+const modalStatus = ref('') // 'add' | 'edit' | 'detail'
+const formData = ref({})
+const childFormData = ref({})
+const confirmLoading = ref(false)
+const currentRow = ref(null)
+const fieldEventLoadToken = ref(0)
+const inlineFormTabs = ref([])
+const activeInlineFormTabKey = ref('')
+const INLINE_WORKSPACE_LIST_KEY = 'list'
+const activeInlineWorkspaceKey = ref(INLINE_WORKSPACE_LIST_KEY)
+const inlineFormHydrating = ref(false)
+const formOnlySubmitted = ref(false)
+const detailRuntime = ref(null)
+const detailRuntimeLoading = ref(false)
+const detailActiveTab = ref('business')
+const actionLoadingKeys = ref(new Set())
+const flowStartPageLoading = ref(false)
+const commandActionModalVisible = ref(false)
+const commandActionSubmitting = ref(false)
+const commandActionFormData = ref({})
+const commandActionContext = ref(null)
+const childToolbarActionModalVisible = ref(false)
+const childToolbarActionSubmitting = ref(false)
+const childToolbarActionContext = ref(null)
+const childToolbarItemSelected = ref(null)
+const childToolbarQuantity = ref(1)
+const offlineFormRuntime = ref(null)
+const offlineDraftId = ref('')
+const offlineBaseRecordVersion = ref('')
+const offlineDraftNotice = ref('')
+const offlineDraftHydrating = ref(false)
+const offlineReplayLoading = ref(false)
+let offlineDraftSaveTimer = null
+const commandActionTitle = computed(() => commandActionContext.value?.action?.label || commandActionContext.value?.action?.actionName || localizeLabel('业务动作'))
+const commandActionFormSchema = computed(() => {
+  const config = normalizeCommandActionRuntimeConfig(commandActionContext.value?.action || {})
+  return Array.isArray(config.inputSchema)
+    ? buildBusinessActionInputFormSchema(config.inputSchema)
+    : (Array.isArray(config.formSchema) ? config.formSchema : [])
+})
+const commandActionFormContext = computed(() => ({
+  row: commandActionContext.value?.row || null,
+  action: commandActionContext.value?.action || null,
+  mode: 'businessAction',
+}))
+const childToolbarActionTitle = computed(() =>
+  childToolbarActionContext.value?.action?.label
+  || childToolbarActionContext.value?.action?.actionName
+  || localizeLabel('业务操作'),
+)
+const childToolbarQuantityLabel = computed(() => {
+  const actionCode = childToolbarActionContext.value?.action?.actionCode
+  return actionCode === 'record_return' ? localizeLabel('退货数量') : localizeLabel('提货数量')
+})
+const childToolbarItemOptions = computed(() => {
+  const items = childFormData.value?.presale_items || []
+  return items
+    .filter(item => item?.id)
+    .map(item => ({
+      label: t('customer.pickupSummary', { value0: item.productName || localizeLabel('商品'), value1: item.pendingQuantity ?? 0, value2: item.pickedQuantity ?? 0 }),
+      value: item.id,
+    }))
+})
+const childToolbarQuantityMax = computed(() => {
+  const items = childFormData.value?.presale_items || []
+  const selectedItem = items.find(item => item?.id === childToolbarItemSelected.value)
+  if (!selectedItem)
+    return 999999
+  const actionCode = childToolbarActionContext.value?.action?.actionCode
+  if (actionCode === 'record_return')
+    return selectedItem.pickedQuantity ?? 0
+  return selectedItem.pendingQuantity ?? 0
+})
+const formulaRuntimeTimers = new Map()
+const formulaRuntimeSequences = new Map()
+let inlineFormTabSequence = 0
+
+// 导入
+const importModalVisible = ref(false)
+const hasImportTemplate = computed(() => !!(props.importTemplateUrl || props.apiConfig?.importTemplate))
+
+// 导出
+const exportLoading = ref(false)
+
+// 导出任务
+const exportTaskDrawerVisible = ref(false)
+const exportTaskLoading = ref(false)
+const exportTasks = ref([])
+const activeExportTaskId = ref(null)
+const exportTaskPollTimer = ref(null)
+const exportTaskDrawerWidth = 'min(680px, 92vw)'
+const exportTaskPagination = ref({
+  page: 1,
+  pageSize: 10,
+  itemCount: 0,
+})
+const visibleToolbarActions = computed(() => (Array.isArray(props.toolbarActions) ? props.toolbarActions : [])
+  .filter(action => action?.visible !== false
+    && hasRuntimePermission(action?.permissionCode)
+    && matchDisplayCondition(action?.displayCondition || action?.visibleCondition, {})))
+
+/** 详情页动作独立于列表操作列，流程动作可在两个位置同时配置。 */
+const visibleDetailActions = computed(() => {
+  const row = formData.value || currentRow.value || {}
+  const configured = [
+    ...(Array.isArray(props.detailActions) ? props.detailActions : []),
+    ...(Array.isArray(props.runtimeActions)
+      ? props.runtimeActions.filter(action => String(action?.position || '').toLowerCase() === 'detail')
+      : []),
+    ...(Array.isArray(detailRuntime.value?.runtimeActions)
+      ? detailRuntime.value.runtimeActions.map(action => ({ ...action, position: action?.position || 'detail' }))
+      : []),
+  ]
+  const actions = []
+  for (const source of configured) {
+    const action = normalizeRuntimeAction(source, row)
+    if (!action || actions.some(item => sameAction(item, action)))
+      continue
+    actions.push(action)
+  }
+  return actions.filter((action) => {
+    if (!isRuntimeActionForPosition(action, 'detail'))
+      return false
+    if (action.visible === false || !hasRuntimePermission(action.permissionCode))
+      return false
+    if (!matchDisplayCondition(action.displayCondition || action.visibleCondition, row))
+      return false
+    return !isStartFlowRuntimeHidden(action, row)
+  })
+})
+
+/** 编辑表单页动作。显式 formActions 优先，兼容历史 runtimeActions.position=form。 */
+const visibleFormActions = computed(() => {
+  const row = formData.value || currentRow.value || {}
+  const configured = [
+    ...(Array.isArray(props.formActions) ? props.formActions : []),
+    ...(Array.isArray(props.runtimeActions)
+      ? props.runtimeActions.filter(action => String(action?.position || '').toLowerCase() === 'form')
+      : []),
+    ...(Array.isArray(detailRuntime.value?.runtimeActions)
+      ? detailRuntime.value.runtimeActions.map(action => ({ ...action, position: action?.position || 'form' }))
+      : []),
+  ]
+  const actions = []
+  for (const source of configured) {
+    const action = normalizeRuntimeAction(source, row)
+    if (!action || !isRuntimeActionForPosition(action, 'form') || actions.some(item => sameAction(item, action)))
+      continue
+    actions.push(action)
+  }
+  return actions.filter((action) => {
+    if (String(action.position || '').toLowerCase() !== 'form')
+      return false
+    if (action.visible === false || !hasRuntimePermission(action.permissionCode))
+      return false
+    if (!matchDisplayCondition(action.displayCondition || action.visibleCondition, row))
+      return false
+    return !isStartFlowRuntimeHidden(action, row)
+  })
+})
+
+/**
+ * 操作列最大显示按钮数
+ */
+const maxActionButtons = DEFAULT_VISIBLE_ROW_ACTIONS
+
+/**
+ * 渲染操作列（支持自动折叠）
+ * 使用文字链接风格，紧凑排列，超过 maxActionButtons 个时折叠到"更多"下拉
+ * @param {object} row - 行数据
+ * @param {Array} actions - 操作按钮配置 [{ label, key, type, onClick, visible }]
+ */
+function renderActionColumn(row, actions, maxVisibleActions = maxActionButtons) {
+  maxVisibleActions = resolveVisibleRowActions(maxVisibleActions)
+  const mergedActions = mergeRuntimeActions(actions, row)
+  // 过滤不可见的按钮
+  const visibleActions = mergedActions.filter((action) => {
+    if (!hasActionPermission(action.key, action.permissionCode))
+      return false
+    if (typeof action.visible === 'function' && !action.visible(row))
+      return false
+    if (action.visible === false)
+      return false
+    if (!hasRuntimePermission(action.permissionCode))
+      return false
+    if (!matchDisplayCondition(action.displayCondition || action.visibleCondition, row))
+      return false
+    if (isStartFlowRuntimeHidden(action, row))
+      return false
+    return true
+  })
+
+  if (visibleActions.length === 0) {
+    return h('span', { style: { color: '#999' } }, '-')
+  }
+
+  // 所有按钮都能直接显示
+  if (visibleActions.length <= maxVisibleActions) {
+    return h('div', { class: 'table-action-column' }, visibleActions.map((action, index) => {
+      const nodes = []
+      if (index > 0) {
+        nodes.push(h('span', { class: 'table-action-divider' }, ' | '))
+      }
+      const typeClass = action.type ? `type-${action.type}` : ''
+      const isDanger = action.type === 'error' || action.type === 'danger'
+      const loading = isActionLoading(action, row)
+      const disabled = isActionDisabled(action, row) || loading
+      nodes.push(h('a', {
+        class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : '', loading ? 'loading' : ''],
+        title: disabled ? actionDisabledReason(action, row) : action.label,
+        onClick: (e) => {
+          e?.stopPropagation()
+          e?.preventDefault()
+          if (disabled) {
+            showActionDisabledMessage(action, row)
+            return
+          }
+          if (action.onClick)
+            handleCustomActionClick(action, row)
+          else handleActionClick(action, row)
+        },
+      }, resolveActionDisplayLabel(action, row)))
+      return nodes
+    }).flat())
+  }
+
+  // 需要折叠：显示前 maxActionButtons 个，其余放入"更多"下拉
+  const inlineActions = visibleActions.slice(0, maxVisibleActions)
+  const dropdownOptions = visibleActions.slice(maxVisibleActions).map(action => ({
+    label: resolveActionDisplayLabel(action, row),
+    key: action.key || action.label,
+    disabled: isActionDisabled(action, row) || isActionLoading(action, row),
+  }))
+
+  const inlineNodes = inlineActions.map((action, index) => {
+    const nodes = []
+    if (index > 0) {
+      nodes.push(h('span', { class: 'table-action-divider' }, ' | '))
+    }
+    const typeClass = action.type ? `type-${action.type}` : ''
+    const isDanger = action.type === 'error' || action.type === 'danger'
+    const loading = isActionLoading(action, row)
+    const disabled = isActionDisabled(action, row) || loading
+    nodes.push(h('a', {
+      class: ['table-action-link', typeClass, isDanger ? 'danger' : '', disabled ? 'disabled' : '', loading ? 'loading' : ''],
+      title: disabled ? actionDisabledReason(action, row) : action.label,
+      onClick: (e) => {
+        e?.stopPropagation()
+        e?.preventDefault()
+        if (disabled) {
+          showActionDisabledMessage(action, row)
+          return
+        }
+        if (action.onClick)
+          handleCustomActionClick(action, row)
+        else handleActionClick(action, row)
+      },
+    }, resolveActionDisplayLabel(action, row)))
+    return nodes
+  }).flat()
+
+  return h('div', { class: 'table-action-column' }, [
+    ...inlineNodes,
+    h('span', { class: 'table-action-divider' }, ' | '),
+    h(NDropdown, {
+      options: dropdownOptions,
+      trigger: 'click',
+      onSelect: (key) => {
+        const action = visibleActions.find(a => (a.key || a.label) === key)
+        if (action && isActionDisabled(action, row)) {
+          showActionDisabledMessage(action, row)
+          return
+        }
+        if (action && isActionLoading(action, row)) {
+          showActionDisabledMessage(action, row)
+          return
+        }
+        if (action?.onClick)
+          handleCustomActionClick(action, row)
+        else handleActionClick(action || key, row)
+      },
+    }, {
+      default: () => h('a', {
+        class: 'table-action-link',
+        onClick: (e) => { e?.preventDefault() },
+      }, localizeLabel('更多')),
+    }),
+  ])
+}
+
+function mergeRuntimeActions(actions = [], row) {
+  const next = Array.isArray(actions) ? [...actions] : []
+  const runtimeActions = [
+    ...(Array.isArray(props.runtimeActions) ? props.runtimeActions : []),
+    ...(Array.isArray(row?._runtimeActions) ? row._runtimeActions : []),
+  ]
+    .filter(action => isRuntimeActionForPosition(action, 'row'))
+    .map(action => normalizeRuntimeAction(action, row))
+    .filter(Boolean)
+  runtimeActions.forEach((action) => {
+    const existingIndex = next.findIndex(item => sameAction(item, action))
+    if (existingIndex >= 0) {
+      next[existingIndex] = {
+        ...next[existingIndex],
+        ...action,
+        label: next[existingIndex].label || action.label,
+      }
+    }
+    else {
+      next.push(action)
+    }
+  })
+  return next
+}
+
+function normalizeRuntimeAction(action, row) {
+  if (!action || action.visible === false)
+    return null
+  const key = action.key || action.actionType || action.label
+  if (!key)
+    return null
+  return {
+    ...action,
+    key,
+    label: action.label || key,
+    actionType: action.actionType || key,
+    objectCode: resolveRuntimeObjectCode(action, row),
+    recordId: action.recordId || resolveRowKeyValue(row),
+  }
+}
+
+function isStartFlowRuntimeHidden(action = {}, row = {}) {
+  const runtime = row?._documentRuntime
+    || row?.documentRuntime
+    || (modalStatus.value === 'detail' ? detailRuntime.value : null)
+    || {}
+  return shouldHideProcessStartAction(action, runtime)
+}
+
+function resolveRuntimeObjectCode(action = {}, row = {}) {
+  return firstNonBlankText(
+    action.objectCode,
+    action.businessObjectCode,
+    action.targetObjectCode,
+    action.referenceObjectCode,
+    action.candidateObjectCode,
+    action.props?.objectCode,
+    action.props?.businessObjectCode,
+    props.businessObjectCode,
+    row?._runtimeObjectCode,
+    row?.objectCode,
+    row?.businessObjectCode,
+    row?.targetObjectCode,
+    row?.referenceObjectCode,
+  )
+}
+
+function firstNonBlankText(...values) {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text)
+      return text
+  }
+  return ''
+}
+
+function sameAction(left, right) {
+  if (!left || !right)
+    return false
+  const leftKey = String(left.key || '').toUpperCase()
+  const rightKey = String(right.key || '').toUpperCase()
+  const leftType = String(left.actionType || '').toUpperCase()
+  const rightType = String(right.actionType || '').toUpperCase()
+  if (leftKey && rightKey && leftKey === rightKey)
+    return true
+  return leftType && rightType && leftType === rightType
+}
+
+function isActionDisabled(action, row) {
+  if (typeof action.disabled === 'function')
+    return !!action.disabled(row)
+  return !!action.disabled
+}
+
+function actionDisabledReason(action, row) {
+  if (isActionLoading(action, row))
+    return resolveActionTextValue(action.loadingReason, row) || localizeLabel('操作执行中，请稍候')
+  if (typeof action.disabledReason === 'function')
+    return action.disabledReason(row)
+  return action.disabledReason || localizeLabel('当前状态不可执行')
+}
+
+function showActionDisabledMessage(action, row) {
+  window.$message?.warning(actionDisabledReason(action, row))
+}
+
+function resolveActionDisplayLabel(action, row) {
+  if (isActionLoading(action, row)) {
+    const loadingLabel = resolveActionTextValue(action.loadingLabel, row)
+    if (loadingLabel)
+      return loadingLabel
+  }
+  return localizeLabel(resolveActionTextValue(action.label, row), action.labelI18n) || action.key || ''
+}
+
+function resolveActionTextValue(value, row) {
+  if (typeof value === 'function')
+    return value(row)
+  if (value === undefined || value === null)
+    return ''
+  return String(value)
+}
+
+async function handleCustomActionClick(action, row) {
+  if (!hasActionPermission(action.key, action.permissionCode))
+    return false
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message?.info(resolveActionTextValue(action.loadingReason, row) || localizeLabel('操作正在执行，请稍候'))
+    return
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    if (!(await runBeforeRowAction(action, row)))
+      return
+    await action.onClick(row)
+  }
+  catch (error) {
+    const failureMessage = resolveActionTextValue(action.failureMessage, row) || error?.message || localizeLabel('操作失败')
+    window.$message?.error(failureMessage)
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
+}
+
+// 未配置的旧页面保持兼容；生成页面显式提供与菜单相同的权限码。
+function hasActionPermission(actionKey, permissionCode = '') {
+  const key = actionKey === 'addChild' ? 'add' : actionKey
+  return hasRuntimePermission(props.actionPermissions?.[key]) && hasRuntimePermission(permissionCode)
+}
+
+function hasRuntimePermission(permissionCode = '') {
+  const code = String(permissionCode || '').trim()
+  if (!code)
+    return true
+  if (userStore.isAdmin || userStore.isTenantAdmin)
+    return true
+  const permissions = [
+    ...(Array.isArray(userStore.permissions) ? userStore.permissions : []),
+    ...(Array.isArray(userStore.apiPermissions) ? userStore.apiPermissions : []),
+    ...(Array.isArray(userStore.getDataPermission) ? userStore.getDataPermission : []),
+  ]
+  return permissions.includes('**') || permissions.includes(code)
+}
+
+function matchDisplayCondition(expression = '', row = {}) {
+  return matchesRuntimeDisplayCondition(expression, row)
+}
+
+function resolveConditionValue(row = {}, path = '') {
+  return String(path || '').split('.').filter(Boolean).reduce((value, key) => value?.[key], row)
+}
+
+/**
+ * 处理操作列按钮点击（内置 key 映射）
+ */
+async function handleActionClick(actionOrKey, row) {
+  const action = typeof actionOrKey === 'string' ? { key: actionOrKey, label: actionOrKey } : actionOrKey || {}
+  if (!hasActionPermission(action.key, action.permissionCode))
+    return false
+  if (row?._dataScopeWritable === false && ['edit', 'delete', 'addChild'].includes(action.key)) {
+    window.$message.warning(localizeLabel('该节点仅用于导航展示，不能执行数据操作'))
+    return
+  }
+  if (!(await runBeforeRowAction(action, row)))
+    return
+  switch (action.key) {
+    case 'addChild':
+      handleAddChild(row)
+      break
+    case 'edit':
+      handleEdit(row)
+      break
+    case 'detail':
+      handleDetail(row)
+      break
+    case 'delete':
+      handleDelete(row)
+      break
+    default:
+      handleConfiguredAction(action, row, { skipExtensionHook: true })
+      break
+  }
+}
+
+async function handleConfiguredAction(action, row, options = {}) {
+  if (!hasActionPermission(action.key, action.permissionCode))
+    return false
+  if (!options.skipExtensionHook && !(await runBeforeRowAction(action, row)))
+    return
+  const actionType = action.actionType || 'route'
+  const normalizedActionType = String(actionType).toUpperCase()
+  if (actionType === 'START_FLOW' || action.key === 'START_FLOW') {
+    await startFlowAction(action, row)
+    return
+  }
+  if (normalizedActionType === 'START_PROCESS' || String(action.key || '').startsWith('startProcess:')) {
+    await startProcessAction(action, row)
+    return
+  }
+  emit('custom-action', { action, row })
+  if (action.confirmText && !(await confirmConfiguredAction(resolveActionText(action.confirmText, row))))
+    return
+  if (normalizedActionType === 'COMMAND') {
+    await handleCommandAction(action, row)
+    return
+  }
+  if (actionType === 'refresh') {
+    loadList()
+    return
+  }
+  if (['CALL_API', 'REQUEST'].includes(normalizedActionType)) {
+    await callConfiguredApiAction(action, row)
+    return
+  }
+  if (actionType === 'route' && action.routePath) {
+    const path = buildActionTarget(action, row)
+    if ((action.openTarget || '_self') === '_blank') {
+      const route = router.resolve(path)
+      window.open(route.href, '_blank')
+    }
+    else {
+      router.push(path)
+    }
+    handleConfiguredActionSuccess(action)
+    return
+  }
+  if (actionType === 'external' && action.routePath) {
+    window.open(buildActionTarget(action, row), action.openTarget || '_blank')
+    handleConfiguredActionSuccess(action)
+  }
+}
+
+async function runBeforeRowAction(action, row) {
+  if (typeof props.beforeRowAction !== 'function')
+    return true
+  try {
+    return (await props.beforeRowAction({ action, row })) !== false
+  }
+  catch (error) {
+    window.$message?.error(error?.message || localizeLabel('行操作增强执行失败'))
+    return false
+  }
+}
+
+let formChangeSequence = 0
+async function handleFormValueUpdate(value = {}) {
+  if (typeof props.formChange !== 'function' || modalStatus.value === 'detail')
+    return
+  const sequence = ++formChangeSequence
+  try {
+    const result = await props.formChange({
+      data: { ...(value || {}) },
+      record: { ...(value || {}) },
+      modalStatus: modalStatus.value,
+    })
+    if (sequence !== formChangeSequence || result === false)
+      return
+    const next = result?.record || result?.data || result
+    if (next && typeof next === 'object' && !Array.isArray(next)
+      && JSON.stringify(next) !== JSON.stringify(formData.value)) {
+      formData.value = { ...next }
+    }
+  }
+  catch (error) {
+    window.$message?.error(error?.message || localizeLabel('字段联动增强执行失败'))
+  }
+}
+
+function isChildRowActionVisible(action, _child, row) {
+  return action?.status !== 0
+    && action?.visible !== false
+    && hasRuntimePermission(action?.permissionCode)
+    && matchDisplayCondition(action?.displayCondition || action?.visibleCondition, row)
+}
+
+function isChildRowActionLoading(action, _child, row) {
+  const recordId = row?.id ?? row?.ID ?? ''
+  return isActionLoading({ ...action, recordId }, row)
+}
+
+async function handleChildRowAction({ action, row, executionContext } = {}) {
+  if (!action || !executionContext?.persisted) {
+    window.$message?.warning(localizeLabel('请先保存主记录和子表行'))
+    return
+  }
+  if (String(action.actionType || '').toUpperCase() !== 'COMMAND') {
+    window.$message?.warning(localizeLabel('子表行按钮仅支持事务型业务命令'))
+    return
+  }
+  await handleConfiguredAction({
+    ...action,
+    recordId: executionContext.childRecordId,
+    childActionContext: executionContext,
+  }, row)
+}
+
+async function handleChildToolbarAction({ action, child } = {}) {
+  if (!action)
+    return
+  const parentRecordId = formData.value?.id
+  if (!parentRecordId) {
+    window.$message?.warning(localizeLabel('请先保存主记录'))
+    return
+  }
+  const items = childFormData.value?.presale_items || []
+  const persistedItems = items.filter(item => item?.id)
+  if (!persistedItems.length) {
+    window.$message?.warning(localizeLabel('请先添加并保存商品明细'))
+    return
+  }
+  childToolbarActionContext.value = { action, child }
+  childToolbarItemSelected.value = null
+  childToolbarQuantity.value = 1
+  childToolbarActionModalVisible.value = true
+}
+
+async function submitChildToolbarAction() {
+  const context = childToolbarActionContext.value
+  if (!context?.action)
+    return
+  const selectedItem = (childFormData.value?.presale_items || [])
+    .find(item => item?.id === childToolbarItemSelected.value)
+  if (!selectedItem) {
+    window.$message?.warning(localizeLabel('请选择商品'))
+    return
+  }
+  const executionContext = buildChildRowActionContext({
+    child: { relationKey: context.action.relationKey || 'presale_items' },
+    parentRecord: formData.value,
+    childRecord: selectedItem,
+  })
+  if (!executionContext.persisted) {
+    window.$message?.warning(localizeLabel('记录未保存，无法执行操作'))
+    return
+  }
+  childToolbarActionModalVisible.value = false
+  childToolbarActionSubmitting.value = true
+  try {
+    await executeCommandAction(
+      { ...context.action, childActionContext: executionContext, recordId: executionContext.childRecordId },
+      selectedItem,
+      { quantity: childToolbarQuantity.value },
+      { fromModal: true },
+    )
+  }
+  finally {
+    childToolbarActionSubmitting.value = false
+  }
+}
+
+function closeChildToolbarActionModal() {
+  if (childToolbarActionSubmitting.value)
+    return
+  childToolbarActionModalVisible.value = false
+  childToolbarActionContext.value = null
+  childToolbarItemSelected.value = null
+  childToolbarQuantity.value = 1
+}
+
+function handleConfiguredActionSuccess(action = {}) {
+  if (action.successBehavior === 'refreshList')
+    loadList()
+  else if (action.successBehavior === 'goBack')
+    router.back()
+}
+
+async function startProcessAction(action, row) {
+  const applicationCode = firstNonBlankText(action.applicationCode, action.props?.applicationCode)
+  const processCode = firstNonBlankText(action.processCode, action.props?.processCode)
+  const objectCode = resolveRuntimeObjectCode(action, row)
+  const recordId = action.recordId || resolveRowKeyValue(row)
+  if (!applicationCode || !processCode) {
+    window.$message.warning(localizeLabel('缺少应用或流程编码，无法启动业务流程'))
+    return
+  }
+  if (!recordId) {
+    window.$message.warning(localizeLabel('缺少业务记录ID，无法启动业务流程'))
+    return
+  }
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message.info(localizeLabel('业务流程正在启动，请稍候'))
+    return
+  }
+  const confirmed = await confirmConfiguredAction(
+    resolveActionText(action.confirmText || t('customer.startProcess', { value0: action.label || processCode }), row),
+    { title: action.label || localizeLabel('启动业务流程'), get positiveText() { return localizeLabel('启动') } },
+  )
+  if (!confirmed)
+    return
+  setActionLoading(loadingKey, true)
+  flowStartPageLoading.value = true
+  try {
+    await startBusinessProcess(applicationCode, processCode, {
+      recordId: String(recordId),
+      objectCode: objectCode || undefined,
+    })
+    window.$message.success(localizeLabel('业务流程已启动'))
+    await refreshCurrentDetailRuntime(row)
+    await loadList()
+  }
+  catch (error) {
+    window.$message.error(error.message || localizeLabel('启动业务流程失败'))
+  }
+  finally {
+    flowStartPageLoading.value = false
+    setActionLoading(loadingKey, false)
+  }
+}
+
+async function startFlowAction(action, row) {
+  const objectCode = resolveRuntimeObjectCode(action, row)
+  const recordId = action.recordId || resolveRowKeyValue(row)
+  if (!objectCode || !recordId) {
+    window.$message.warning(localizeLabel('缺少业务对象或记录ID，无法发起主流程'))
+    return
+  }
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message.info(localizeLabel('流程正在发起，请稍候'))
+    return
+  }
+  const confirmed = await confirmConfiguredAction(
+    resolveActionText(action.confirmText || localizeLabel('确定要发起该记录的主流程吗？'), row),
+    { title: action.label || localizeLabel('发起主流程'), get positiveText() { return localizeLabel('发起流程') } },
+  )
+  if (!confirmed)
+    return
+  setActionLoading(loadingKey, true)
+  flowStartPageLoading.value = true
+  try {
+    const res = await request.post('/ai/business/flow/start', {
+      objectCode,
+      recordId,
+    })
+    if (row)
+      row._documentRuntime = res?.data || row?._documentRuntime || null
+    window.$message.success(localizeLabel('流程已发起'))
+    await refreshCurrentDetailRuntime(row)
+    await loadList()
+  }
+  catch (error) {
+    window.$message.error(error.message || localizeLabel('发起主流程失败'))
+  }
+  finally {
+    flowStartPageLoading.value = false
+    setActionLoading(loadingKey, false)
+  }
+}
+
+async function refreshCurrentDetailRuntime(row = {}) {
+  if (!(['detail', 'edit'].includes(modalStatus.value)) || !row)
+    return
+  const target = { ...row, ...formData.value }
+  await loadDetailRuntime(target)
+  if (detailRuntime.value) {
+    formData.value = {
+      ...formData.value,
+      _documentRuntime: detailRuntime.value,
+      _runtimeActions: detailRuntime.value.runtimeActions || [],
+    }
+  }
+}
+
+async function callConfiguredApiAction(action, row) {
+  const requestInfo = buildConfiguredApiRequest(action, row)
+  if (!requestInfo.url) {
+    if (requestInfo.config.capabilityCode) {
+      window.$message.info(localizeLabel('已触发自定义能力事件'))
+      return null
+    }
+    window.$message.warning(localizeLabel('未配置接口地址，无法调用 API'))
+    return null
+  }
+  const loadingKey = getActionLoadingKey(action, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message.info(localizeLabel('操作正在执行，请稍候'))
+    return null
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    const response = await sendConfiguredApiRequest(requestInfo)
+    const successMessage = action.successMessage || requestInfo.config.successMessage || localizeLabel('操作成功')
+    if (successMessage)
+      window.$message.success(resolveActionText(successMessage, row))
+    const successBehavior = action.successBehavior || requestInfo.config.successBehavior
+    if (successBehavior) {
+      handleConfiguredActionSuccess({ ...action, successBehavior })
+    }
+    else if (!isFalseLike(requestInfo.config.refreshAfter)) {
+      await loadList()
+    }
+    return response
+  }
+  catch (error) {
+    const failureMessage = action.failureMessage || requestInfo.config.failureMessage || error.message || localizeLabel('操作失败')
+    window.$message.error(resolveActionText(failureMessage, row))
+    return null
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
+}
+
+async function handleCommandAction(action, row) {
+  const config = normalizeCommandActionRuntimeConfig(action)
+  const hasInputForm = Array.isArray(config.inputSchema)
+    ? buildBusinessActionInputFormSchema(config.inputSchema).length > 0
+    : config.formSchema.length > 0
+  if (hasInputForm) {
+    commandActionContext.value = {
+      action,
+      row,
+      attempt: {
+        idempotencyKey: createBusinessActionIdempotencyKey(),
+        lastPayloadDigest: '',
+      },
+    }
+    commandActionFormData.value = buildCommandActionInitialData(config, row)
+    commandActionModalVisible.value = true
+    await nextTick()
+    commandActionFormRef.value?.restoreValidation?.()
+    return
+  }
+  await executeCommandAction(action, row, {})
+}
+
+async function submitCommandAction() {
+  const context = commandActionContext.value
+  if (!context?.action)
+    return
+  commandActionSubmitting.value = true
+  try {
+    await nextTick()
+    await commandActionFormRef.value?.validate?.()
+    const latestFormData = commandActionFormRef.value?.getFormData?.() || commandActionFormData.value || {}
+    const attempt = resolveBusinessActionAttempt(context.attempt, latestFormData)
+    context.attempt = attempt
+    const success = await executeCommandAction(context.action, context.row, latestFormData, {
+      fromModal: true,
+      idempotencyKey: attempt.idempotencyKey,
+    })
+    if (success)
+      closeCommandActionModal()
+  }
+  finally {
+    commandActionSubmitting.value = false
+  }
+}
+
+function closeCommandActionModal() {
+  if (commandActionSubmitting.value)
+    return
+  commandActionModalVisible.value = false
+  commandActionFormData.value = {}
+  commandActionContext.value = null
+}
+
+async function executeCommandAction(action, row, formData = {}, options = {}) {
+  const config = normalizeCommandActionRuntimeConfig(action)
+  const objectCode = resolveRuntimeObjectCode(action, row)
+  const recordId = action.recordId === undefined || action.recordId === null || action.recordId === ''
+    ? resolveRowKeyValue(row)
+    : action.recordId
+  const actionCode = action.actionCode || action.key
+  if (!objectCode || !actionCode) {
+    window.$message?.warning(localizeLabel('缺少业务对象或动作编码，无法执行'))
+    return false
+  }
+  const loadingKey = getActionLoadingKey({ ...action, actionType: 'COMMAND', objectCode, recordId }, row)
+  if (loadingKey && actionLoadingKeys.value.has(loadingKey)) {
+    window.$message?.info(resolveActionTextValue(action.loadingReason, row) || localizeLabel('操作正在执行，请稍候'))
+    return false
+  }
+  setActionLoading(loadingKey, true)
+  try {
+    const response = await executeBusinessAction(buildBusinessActionExecutePayload({
+      action: { ...action, actionCode },
+      config,
+      objectCode,
+      recordId,
+      formData,
+      routeQuery: route.query,
+      idempotencyKey: options.idempotencyKey || createBusinessActionIdempotencyKey(),
+      parentRecordId: action.childActionContext?.parentRecordId,
+      childRecordId: action.childActionContext?.childRecordId,
+      relationKey: action.childActionContext?.relationKey,
+    }))
+    const result = unwrapBusinessActionResult(response, action.failureMessage || localizeLabel('动作执行失败'))
+    const successMessage = action.successMessage || result.message || config.successMessage || localizeLabel('操作成功')
+    if (successMessage)
+      window.$message?.success(resolveActionText(successMessage, row))
+    const successBehavior = action.successBehavior || config.successBehavior || 'refreshList'
+    if (successBehavior && successBehavior !== 'none')
+      handleConfiguredActionSuccess({ ...action, successBehavior })
+    else if (!options.fromModal)
+      await loadList()
+    return true
+  }
+  catch (error) {
+    const failureMessage = action.failureMessage || config.failureMessage || error?.message || localizeLabel('动作执行失败')
+    window.$message?.error(resolveActionText(failureMessage, row))
+    return false
+  }
+  finally {
+    setActionLoading(loadingKey, false)
+  }
+}
+
+function normalizeCommandActionRuntimeConfig(action = {}) {
+  const config = parseActionConfig(action.actionConfig)
+  return {
+    ...config,
+    inputSchema: Array.isArray(config.inputSchema) ? config.inputSchema : undefined,
+    formSchema: Array.isArray(config.formSchema) ? config.formSchema : [],
+    steps: Array.isArray(config.steps) ? config.steps : [],
+    successBehavior: action.successBehavior || config.successBehavior || 'refreshList',
+    successMessage: action.successMessage || config.successMessage || '',
+    failureMessage: action.failureMessage || config.failureMessage || '',
+  }
+}
+
+function buildCommandActionInitialData(config = {}, row = {}) {
+  if (Array.isArray(config.inputSchema))
+    return buildBusinessActionInitialData(config, row)
+  const defaults = {}
+  const defaultValues = config.defaultValues && typeof config.defaultValues === 'object' ? config.defaultValues : {}
+  Object.entries(defaultValues).forEach(([key, value]) => {
+    defaults[key] = typeof value === 'string' && value.startsWith('row.')
+      ? resolveConditionValue(row, value.slice(4))
+      : value
+  })
+  return defaults
+}
+
+function parseActionConfig(config) {
+  if (!config)
+    return {}
+  if (typeof config === 'string') {
+    try {
+      return JSON.parse(config) || {}
+    }
+    catch {
+      return {}
+    }
+  }
+  return typeof config === 'object' ? { ...config } : {}
+}
+
+async function sendConfiguredApiRequest(requestInfo) {
+  const { method, url, params, data, headers } = requestInfo
+  if (method === 'postEncrypt')
+    return postEncrypt(url, data, compactRequestOptions({ params, headers }))
+  const requestConfig = {
+    method,
+    url,
+    ...compactRequestOptions({ params, headers }),
+  }
+  if (method !== 'get' || Object.keys(data).length)
+    requestConfig.data = data
+  return request(requestConfig)
+}
+
+function compactRequestOptions(options = {}) {
+  const result = {}
+  Object.entries(options).forEach(([key, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value) && !Object.keys(value).length)
+      return
+    if (value === undefined || value === null)
+      return
+    result[key] = value
+  })
+  return result
+}
+
+function buildConfiguredApiRequest(action = {}, row = {}) {
+  const config = normalizeConfiguredApiConfig(action)
+  const urlTemplate = config.url
+  let url = resolveActionText(urlTemplate, row)
+  const method = normalizeConfiguredApiMethod(config.method)
+  const params = {}
+  const data = {}
+  const headers = {}
+  config.params.forEach((param) => {
+    const name = String(param?.name || '').trim()
+    if (!name)
+      return
+    const value = resolveActionParamRawValue(param, row)
+    if (isEmptyApiParamValue(value))
+      return
+    const target = resolveApiParamTarget(param, method, urlTemplate)
+    if (target === 'path') {
+      url = replaceApiPathParam(url, name, value)
+    }
+    else if (target === 'header') {
+      headers[name] = value
+    }
+    else if (target === 'query') {
+      setApiObjectValue(params, name, value)
+    }
+    else {
+      setApiObjectValue(data, name, value)
+    }
+  })
+  return {
+    method,
+    url,
+    params,
+    data,
+    headers,
+    config,
+  }
+}
+
+function normalizeConfiguredApiConfig(action = {}) {
+  const actionConfig = action.actionConfig && typeof action.actionConfig === 'object' ? action.actionConfig : {}
+  const parsed = parseConfiguredApiValue(
+    actionConfig.apiConfigValue
+    || actionConfig.api
+    || actionConfig.request
+    || action.apiConfigValue
+    || action.api,
+  )
+  const params = Array.isArray(actionConfig.params) && actionConfig.params.length
+    ? actionConfig.params
+    : Array.isArray(actionConfig.paramMappings) && actionConfig.paramMappings.length
+      ? actionConfig.paramMappings
+      : Array.isArray(action.params)
+        ? action.params
+        : []
+  return {
+    ...actionConfig,
+    method: normalizeConfiguredApiMethod(
+      actionConfig.method
+      || actionConfig.reqMethod
+      || actionConfig.apiMethod
+      || action.method
+      || parsed.method
+      || 'post',
+    ),
+    url: String(
+      actionConfig.url
+      || actionConfig.apiUrl
+      || actionConfig.urlPath
+      || actionConfig.path
+      || action.url
+      || action.apiUrl
+      || parsed.url
+      || action.routePath
+      || '',
+    ).trim(),
+    capabilityCode: String(actionConfig.capabilityCode || action.capabilityCode || '').trim(),
+    params: params.map(normalizeConfiguredApiParam).filter(Boolean),
+  }
+}
+
+function parseConfiguredApiValue(value) {
+  const text = String(value || '').trim()
+  if (!text)
+    return {}
+  const parts = text.split('@')
+  if (parts.length > 1 && /^[A-Z_]+$/i.test(parts[0]))
+    return { method: normalizeConfiguredApiMethod(parts[0]), url: parts.slice(1).join('@') }
+  return { url: text }
+}
+
+function normalizeConfiguredApiMethod(value) {
+  const method = String(value || 'post')
+    .replace('-', '_')
+    .toLowerCase()
+  if (['postencrypt', 'post_encrypt'].includes(method))
+    return 'postEncrypt'
+  if (['get', 'post', 'put', 'delete', 'patch'].includes(method))
+    return method
+  return 'post'
+}
+
+function normalizeConfiguredApiParam(param = {}) {
+  if (!param || typeof param !== 'object')
+    return null
+  const sourceType = ['rowField', 'routeQuery', 'static', 'system'].includes(param.sourceType) ? param.sourceType : 'static'
+  const target = ['path', 'query', 'body', 'header'].includes(param.target) ? param.target : ''
+  return {
+    name: String(param.name || '').trim(),
+    target,
+    sourceType,
+    sourceField: String(param.sourceField || '').trim(),
+    value: param.value,
+  }
+}
+
+function resolveApiParamTarget(param = {}, method = 'post', urlTemplate = '') {
+  if (param.target)
+    return param.target
+  const name = String(param.name || '').trim()
+  if (name && (String(urlTemplate).includes(`:${name}`) || String(urlTemplate).includes(`{${name}}`)))
+    return 'path'
+  return method === 'get' ? 'query' : 'body'
+}
+
+function resolveActionParamRawValue(param = {}, row = {}) {
+  const sourceType = param.sourceType || 'static'
+  const sourceField = String(param.sourceField || '').trim()
+  if (sourceType === 'rowField' && sourceField)
+    return resolveObjectPathValue(row, sourceField)
+  if (sourceType === 'routeQuery' && sourceField)
+    return route.query?.[sourceField] ?? ''
+  if (sourceType === 'system' && sourceField)
+    return resolveSystemParamValue(sourceField)
+  return resolveActionText(param.value, row)
+}
+
+function resolveObjectPathValue(source = {}, path = '') {
+  const directValue = source?.[path]
+  if (directValue !== undefined)
+    return directValue
+  return String(path || '').split('.').filter(Boolean).reduce((value, key) => value?.[key], source)
+}
+
+function replaceApiPathParam(url, name, value) {
+  const encoded = encodeURIComponent(Array.isArray(value) ? value.join(',') : String(value))
+  return String(url || '')
+    .replaceAll(`:${name}`, encoded)
+    .replaceAll(`{${name}}`, encoded)
+}
+
+function setApiObjectValue(target, name, value) {
+  const keys = String(name || '').split('.').filter(Boolean)
+  if (keys.length <= 1) {
+    target[name] = value
+    return
+  }
+  let cursor = target
+  keys.forEach((key, index) => {
+    if (index === keys.length - 1) {
+      cursor[key] = value
+      return
+    }
+    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key]))
+      cursor[key] = {}
+    cursor = cursor[key]
+  })
+}
+
+function isEmptyApiParamValue(value) {
+  if (value === null || value === undefined)
+    return true
+  if (Array.isArray(value))
+    return value.length === 0
+  return typeof value === 'string' && value === ''
+}
+
+function isFalseLike(value) {
+  return value === false || value === 0 || String(value).toLowerCase() === 'false'
+}
+
+function confirmConfiguredAction(message, options = {}) {
+  if (!window.$dialog?.warning) {
+    const nativeConfirm = globalThis?.confirm
+    return Promise.resolve(typeof nativeConfirm !== 'function' || nativeConfirm(message))
+  }
+  return new Promise((resolve) => {
+    window.$dialog.warning({
+      title: options.title || localizeLabel('确认操作'),
+      content: message,
+      positiveText: options.positiveText || localizeLabel('确定'),
+      get negativeText() { return localizeLabel('取消') },
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    })
+  })
+}
+
+function getActionLoadingKey(action, row) {
+  const actionType = String(action?.actionType || action?.key || '').toUpperCase()
+  const actionKey = action?.key || action?.actionCode || action?.label || ''
+  const objectCode = resolveRuntimeObjectCode(action, row)
+  const recordId = action?.recordId || resolveRowKeyValue(row) || ''
+  return `${actionType}:${actionKey}:${objectCode}:${recordId}`
+}
+
+function isActionLoading(action, row) {
+  const internalLoading = actionLoadingKeys.value.has(getActionLoadingKey(action, row))
+  if (typeof action?.loading === 'function')
+    return internalLoading || !!action.loading(row)
+  return internalLoading || !!action?.loading
+}
+
+function setActionLoading(key, loading) {
+  if (!key)
+    return
+  const next = new Set(actionLoadingKeys.value)
+  if (loading)
+    next.add(key)
+  else
+    next.delete(key)
+  actionLoadingKeys.value = next
+}
+
+function buildActionTarget(action, row) {
+  let target = resolveActionText(action.routePath, row)
+  const params = Array.isArray(action.params) ? action.params : []
+  const query = new URLSearchParams()
+  if (action.targetFormKey)
+    query.set('formKey', action.targetFormKey)
+  params.forEach((param) => {
+    const name = String(param?.name || '').trim()
+    if (!name)
+      return
+    const value = resolveActionParamValue(param, row)
+    if (value !== '')
+      query.append(name, value)
+  })
+  const queryString = query.toString()
+  if (!queryString)
+    return target
+  target += target.includes('?') ? '&' : '?'
+  return `${target}${queryString}`
+}
+
+function resolveActionParamValue(param = {}, row = {}) {
+  const sourceType = param.sourceType || 'static'
+  const sourceField = String(param.sourceField || '').trim()
+  if (sourceType === 'rowField' && sourceField)
+    return row?.[sourceField] ?? ''
+  if (sourceType === 'routeQuery' && sourceField)
+    return route.query?.[sourceField] ?? ''
+  if (sourceType === 'system' && sourceField)
+    return resolveSystemParamValue(sourceField)
+  return resolveActionText(param.value, row)
+}
+
+function resolveSystemParamValue(sourceField = '') {
+  if (sourceField === 'now')
+    return new Date().toISOString()
+  if (sourceField === 'today')
+    return new Date().toISOString().slice(0, 10)
+  if (sourceField === 'userId')
+    return userStore.userId || ''
+  if (sourceField === 'tenantId')
+    return userStore.userInfo?.tenantId || route.query?.tenantId || ''
+  if (sourceField === 'selectedIds')
+    return [...selectedKeys.value]
+  return ''
+}
+
+function resolveActionText(template, row) {
+  let text = String(template || '')
+  const data = row || {}
+  Object.keys(data).forEach((key) => {
+    const value = data[key]
+    if (!isUsableKeyValue(value))
+      return
+    text = text.replaceAll(`:${key}`, value)
+    text = text.replaceAll(`\${${key}}`, value)
+  })
+  const idValue = resolveRowKeyValue(data)
+  if (isUsableKeyValue(idValue))
+    text = text.replaceAll(':id', idValue)
+  Object.keys(route.query || {}).forEach((key) => {
+    const value = route.query[key]
+    if (!isUsableKeyValue(value))
+      return
+    text = text.replaceAll(resolveTemplatePlaceholder(`route.${key}`), Array.isArray(value) ? value[0] : value)
+  })
+  text = text
+    .replaceAll(resolveTemplatePlaceholder('system.now'), new Date().toISOString())
+    .replaceAll(resolveTemplatePlaceholder('system.today'), new Date().toISOString().slice(0, 10))
+  return text
+}
+
+function resolveTemplatePlaceholder(name = '') {
+  return ['$', '{', name, '}'].join('')
+}
+
+function resolveButtonType(action) {
+  return action?.type && action.type !== 'default' ? action.type : undefined
+}
+
+/**
+ * ==================== 计算属性 ====================
+ */
+
+/**
+ * 行键函数
+ */
+const rowKeyFn = computed(() => {
+  if (typeof props.rowKey === 'function') {
+    return props.rowKey
+  }
+  return row => row[props.rowKey]
+})
+
+function isUsableKeyValue(value) {
+  if (value === null || value === undefined)
+    return false
+  const textValue = String(value).trim()
+  return textValue !== '' && textValue !== 'undefined' && textValue !== 'null'
+}
+
+function readBoolean(value, defaultValue = false) {
+  if (value === null || value === undefined)
+    return defaultValue
+  if (typeof value === 'boolean')
+    return value
+  if (typeof value === 'number')
+    return value !== 0
+  return ['true', '1', 'yes'].includes(String(value).trim().toLowerCase())
+}
+
+function resolveRowKeyValue(row) {
+  if (!row || typeof row !== 'object')
+    return undefined
+
+  const values = []
+  try {
+    values.push(rowKeyFn.value(row))
+  }
+  catch (error) {
+    console.warn('[AiCrudPage] rowKey解析失败:', error)
+  }
+
+  if (typeof props.rowKey === 'string')
+    values.push(row[props.rowKey])
+  values.push(row.id, row.Id)
+
+  return values.find(isUsableKeyValue)
+}
+
+function mergeHookRowWithOriginal(row, processedRow) {
+  if (!processedRow || typeof processedRow !== 'object')
+    return row
+  const merged = row && typeof row === 'object'
+    ? { ...row, ...processedRow }
+    : { ...processedRow }
+  const originalKey = resolveRowKeyValue(row)
+  if (isUsableKeyValue(originalKey) && !isUsableKeyValue(resolveRowKeyValue(merged))) {
+    const key = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+    merged[key] = originalKey
+    if (!isUsableKeyValue(merged.id))
+      merged.id = originalKey
+  }
+  return merged
+}
+
+function resolveFormDefaultValues() {
+  return isPlainRecord(props.formDefaultValues) ? props.formDefaultValues : {}
+}
+
+function resolveSubmitDefaultParams() {
+  return isPlainRecord(props.submitDefaultParams) ? props.submitDefaultParams : {}
+}
+
+const resolvedCustomQueryConfigKey = computed(() => {
+  if (props.customQueryConfigKey) {
+    return props.customQueryConfigKey
+  }
+  const listApi = props.apiConfig?.list || ''
+  const match = listApi.match(/\/ai\/crud\/([^/]+)\/page/)
+  return match?.[1] || ''
+})
+
+const resolvedExportTaskConfigKey = computed(() => {
+  if (props.exportTaskConfigKey) {
+    return props.exportTaskConfigKey
+  }
+  const exportApi = props.apiConfig?.export || props.exportApi || ''
+  const exportUrl = extractApiUrl(exportApi)
+  const match = exportUrl.match(/\/ai\/crud\/([^/]+)\/export(?:$|\?)/)
+  return match?.[1] || ''
+})
+
+const hasExportTaskApi = computed(() => {
+  return !!props.apiConfig?.exportTasks || !!resolvedExportTaskConfigKey.value
+})
+
+const showExportTaskEntry = computed(() => {
+  return props.showExport && hasActionPermission('export') && props.showExportTasks && hasExportTaskApi.value
+})
+
+const toolbarOverflowOptions = computed(() => {
+  const options = []
+  if (!props.hideBatchDelete && hasActionPermission('batchDelete')) {
+    options.push({
+      get label() {
+        return localizeLabel('批量删除')
+      },
+      key: 'batch-delete',
+      disabled: selectedKeys.value.length === 0,
+      buttonType: 'error',
+      secondary: true,
+      iconComponent: TrashOutline,
+    })
+  }
+  if (props.showImport && hasActionPermission('import')) {
+    options.push({
+      get label() {
+        return localizeLabel('批量导入')
+      },
+      key: 'import',
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: CloudUploadOutline,
+    })
+  }
+  if (props.showExport && hasActionPermission('export')) {
+    options.push({
+      label: localizeLabel(exportLoading.value ? '导出中...' : props.exportButtonText),
+      key: 'export',
+      disabled: exportLoading.value,
+      loading: exportLoading.value,
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: DownloadOutline,
+    })
+  }
+  if (showExportTaskEntry.value) {
+    options.push({
+      get label() {
+        return localizeLabel('导出任务')
+      },
+      key: 'export-tasks',
+      buttonType: 'default',
+      secondary: true,
+      iconComponent: TimeOutline,
+    })
+  }
+  return options
+})
+
+const toolbarDropdownOptions = computed(() => toolbarOverflowOptions.value.map(option => ({
+  label: option.label,
+  key: option.key,
+  disabled: option.disabled,
+  icon: () => h(NIcon, null, { default: () => h(option.iconComponent) }),
+})))
+
+function handleToolbarOverflowSelect(key) {
+  if (key === 'batch-delete') {
+    handleBatchDelete()
+    return
+  }
+  if (key === 'import') {
+    handleShowImport()
+    return
+  }
+  if (key === 'export') {
+    handleExport()
+    return
+  }
+  if (key === 'export-tasks') {
+    handleOpenExportTasks()
+  }
+}
+
+const activeExportTask = computed(() => {
+  if (!activeExportTaskId.value) {
+    return null
+  }
+  return exportTasks.value.find(task => String(task.id) === String(activeExportTaskId.value)) || null
+})
+
+const exportTaskPaginationConfig = computed(() => ({
+  page: exportTaskPagination.value.page,
+  pageSize: exportTaskPagination.value.pageSize,
+  itemCount: exportTaskPagination.value.itemCount,
+  pageSizes: [10, 20, 50],
+  showSizePicker: true,
+  prefix: ({ itemCount }) => t('customer.taskCount', { value0: itemCount }),
+  onUpdatePage: handleExportTaskPageChange,
+  onUpdatePageSize: handleExportTaskPageSizeChange,
+}))
+
+const exportTaskColumns = computed(() => [
+  {
+    get title() {
+      return localizeLabel('文件')
+    },
+    key: 'fileName',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: row => row.fileName || '-',
+  },
+  {
+    get title() {
+      return localizeLabel('状态')
+    },
+    key: 'status',
+    width: 96,
+    render: row => h(NTag, {
+      size: 'small',
+      type: resolveExportTaskTagType(row.status),
+    }, { default: () => resolveExportTaskStatusText(row.status) }),
+  },
+  {
+    get title() {
+      return localizeLabel('进度')
+    },
+    key: 'progress',
+    width: 150,
+    render: row => h(NProgress, {
+      type: 'line',
+      percentage: row.progress || 0,
+      processing: isExportTaskRunning(row),
+      indicatorPlacement: 'inside',
+      height: 10,
+      status: row.status === 'FAILED' ? 'error' : undefined,
+    }),
+  },
+  {
+    get title() {
+      return localizeLabel('数据量')
+    },
+    key: 'totalCount',
+    width: 120,
+    render: row => `${row.exportedCount || 0}/${row.totalCount || 0}`,
+  },
+  {
+    get title() {
+      return localizeLabel('创建时间')
+    },
+    key: 'createTime',
+    width: 160,
+    render: row => row.createTime || '-',
+  },
+  {
+    get title() {
+      return localizeLabel('操作')
+    },
+    key: 'actions',
+    width: 88,
+    fixed: 'right',
+    render: row => h(NButton, {
+      text: true,
+      type: 'primary',
+      size: 'small',
+      disabled: row.status !== 'SUCCESS' || !row.fileId,
+      onClick: () => handleDownloadExportTask(row),
+    }, { default: () => localizeLabel('下载') }),
+  },
+])
+
+function getColumnKey(col) {
+  return String(col?.prop || col?.key || col?.dataIndex || '').trim()
+}
+
+function isActionColumnConfig(col) {
+  const key = getColumnKey(col)
+  const title = String(col?.label || col?.title || '').trim()
+  return ['action', 'actions', 'operation', 'operations'].includes(key) || title === '操作'
+}
+
+function shouldDefaultActionFixedRight(col) {
+  return col.fixed === undefined || col.fixed === null || col.fixed === ''
+}
+
+const activeSourceColumns = computed(() => {
+  if (!customQueryFields.value.length) {
+    return props.columns
+  }
+  const actionColumns = props.columns.filter(isActionColumnConfig)
+  const orderedColumns = customQueryFields.value
+    .map(field => props.columns.find(col => getColumnKey(col) === field))
+    .filter(Boolean)
+  return [...orderedColumns, ...actionColumns]
+})
+
+/**
+ * 表单上下文（传递 modalStatus 等信息）
+ */
+const formContext = computed(() => {
+  return {
+    ...(props.formRuntimeContext || {}),
+    modalStatus: modalStatus.value, // 'add' | 'edit' | 'detail'
+    isEdit: modalStatus.value === 'edit',
+    isAdd: modalStatus.value === 'add',
+    isDetail: modalStatus.value === 'detail',
+    currentRow: currentRow.value,
+    formAssets: props.formAssets,
+    fieldEvents: props.fieldEvents,
+    fieldEventLoadToken: fieldEventLoadToken.value,
+  }
+})
+
+const normalizedExpandConfig = computed(() => normalizeExpandConfig(props.expandConfig, props.childrenConfig))
+const hasExpandConfig = computed(() => normalizedExpandConfig.value.enabled && normalizedExpandConfig.value.panels.length > 0)
+const resolvedResizable = computed(() => props.tableProps?.resizable ?? props.resizable)
+
+/**
+ * 表格列配置（添加操作列）
+ */
+const tableColumns = computed(() => {
+  const cols = []
+
+  if (hasExpandConfig.value) {
+    cols.push({
+      type: 'expand',
+      key: '__expand',
+      width: 48,
+      fixed: 'left',
+      expandable: row => shouldExpandRow(normalizedExpandConfig.value.rowExpandable, row, formContext.value),
+      renderExpand: row => h(AiCrudRowExpand, {
+        config: normalizedExpandConfig.value,
+        row,
+        rowKeyValue: resolveRowKeyValue(row),
+        context: formContext.value,
+      }, collectExpandSlots()),
+    })
+  }
+
+  // 判断是否是操作列（兼容 action / actions / operation 等写法）
+  const isActionCol = (col) => {
+    return isActionColumnConfig(col)
+  }
+
+  activeSourceColumns.value.forEach((col) => {
+    if (isActionCol(col) && col.actions) {
+      const actionCol = { ...col }
+      const actions = normalizeRowActions(col.actions)
+      if (shouldDefaultActionFixedRight(actionCol)) {
+        actionCol.fixed = 'right'
+      }
+      delete actionCol.actions
+      delete actionCol._slot
+      delete actionCol.slot
+      actionCol.render = row => renderActionColumn(row, actions, col.maxActionButtons)
+      cols.push(actionCol)
+      return
+    }
+    if (isActionCol(col) && col.render) {
+      cols.push({
+        ...col,
+        fixed: shouldDefaultActionFixedRight(col) ? 'right' : col.fixed,
+      })
+      return
+    }
+    if (isActionCol(col) && !col.actions && !col.render) {
+      return
+    }
+    const resolvedCol = resolveColumnRender(col)
+    cols.push(resolvedCol)
+  })
+
+  // 如果没有操作列且没有隐藏，添加默认操作列
+  const hasActionColumn = cols.some(isActionCol)
+
+  if (!hasActionColumn) {
+    cols.push({
+      prop: 'action',
+      get label() {
+        return localizeLabel('操作')
+      },
+      width: 200,
+      fixed: 'right',
+      render: (row) => {
+        const actions = normalizeRowActions([
+          { get label() {
+            return localizeLabel('编辑')
+          }, key: 'edit', type: 'primary' },
+          { get label() {
+            return localizeLabel('删除')
+          }, key: 'delete', type: 'error' },
+        ])
+        return renderActionColumn(row, actions)
+      },
+    })
+  }
+
+  return cols
+})
+
+function collectExpandSlots() {
+  return Object.keys(slots).reduce((result, name) => {
+    if (name.startsWith('expand-'))
+      result[name] = slotProps => slots[name]?.(slotProps)
+    return result
+  }, {})
+}
+
+function normalizeRowActions(actions = []) {
+  const next = Array.isArray(actions) ? [...actions] : []
+  if (!props.enableTreeAddChild)
+    return next
+  if (next.some(action => action?.key === 'addChild'))
+    return next
+  const editIndex = next.findIndex(action => action?.key === 'edit')
+  const addChildAction = { get label() {
+    return localizeLabel('添加下级')
+  }, key: 'addChild', type: 'success' }
+  if (editIndex >= 0) {
+    next.splice(editIndex + 1, 0, addChildAction)
+    return next
+  }
+  next.unshift(addChildAction)
+  return next
+}
+
+function resolveColumnRender(col) {
+  const nextCol = { ...col }
+  const presentation = { ...(typeof col.render === 'object' ? col.render : {}), ...(col.renderConfig || {}), ...col }
+  const semanticType = presentation.renderType || col.renderConfig?.type || col.render?.type
+  if (typeof col.render !== 'function' && ['entity', 'relations'].includes(semanticType)) {
+    const key = col.prop || col.key || col.dataIndex
+    nextCol.render = row => h(SystemTableCell, {
+      ...resolveSemanticCell(row, key, { ...presentation, renderType: semanticType }, row[key]),
+      interactive: semanticType === 'entity' && presentation.clickAction === 'detail' && hasActionPermission('detail'),
+      onActivate: () => handleDetail(row),
+    })
+    return nextCol
+  }
+  if (!col.render || typeof col.render === 'function') {
+    return nextCol
+  }
+  if (typeof col.render !== 'object') {
+    return nextCol
+  }
+  const key = col.prop || col.key || col.dataIndex
+  const renderType = col.render.type
+  if (renderType === 'dictTag') {
+    nextCol.render = row => h(DictTag, {
+      dictType: col.render.dictType,
+      value: row[key],
+      size: 'small',
+    })
+  }
+  else if (renderType === 'relationName') {
+    const targetField = col.render.targetField || `${key}Name`
+    nextCol.render = row => h(SystemTableCell, {
+      values: splitTableCellValues(row[targetField] ?? row[key]),
+    })
+  }
+  else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+    const targetField = col.render.targetField || `${key}Name`
+    nextCol.render = row => h(SystemTableCell, {
+      values: splitTableCellValues(row[targetField] ?? row[key]),
+    })
+  }
+  else if (renderType === 'imageUpload') {
+    nextCol.render = (row) => {
+      const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+      if (items.length === 0)
+        return '-'
+      return h('div', { style: 'display: flex; gap: 4px; flex-wrap: wrap;' }, items.map(item => h(AuthImage, {
+        src: item.value,
+        alt: item.name,
+        title: item.name,
+        imgClass: 'ai-crud-file-image',
+        preview: true,
+        style: 'width: 32px; height: 32px;',
+        imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+      })))
+    }
+  }
+  else if (renderType === 'fileUpload') {
+    nextCol.render = (row) => {
+      const items = resolveFileRenderItems(row[key], row[col.render.targetField || `${key}Name`])
+      if (items.length === 0)
+        return '-'
+      return h('div', { style: 'display: flex; gap: 6px; align-items: center; flex-wrap: wrap;' }, items.map((item) => {
+        if (isImageFileName(item.name)) {
+          return h(AuthImage, {
+            src: item.value,
+            alt: item.name,
+            title: item.name,
+            imgClass: 'ai-crud-file-image',
+            preview: true,
+            style: 'width: 32px; height: 32px;',
+            imgStyle: 'width: 100%; height: 100%; border-radius: 4px; object-fit: cover;',
+          })
+        }
+        return h('span', { title: item.name }, item.name)
+      }))
+    }
+  }
+  return nextCol
+}
+
+function splitTableCellValues(value) {
+  const rawValues = Array.isArray(value) ? value : [value]
+  return rawValues
+    .flatMap(item => String(item || '').split(/[、,，]/))
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+/**
+ * 分页配置
+ */
+const paginationConfig = computed(() => {
+  if (!props.showPagination) {
+    return false
+  }
+
+  return {
+    page: pagination.value.page,
+    pageSize: pagination.value.pageSize,
+    itemCount: pagination.value.itemCount,
+    pageCount: Math.ceil(pagination.value.itemCount / pagination.value.pageSize),
+    showSizePicker: true,
+    pageSizes: props.pageSizes,
+    showQuickJumper: true,
+    prefix: ({ itemCount }) => t('customer.recordCount', { value0: itemCount }),
+  }
+})
+
+/**
+ * 搜索表单插槽名称
+ */
+const searchSlots = computed(() => {
+  return props.searchSchema
+    .filter(field => field.type === 'slot')
+    .map(field => field.slotName || field.field)
+})
+
+/**
+ * 表格插槽名称
+ */
+const tableSlots = computed(() => {
+  return props.columns
+    .filter(col => (col.slot || col._slot) && !col.actions)
+    .map(col => col.slot || col._slot)
+})
+
+/**
+ * 表单插槽名称
+ */
+const formSlots = computed(() => {
+  return props.editSchema
+    .filter(field => field.type === 'slot')
+    .map(field => field.slotName || field.field)
+})
+
+const isDetailMode = computed(() => modalStatus.value === 'detail')
+
+const resolvedFormOpenMode = computed(() => {
+  const configured = String(props.formOpenMode || '').trim()
+  if (configured === 'tabWorkspace' || configured.toLowerCase() === 'tabworkspace')
+    return 'tabWorkspace'
+  const normalized = configured.toLowerCase()
+  if (['modal', 'drawer', 'flat'].includes(normalized))
+    return normalized
+  return String(props.modalType || '').trim().toLowerCase() === 'drawer' ? 'drawer' : 'modal'
+})
+
+const usesInlineFormWorkspace = computed(() => ['flat', 'tabWorkspace'].includes(resolvedFormOpenMode.value))
+const isTabWorkspaceMode = computed(() => resolvedFormOpenMode.value === 'tabWorkspace')
+const inlineWorkspaceVisible = computed(() => usesInlineFormWorkspace.value && inlineFormTabs.value.length > 0)
+const showInlineListPane = computed(() => {
+  return !inlineWorkspaceVisible.value
+    || (isTabWorkspaceMode.value && activeInlineWorkspaceKey.value === INLINE_WORKSPACE_LIST_KEY)
+})
+const showInlineFormWorkspacePane = computed(() => {
+  return inlineWorkspaceVisible.value
+    && (!isTabWorkspaceMode.value || activeInlineWorkspaceKey.value !== INLINE_WORKSPACE_LIST_KEY)
+})
+const activeInlineFormTab = computed(() => inlineFormTabs.value.find(tab => tab.key === activeInlineFormTabKey.value) || null)
+const activeInlineFormTitle = computed(() => activeInlineFormTab.value?.title || modalTitle.value || localizeLabel('编辑'))
+const inlineFormModeLabel = computed(() => {
+  if (modalStatus.value === 'add')
+    return localizeLabel('新增')
+  if (modalStatus.value === 'edit')
+    return localizeLabel('编辑')
+  if (modalStatus.value === 'detail')
+    return localizeLabel('详情')
+  return localizeLabel('表单')
+})
+
+const resolvedTabWorkspace = computed(() => {
+  const config = props.tabWorkspace || {}
+  return {
+    maxTabs: Math.max(1, Number(config.maxTabs || 8)),
+    reuseRecordTab: config.reuseRecordTab !== false,
+    closeAfterSave: config.closeAfterSave === true,
+    showDirtyMark: config.showDirtyMark !== false,
+  }
+})
+
+const activeModalWidth = computed(() => {
+  if (isDetailMode.value)
+    return props.detailModalWidth
+  return props.modalWidth
+})
+
+const detailFlowTimelineVisible = computed(() => {
+  return readBoolean(detailRuntime.value?.detailFlowTimelineVisible, true)
+})
+
+const detailFlowDiagramVisible = computed(() => {
+  return readBoolean(detailRuntime.value?.detailFlowDiagramVisible, true)
+})
+
+const showDetailFlowTabs = computed(() => {
+  return shouldShowDetailFlowHistory({
+    isDetailMode: isDetailMode.value,
+    runtime: detailRuntime.value,
+    timelineVisible: detailFlowTimelineVisible.value,
+    diagramVisible: detailFlowDiagramVisible.value,
+  })
+})
+
+const visibleChildrenConfig = computed(() => {
+  const status = modalStatus.value || 'add'
+  return (props.childrenConfig || []).filter((child) => {
+    if (!child?.fields?.length)
+      return false
+    if (status === 'add')
+      return child.showInCreate !== false
+    if (status === 'edit')
+      return child.showInEdit !== false
+    if (status === 'detail')
+      return child.showInDetail !== false
+    return true
+  })
+})
+
+const hasChildrenConfig = computed(() => visibleChildrenConfig.value.some(child => child?.fields?.length))
+const showDefaultDetailContent = computed(() => {
+  return !isDetailMode.value || !props.hideDefaultDetailContent
+})
+
+const showDefaultDetailChildren = computed(() => {
+  return hasChildrenConfig.value && showDefaultDetailContent.value
+})
+const normalizedDetailPanelConfig = computed(() => normalizeExpandConfig({
+  enabled: isDetailMode.value && Array.isArray(props.detailPanels) && props.detailPanels.length > 0,
+  lazy: true,
+  cache: false,
+  layout: {
+    mode: props.detailPanels?.length > 1 ? 'tabs' : 'single',
+    density: 'compact',
+    padding: 12,
+  },
+  panels: props.detailPanels || [],
+}, props.childrenConfig))
+const showDetailPanels = computed(() => isDetailMode.value && normalizedDetailPanelConfig.value.enabled && normalizedDetailPanelConfig.value.panels.length > 0)
+const detailPanelRowKeyValue = computed(() => {
+  const value = resolveRowKeyValue(formData.value)
+  if (isUsableKeyValue(value))
+    return value
+  return resolveRowKeyValue(currentRow.value) || `detail_${modalStatus.value || 'current'}`
+})
+const hasSearchSchema = computed(() => !props.formOnly && props.showSearch && props.searchSchema.length > 0)
+const hasActiveListFilters = computed(() => hasFilledSearchParams(searchParams.value) || !!customQueryPayload.value)
+const resolvedEmptyTitle = computed(() => hasActiveListFilters.value ? localizeLabel('没有匹配结果') : localizeLabel('暂无数据'))
+const resolvedEmptyDescription = computed(() => {
+  if (hasActiveListFilters.value)
+    return localizeLabel('调整筛选条件后再试')
+  return localizeLabel('当前列表还没有记录')
+})
+const normalizedSearchSchema = computed(() => {
+  return (props.searchSchema || []).map((field) => {
+    const propsData = { ...(field.props || {}) }
+    delete propsData.showCount
+    delete propsData.showWordLimit
+    return {
+      ...field,
+      props: propsData,
+      showCount: false,
+      showWordLimit: false,
+    }
+  })
+})
+
+const modalFormSchema = computed(() => {
+  if (!isDetailMode.value)
+    return props.editSchema
+  const schema = props.editSchema.map(toReadonlyField)
+  return schema.length > 0 ? schema : buildDetailFallbackSchema(props.columns)
+})
+
+function buildDetailFallbackSchema(columns = []) {
+  const skippedKeys = new Set(['action', 'actions', 'operation', 'operations', 'selection', 'expand'])
+  return (Array.isArray(columns) ? columns : [])
+    .filter((column) => {
+      const field = column?.prop || column?.key || column?.dataIndex
+      return field && !skippedKeys.has(String(field)) && column?.visible !== false
+    })
+    .slice(0, 12)
+    .map(column => ({
+      field: column.prop || column.key || column.dataIndex,
+      label: column.label || column.title || column.prop || column.key,
+      type: 'input',
+      disabled: true,
+      readonly: true,
+      props: {
+        disabled: true,
+        readonly: true,
+      },
+    }))
+}
+
+const runtimeFormulaFields = computed(() => {
+  return flattenRuntimeFormFields(props.editSchema)
+    .map(field => normalizeRuntimeFormulaField(field))
+    .filter(Boolean)
+})
+
+const runtimeFormFieldMap = computed(() => {
+  const result = new Map()
+  flattenRuntimeFormFields(props.editSchema).forEach((field) => {
+    if (field?.field)
+      result.set(field.field, field)
+  })
+  return result
+})
+
+const runtimeFormulaCalculationEnabled = computed(() => {
+  if (isDetailMode.value || formOnlySubmitted.value)
+    return false
+  return props.formOnly || modalVisible.value || inlineWorkspaceVisible.value
+})
+
+const runtimeFormulaSignature = computed(() => {
+  if (!runtimeFormulaCalculationEnabled.value || !runtimeFormulaFields.value.length)
+    return ''
+  return JSON.stringify(runtimeFormulaFields.value.map((field) => {
+    const dependsOn = getRuntimeFormulaDependsOn(field.config, field.field)
+    return {
+      field: field.field,
+      expression: field.config.expression || '',
+      condition: field.config.condition || null,
+      values: dependsOn.map(dep => [dep, formData.value?.[dep]]),
+    }
+  }))
+})
+
+function toReadonlyField(field) {
+  if (!field || field.type === 'divider')
+    return field
+  if (field.nodeType && field.nodeType !== 'field') {
+    return {
+      ...field,
+      children: Array.isArray(field.children) ? field.children.map(toReadonlyField) : field.children,
+    }
+  }
+  return {
+    ...field,
+    disabled: true,
+    readonly: true,
+    props: {
+      ...(field.props || {}),
+      disabled: true,
+      readonly: true,
+    },
+  }
+}
+
+function flattenRuntimeFormFields(nodes = []) {
+  const result = []
+  const walk = (items = []) => {
+    ;(Array.isArray(items) ? items : []).forEach((node) => {
+      if (!node || typeof node !== 'object')
+        return
+      if (node.nodeType && node.nodeType !== 'field') {
+        walk(node.children || [])
+        return
+      }
+      if (node.field)
+        result.push(node)
+    })
+  }
+  walk(nodes)
+  return result
+}
+
+function normalizeRuntimeFormulaField(field) {
+  if (!field?.field)
+    return null
+  const config = normalizeRuntimeFormulaConfig(field.formulaConfig)
+  if (!config)
+    return null
+  const type = String(config.type || 'CALC').toUpperCase()
+  if (type === 'AGGREGATE')
+    return null
+  if (type === 'CONDITIONAL') {
+    const expression = config.condition?.expression || config.expression
+    if (!expression)
+      return null
+    return {
+      field: field.field,
+      config: {
+        ...config,
+        type,
+        expression,
+        condition: {
+          ...(config.condition || {}),
+          expression,
+        },
+      },
+    }
+  }
+  if (!config.expression)
+    return null
+  return {
+    field: field.field,
+    config: {
+      ...config,
+      type,
+    },
+  }
+}
+
+function normalizeRuntimeFormulaConfig(raw) {
+  if (!raw)
+    return null
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw)
+    }
+    catch {
+      return null
+    }
+  }
+  if (typeof raw !== 'object')
+    return null
+  return { ...raw }
+}
+
+function getRuntimeFormulaDependsOn(config = {}, targetField = '') {
+  const result = []
+  appendRuntimeDependsOn(result, config.dependsOn)
+  appendRuntimeExpressionVariables(result, config.expression)
+  if (String(config.type || '').toUpperCase() === 'CONDITIONAL')
+    appendRuntimeExpressionVariables(result, config.condition?.expression)
+  return result.filter(field => field !== targetField)
+}
+
+function appendRuntimeDependsOn(result, dependsOn) {
+  ;(Array.isArray(dependsOn) ? dependsOn : []).forEach(value => appendRuntimeFormulaVariable(result, value))
+}
+
+function appendRuntimeExpressionVariables(result, expression) {
+  extractRuntimeFormulaVariables(expression).forEach(value => appendRuntimeFormulaVariable(result, value))
+}
+
+function appendRuntimeFormulaVariable(result, value) {
+  const field = String(value || '').trim()
+  if (field && !result.includes(field))
+    result.push(field)
+}
+
+function extractRuntimeFormulaVariables(expression) {
+  const text = stripRuntimeFormulaStringLiterals(expression)
+  if (!text)
+    return []
+  const variables = []
+  const pattern = /[a-z_]\w*/gi
+  let match = pattern.exec(text)
+  while (match) {
+    const token = match[0]
+    const previous = text[match.index - 1] || ''
+    const nextIndex = match.index + token.length
+    const nextText = text.slice(nextIndex).trimStart()
+    if (!isRuntimeFormulaReservedToken(token) && previous !== '.' && !nextText.startsWith('(') && !variables.includes(token))
+      variables.push(token)
+    match = pattern.exec(text)
+  }
+  return variables
+}
+
+function stripRuntimeFormulaStringLiterals(expression) {
+  return String(expression || '').replace(/'[^']*'|"[^"]*"/g, ' ')
+}
+
+function isRuntimeFormulaReservedToken(token) {
+  return [
+    'true',
+    'false',
+    'null',
+    'nil',
+    'and',
+    'or',
+    'not',
+    'if',
+    'else',
+    'return',
+    'math',
+    'string',
+    'seq',
+    'date',
+  ].includes(String(token || '').toLowerCase())
+}
+
+function scheduleRuntimeFormulaCalculation(formulaField, delay = 180) {
+  if (!formulaField?.field || !runtimeFormulaCalculationEnabled.value)
+    return
+  const field = formulaField.field
+  if (formulaRuntimeTimers.has(field))
+    clearTimeout(formulaRuntimeTimers.get(field))
+  formulaRuntimeTimers.set(field, setTimeout(() => {
+    formulaRuntimeTimers.delete(field)
+    calculateRuntimeFormula(formulaField)
+  }, delay))
+}
+
+function clearRuntimeFormulaTimers() {
+  formulaRuntimeTimers.forEach(timer => clearTimeout(timer))
+  formulaRuntimeTimers.clear()
+}
+
+function refreshRuntimeFormulas(delay = 0) {
+  if (!runtimeFormulaCalculationEnabled.value)
+    return
+  runtimeFormulaFields.value.forEach(field => scheduleRuntimeFormulaCalculation(field, delay))
+}
+
+async function calculateRuntimeFormula(formulaField) {
+  if (!formulaField?.field || !runtimeFormulaCalculationEnabled.value)
+    return
+  const dependsOn = getRuntimeFormulaDependsOn(formulaField.config, formulaField.field)
+  if (dependsOn.some(dep => isEmptyRuntimeFormulaValue(formData.value?.[dep]))) {
+    patchRuntimeFormulaValue(formulaField.field, null)
+    return
+  }
+  const sequence = (formulaRuntimeSequences.get(formulaField.field) || 0) + 1
+  formulaRuntimeSequences.set(formulaField.field, sequence)
+  try {
+    const response = await previewFormula(buildRuntimeFormulaPreviewPayload(formulaField))
+    if (!runtimeFormulaCalculationEnabled.value || formulaRuntimeSequences.get(formulaField.field) !== sequence)
+      return
+    const result = response?.data ?? response
+    if (result?.success) {
+      patchRuntimeFormulaValue(formulaField.field, result.result)
+    }
+    else if (result?.errorMessage) {
+      console.warn(`[AiCrudPage] 公式计算失败: ${formulaField.field}`, result.errorMessage)
+    }
+  }
+  catch (error) {
+    if (runtimeFormulaCalculationEnabled.value && formulaRuntimeSequences.get(formulaField.field) === sequence)
+      console.warn(`[AiCrudPage] 公式计算请求失败: ${formulaField.field}`, error)
+  }
+}
+
+function buildRuntimeFormulaPreviewPayload(formulaField) {
+  const config = formulaField.config || {}
+  const type = String(config.type || 'CALC').toUpperCase()
+  const payload = {
+    expression: config.expression,
+    type,
+    dependsOn: getRuntimeFormulaDependsOn(config, formulaField.field),
+    sampleValues: buildRuntimeFormulaSampleValues(formulaField),
+  }
+  if (type === 'CONDITIONAL') {
+    const condition = config.condition || {}
+    payload.condition = {
+      expression: condition.expression || config.expression,
+      trueValue: condition.trueValue ?? '',
+      falseValue: condition.falseValue ?? '',
+    }
+    payload.expression = payload.condition.expression
+  }
+  return payload
+}
+
+function buildRuntimeFormulaSampleValues(formulaField) {
+  const values = { ...(formData.value || {}) }
+  getRuntimeFormulaDependsOn(formulaField.config, formulaField.field).forEach((field) => {
+    values[field] = normalizeRuntimeFormulaSampleValue(
+      values[field],
+      runtimeFormFieldMap.value.get(field),
+      formulaField.config,
+      field,
+    )
+  })
+  return values
+}
+
+function normalizeRuntimeFormulaSampleValue(value, field = {}, config = {}, fieldName = '') {
+  if (isEmptyRuntimeFormulaValue(value))
+    return value
+  if (typeof value !== 'string')
+    return value
+  if (!isRuntimeNumericField(field) && !isRuntimeNumericFormulaOperand(config, fieldName))
+    return value
+  const text = value.trim()
+  if (!/^-?\d+(?:\.\d+)?$/.test(text))
+    return value
+  const number = Number(text)
+  return Number.isFinite(number) ? number : value
+}
+
+function isRuntimeNumericField(field = {}) {
+  const type = String(field.type || field.componentType || '').toLowerCase()
+  const dataType = String(field.dataType || field.fieldDataType || field.props?.dataType || '').toLowerCase()
+  return isNumberFieldType(type)
+    || ['int', 'integer', 'bigint', 'decimal', 'double', 'float', 'number'].includes(dataType)
+}
+
+function isRuntimeNumericFormulaOperand(config = {}, fieldName = '') {
+  if (!fieldName)
+    return false
+  if (isRuntimeNumericLikeFieldName(fieldName))
+    return true
+  if (isRuntimeArithmeticOperand(config.expression, fieldName))
+    return true
+  return String(config.type || '').toUpperCase() === 'CONDITIONAL'
+    && isRuntimeArithmeticOperand(config.condition?.expression, fieldName)
+}
+
+function isRuntimeNumericLikeFieldName(fieldName = '') {
+  const value = String(fieldName || '').toLowerCase()
+  return [
+    'qty',
+    'quantity',
+    'count',
+    'num',
+    'number',
+    'price',
+    'amount',
+    'money',
+    'fee',
+    'cost',
+    'total',
+    'rate',
+    'ratio',
+    'percent',
+    'discount',
+    'tax',
+    'score',
+    'weight',
+    'area',
+    'volume',
+  ].some(keyword => value.includes(keyword))
+}
+
+function isRuntimeArithmeticOperand(expression, fieldName = '') {
+  const text = stripRuntimeFormulaStringLiterals(expression)
+  if (!text || !fieldName)
+    return false
+  const tokenPattern = new RegExp(`(^|[^\\w.])${escapeRuntimeFormulaRegex(fieldName)}(?=$|[^\\w])`, 'g')
+  const arithmeticOperators = new Set(['*', '/', '%', '-'])
+  let match = tokenPattern.exec(text)
+  while (match) {
+    const tokenStart = match.index + match[1].length
+    const tokenEnd = tokenStart + fieldName.length
+    const previous = findRuntimeFormulaAdjacentOperator(text, tokenStart, -1)
+    const next = findRuntimeFormulaAdjacentOperator(text, tokenEnd, 1)
+    if (arithmeticOperators.has(previous) || arithmeticOperators.has(next))
+      return true
+    match = tokenPattern.exec(text)
+  }
+  return false
+}
+
+function findRuntimeFormulaAdjacentOperator(text = '', startIndex = 0, direction = 1) {
+  let index = startIndex + (direction < 0 ? -1 : 0)
+  while (index >= 0 && index < text.length) {
+    const char = text[index]
+    if (!/\s/.test(char))
+      return char
+    index += direction < 0 ? -1 : 1
+  }
+  return ''
+}
+
+function escapeRuntimeFormulaRegex(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function patchRuntimeFormulaValue(field, value) {
+  if (!field)
+    return
+  if (Object.is(formData.value?.[field], value))
+    return
+  formData.value = {
+    ...(formData.value || {}),
+    [field]: value,
+  }
+}
+
+function isEmptyRuntimeFormulaValue(value) {
+  if (Array.isArray(value))
+    return value.length === 0
+  return value === null || value === undefined || value === ''
+}
+
+const offlineReplayAvailable = computed(() => {
+  const runtime = offlineFormRuntime.value
+  if (!runtime || !offlineDraftId.value)
+    return false
+  const draft = runtime.store.getDraft(offlineDraftId.value)
+  return Boolean(draft?.replayLog?.some(item => item.status !== 'COMPLETED'))
+})
+
+function refreshOfflineFormRuntime() {
+  if (offlineDraftSaveTimer) {
+    window.clearTimeout(offlineDraftSaveTimer)
+    offlineDraftSaveTimer = null
+  }
+  offlineDraftId.value = ''
+  offlineBaseRecordVersion.value = ''
+  offlineDraftNotice.value = ''
+  try {
+    offlineFormRuntime.value = createOfflineFormRuntime({
+      config: props.offlineDraft,
+      scope: {
+        tenantId: userStore.tenantId,
+        userId: userStore.userId,
+      },
+    })
+  }
+  catch (error) {
+    offlineFormRuntime.value = null
+    if (props.offlineDraft?.enabled === true)
+      console.warn('[AiCrudPage] 离线草稿配置无效，已失败关闭:', error?.message || error)
+  }
+}
+
+function resolveOfflineRecordId(row = currentRow.value) {
+  if (!row || modalStatus.value !== 'edit')
+    return ''
+  return resolveRowKeyValue(row) ?? ''
+}
+
+function readOfflineRecordVersion(row = currentRow.value) {
+  const field = offlineFormRuntime.value?.config.recordVersionField
+    || props.offlineDraft?.recordVersionField
+    || 'updateTime'
+  const mainData = isMasterDetailPayload(formData.value) ? formData.value.main : formData.value
+  return mainData?.[field]
+    ?? mainData?.version
+    ?? mainData?.recordVersion
+    ?? row?.[field]
+    ?? row?.version
+    ?? row?.recordVersion
+    ?? ''
+}
+
+function resolveOfflineRecordVersion() {
+  return offlineBaseRecordVersion.value || readOfflineRecordVersion()
+}
+
+function offlineDraftPayload(data = formData.value) {
+  if (hasChildrenConfig.value) {
+    return {
+      main: data && typeof data.main === 'object' ? data.main : { ...(formData.value || {}) },
+      children: normalizeChildrenData(data?.children || childFormData.value),
+    }
+  }
+  return data && typeof data === 'object' ? data : {}
+}
+
+function saveOfflineDraft(data = formData.value) {
+  const runtime = offlineFormRuntime.value
+  if (!runtime || !['add', 'edit'].includes(modalStatus.value) || offlineDraftHydrating.value || inlineFormHydrating.value)
+    return null
+  try {
+    const draft = runtime.save({
+      draftId: offlineDraftId.value || undefined,
+      data: offlineDraftPayload(data),
+      recordId: resolveOfflineRecordId(),
+      baseRecordVersion: resolveOfflineRecordVersion(),
+    })
+    offlineDraftId.value = draft.draftId
+    return draft
+  }
+  catch (error) {
+    offlineDraftNotice.value = error?.message || localizeLabel('本地草稿保存失败')
+    console.warn('[AiCrudPage] 本地草稿保存失败:', error?.code || error?.message || error)
+    return null
+  }
+}
+
+function scheduleOfflineDraftSave() {
+  if (!offlineFormRuntime.value
+    || !['add', 'edit'].includes(modalStatus.value)
+    || offlineDraftHydrating.value
+    || inlineFormHydrating.value) {
+    return
+  }
+  if (offlineDraftSaveTimer) {
+    window.clearTimeout(offlineDraftSaveTimer)
+  }
+  offlineDraftSaveTimer = window.setTimeout(() => {
+    offlineDraftSaveTimer = null
+    saveOfflineDraft()
+  }, 300)
+}
+
+function flushOfflineDraftSave() {
+  const shouldSave = Boolean(offlineDraftSaveTimer || offlineDraftId.value)
+  if (offlineDraftSaveTimer) {
+    window.clearTimeout(offlineDraftSaveTimer)
+    offlineDraftSaveTimer = null
+  }
+  return shouldSave ? saveOfflineDraft() : null
+}
+
+function resetOfflineDraftSession() {
+  if (offlineDraftSaveTimer) {
+    window.clearTimeout(offlineDraftSaveTimer)
+    offlineDraftSaveTimer = null
+  }
+  offlineDraftId.value = ''
+  offlineBaseRecordVersion.value = ''
+  offlineDraftNotice.value = ''
+}
+
+async function restoreOfflineDraft(recordId = '') {
+  const runtime = offlineFormRuntime.value
+  if (!runtime)
+    return null
+  const draft = runtime.findDraft(recordId)
+  if (!draft)
+    return null
+  offlineDraftId.value = draft.draftId
+  offlineBaseRecordVersion.value = draft.baseRecordVersion || readOfflineRecordVersion()
+  offlineDraftHydrating.value = true
+  try {
+    if (hasChildrenConfig.value && draft.data && typeof draft.data.main === 'object') {
+      formData.value = normalizeEditData({ ...(formData.value || {}), ...draft.data.main })
+      childFormData.value = normalizeChildrenData(draft.data.children)
+    }
+    else if (draft.data && typeof draft.data === 'object') {
+      formData.value = normalizeEditData({ ...(formData.value || {}), ...draft.data })
+    }
+    offlineDraftNotice.value = draft.replayLog?.some(item => item.status !== 'COMPLETED')
+      ? localizeLabel('已恢复待提交草稿，联网后可检查并重放。')
+      : localizeLabel('已恢复本地草稿，提交前请确认数据。')
+    return draft
+  }
+  finally {
+    await nextTick()
+    offlineDraftHydrating.value = false
+  }
+}
+
+function isBrowserOffline() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+}
+
+function createOfflineReplayKey() {
+  return `ui:offline:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`
+}
+
+function appendOfflineSubmitIntent(draft, data, isEdit, idValue) {
+  const runtime = offlineFormRuntime.value
+  if (!runtime?.config.replayActionCode || !draft)
+    return null
+  const sourceData = hasChildrenConfig.value ? (data?.main || {}) : data
+  const intent = runtime.appendSubmitIntent(draft.draftId, {
+    formData: sourceData,
+    recordId: isEdit ? idValue : '',
+    idempotencyKey: createOfflineReplayKey(),
+    routeQuery: route.query,
+  })
+  if (intent)
+    offlineDraftNotice.value = localizeLabel('当前网络不可用，已保存本地草稿和待提交意图。联网后请检查并重放。')
+  return intent
+}
+
+function confirmOfflineReplay() {
+  if (!offlineDraftId.value || offlineReplayLoading.value)
+    return
+  window.$dialog?.warning({
+    get title() {
+      return localizeLabel('检查并重放本地草稿')
+    },
+    get content() { return localizeLabel('系统会先检查发布版本和记录版本，确认无冲突后按幂等键提交。是否继续？') },
+    get positiveText() { return localizeLabel('继续检查') },
+    get negativeText() { return localizeLabel('取消') },
+    onPositiveClick: replayOfflineDraft,
+  })
+}
+
+async function replayOfflineDraft() {
+  const runtime = offlineFormRuntime.value
+  const draftId = offlineDraftId.value
+  if (!runtime || !draftId)
+    return
+  offlineReplayLoading.value = true
+  try {
+    const result = await runtime.store.replayDraft(draftId, {
+      confirmed: true,
+      loadCurrent: () => loadOfflineCurrent(runtime, draftId),
+      execute: async (intent) => {
+        const response = await executeBusinessAction(buildBusinessActionExecutePayload({
+          action: { actionCode: intent.actionCode },
+          config: { suiteCode: runtime.config.suiteCode },
+          objectCode: intent.objectCode,
+          recordId: intent.recordId,
+          formData: intent.formData,
+          routeQuery: intent.routeQuery,
+          idempotencyKey: intent.idempotencyKey,
+          parentRecordId: intent.parentRecordId,
+          childRecordId: intent.childRecordId,
+          relationKey: intent.relationKey,
+        }))
+        return unwrapBusinessActionResult(response, localizeLabel('草稿重放失败'))
+      },
+    })
+    if (result.status === 'completed') {
+      runtime.store.removeDraft(draftId)
+      offlineDraftId.value = ''
+      offlineDraftNotice.value = localizeLabel('本地草稿已按幂等键提交。')
+      await loadList()
+    }
+    else if (result.status === 'conflict') {
+      offlineDraftNotice.value = result.message || localizeLabel('草稿存在冲突，请重新加载。')
+    }
+    else if (result.status === 'failed') {
+      offlineDraftNotice.value = result.draft?.failureMessage || localizeLabel('草稿重放失败，请修正后重试。')
+    }
+  }
+  finally {
+    offlineReplayLoading.value = false
+  }
+}
+
+async function loadOfflineCurrent(runtime, draftId) {
+  const draft = runtime.store.getDraft(draftId)
+  const publication = await loadOfflinePublishedSnapshot(runtime)
+  if (!draft?.recordId) {
+    return {
+      available: true,
+      ...publication,
+    }
+  }
+  const { method, url } = parseApiConfig(
+    'detail',
+    `${props.api}/${draft.recordId}`,
+    'get',
+    { id: draft.recordId },
+  )
+  try {
+    const requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+    const urlHasId = url.endsWith(`/${draft.recordId}`)
+      || url.includes(`/${draft.recordId}?`)
+      || url.includes(`/${draft.recordId}/`)
+    const idParam = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+    const params = ['post', 'postEncrypt'].includes(requestMethod) && !urlHasId
+      ? { [idParam]: draft.recordId }
+      : undefined
+    const response = requestMethod === 'postEncrypt'
+      ? await postEncrypt(url, {}, { params })
+      : await request({ method: requestMethod, url, params })
+    const payload = response?.data && typeof response.data === 'object' ? response.data : response
+    const current = payload?.main && typeof payload.main === 'object' ? payload.main : payload
+    return {
+      available: Boolean(current),
+      ...publication,
+      recordVersion: current?.[runtime.config.recordVersionField]
+        ?? current?.version
+        ?? current?.recordVersion,
+    }
+  }
+  catch {
+    return { available: false, ...publication }
+  }
+}
+
+async function loadOfflinePublishedSnapshot(runtime) {
+  if (!runtime.config.configKey) {
+    return {
+      publishedVersion: runtime.config.publishedVersion,
+      schemaHash: runtime.config.schemaHash,
+    }
+  }
+  const response = await crudConfigRender(runtime.config.configKey, false)
+  const currentConfig = response?.data && typeof response.data === 'object' ? response.data : null
+  if (!currentConfig)
+    throw new Error(localizeLabel('无法读取最新发布配置'))
+  return createOfflinePublishedSnapshot(currentConfig, runtime.config.formCode)
+}
+
+function clearOfflineDraftAfterSubmit() {
+  if (offlineDraftSaveTimer) {
+    window.clearTimeout(offlineDraftSaveTimer)
+    offlineDraftSaveTimer = null
+  }
+  if (offlineFormRuntime.value && offlineDraftId.value)
+    offlineFormRuntime.value.store.removeDraft(offlineDraftId.value)
+  offlineDraftId.value = ''
+  offlineBaseRecordVersion.value = ''
+  offlineDraftNotice.value = ''
+}
+
+function handleBrowserOnline() {
+  const runtime = offlineFormRuntime.value
+  if (!runtime)
+    return
+  const draft = offlineDraftId.value
+    ? runtime.store.getDraft(offlineDraftId.value)
+    : runtime.findDraft(resolveOfflineRecordId())
+  if (!draft)
+    return
+  offlineDraftId.value = draft.draftId
+  offlineBaseRecordVersion.value = draft.baseRecordVersion || offlineBaseRecordVersion.value
+  offlineDraftNotice.value = draft.replayLog?.some(item => item.status !== 'COMPLETED')
+    ? localizeLabel('网络已恢复，请检查发布版本和记录版本后再重放。')
+    : localizeLabel('网络已恢复，本地草稿仍保留，请确认后在线提交。')
+}
+
+watch(runtimeFormulaSignature, () => {
+  if (!runtimeFormulaCalculationEnabled.value)
+    return
+  runtimeFormulaFields.value.forEach(scheduleRuntimeFormulaCalculation)
+})
+
+watch(formData, () => {
+  persistActiveInlineFormTab({ dirty: true })
+  scheduleOfflineDraftSave()
+}, { deep: true })
+
+watch(childFormData, () => {
+  persistActiveInlineFormTab({ dirty: true })
+  scheduleOfflineDraftSave()
+}, { deep: true })
+
+watch([
+  () => stableSerialize(props.offlineDraft || {}),
+  () => String(userStore.tenantId || ''),
+  () => String(userStore.userId || ''),
+], refreshOfflineFormRuntime, { immediate: true })
+
+watch(detailActiveTab, () => {
+  persistActiveInlineFormTab()
+})
+
+const resolvedFormOnlyTitle = computed(() => props.formOnlyTitle || props.addButtonText || localizeLabel('单据填报'))
+
+const resolvedEditFormClass = computed(() => [
+  'ai-crud-edit-form',
+  props.editFormClass,
+].filter(Boolean))
+
+/**
+ * 计算横向滚动宽度
+ * 如果没有设置 scrollX，自动计算所有列的宽度总和
+ */
+const DEFAULT_SELECTION_COLUMN_WIDTH = 48
+const DEFAULT_EXPAND_COLUMN_WIDTH = 48
+const DEFAULT_ACTION_COLUMN_WIDTH = 180
+const DEFAULT_DATA_COLUMN_WIDTH = 120
+const TABLE_SCROLL_X_BUFFER = 24
+
+const computedScrollX = computed(() => {
+  if (props.scrollX !== undefined) {
+    return props.scrollX
+  }
+
+  if (!tableColumns.value.length) {
+    return undefined
+  }
+
+  let totalWidth = props.hideSelection ? 0 : DEFAULT_SELECTION_COLUMN_WIDTH
+  tableColumns.value.forEach((col) => {
+    const width = resolveColumnWidth(col.width ?? col.minWidth)
+    if (width > 0) {
+      totalWidth += width
+      return
+    }
+    if (col.type === 'expand') {
+      totalWidth += DEFAULT_EXPAND_COLUMN_WIDTH
+      return
+    }
+    if (isActionColumnConfig(col)) {
+      totalWidth += DEFAULT_ACTION_COLUMN_WIDTH
+      return
+    }
+    totalWidth += DEFAULT_DATA_COLUMN_WIDTH
+  })
+
+  return totalWidth > 0 ? totalWidth + TABLE_SCROLL_X_BUFFER : undefined
+})
+
+function resolveColumnWidth(value) {
+  if (typeof value === 'number')
+    return value
+  if (typeof value !== 'string')
+    return 0
+  const matched = value.trim().match(/^(\d+(?:\.\d+)?)px?$/i)
+  return matched ? Number(matched[1]) : 0
+}
+
+/**
+ * 表格高度交给外层 flex 容器和 Naive flex-height 处理，避免页面级滚动条。
+ */
+const computedMaxHeight = computed(() => {
+  if (props.maxHeight !== undefined) {
+    return props.maxHeight
+  }
+  return undefined
+})
+
+/*
+ * 页面高度自愈。
+ *
+ * 表格依赖一条完整的 flex 高度链：
+ * .ai-crud-page(height:100%) -> .ai-crud-main(flex:1) -> .ai-crud-table(flex:1,min-height:0)
+ * -> .ai-table-wrapper(height:100%) -> n-data-table(flex-height)。
+ * 链上任意一层高度是 auto（放进 n-tab-pane、n-card 内容区、未写高度的 div 等），
+ * height:100% 就退化成 auto，表格体高度塌陷并被 overflow:hidden 裁掉，
+ * 表现为「接口有数据但页面看不见行」。
+ *
+ * 这里挂载后探测父容器高度是否由内容决定：是则说明链路断在父级，
+ * 用视口剩余空间接管自身高度让链路重新闭合，而不要求每个调用页面手工补父容器样式。
+ */
+/** 页面底部留白，避免顶出外层滚动条 */
+const HEIGHT_FALLBACK_BOTTOM_GAP = 16
+/** 视口剩余空间低于此值时不再强行拉高，交给外层滚动 */
+const HEIGHT_FALLBACK_MIN_HEIGHT = 320
+/** 探测父容器高度变化的容差，规避亚像素误差 */
+const HEIGHT_PROBE_TOLERANCE = 8
+/** 这些容器自带确定高度或需要内容驱动高度，不接管：弹窗、抽屉、低代码栅格 */
+const HEIGHT_FALLBACK_EXCLUDE_SELECTOR = '.n-modal, .n-drawer-content, .ai-crud-preview'
+
+const crudRootRef = ref(null)
+const fallbackPageHeight = ref(0)
+let heightResizeObserver = null
+let heightMeasureRaf = null
+let heightProbeDone = false
+
+const pageHeightStyle = computed(() => (
+  fallbackPageHeight.value > 0 ? { height: `${fallbackPageHeight.value}px` } : null
+))
+
+/**
+ * 探测父容器高度是否由内容决定。
+ * 把自身临时隐藏后父容器明显变矮，说明父容器没有确定高度（height 为 auto），
+ * 此时子元素的 height:100% 会退化成 auto，高度链断裂。
+ * 父容器若由外层 flex 或显式高度撑开，隐藏子元素不会改变其高度。
+ */
+function isParentHeightContentDriven(el) {
+  const parent = el.parentElement
+  if (!parent)
+    return false
+  const heightWithSelf = parent.clientHeight
+  el.style.setProperty('display', 'none')
+  const heightWithoutSelf = parent.clientHeight
+  el.style.removeProperty('display')
+  return heightWithoutSelf < heightWithSelf - HEIGHT_PROBE_TOLERANCE
+}
+
+function measurePageHeight() {
+  const el = crudRootRef.value
+  // formOnly 是文档流布局；显式传了 maxHeight 时表格自带确定高度，都无需接管
+  if (!el || props.formOnly || props.maxHeight !== undefined)
+    return
+  // 隐藏状态（如未激活的 n-tab-pane）测不到真实位置，等可见后由 ResizeObserver 再触发
+  if (!el.offsetParent)
+    return
+  if (el.closest(HEIGHT_FALLBACK_EXCLUDE_SELECTOR))
+    return
+
+  const expected = Math.round(
+    window.innerHeight - el.getBoundingClientRect().top - HEIGHT_FALLBACK_BOTTOM_GAP,
+  )
+  if (expected < HEIGHT_FALLBACK_MIN_HEIGHT)
+    return
+
+  // 已接管后只跟随视口更新数值，不再重复探测：
+  // 接管带来的高度变化会让探测结论反转，与 ResizeObserver 相互触发形成抖动
+  if (fallbackPageHeight.value > 0) {
+    fallbackPageHeight.value = expected
+    return
+  }
+  if (heightProbeDone)
+    return
+
+  heightProbeDone = true
+  if (isParentHeightContentDriven(el))
+    fallbackPageHeight.value = expected
+}
+
+function scheduleMeasurePageHeight() {
+  if (heightMeasureRaf)
+    cancelAnimationFrame(heightMeasureRaf)
+  heightMeasureRaf = requestAnimationFrame(() => {
+    heightMeasureRaf = null
+    measurePageHeight()
+  })
+}
+
+onMounted(() => {
+  nextTick(scheduleMeasurePageHeight)
+  if (typeof ResizeObserver !== 'undefined' && crudRootRef.value) {
+    heightResizeObserver = new ResizeObserver(scheduleMeasurePageHeight)
+    heightResizeObserver.observe(crudRootRef.value)
+  }
+  window.addEventListener('resize', scheduleMeasurePageHeight)
+})
+
+onBeforeUnmount(() => {
+  if (heightMeasureRaf) {
+    cancelAnimationFrame(heightMeasureRaf)
+    heightMeasureRaf = null
+  }
+  heightResizeObserver?.disconnect()
+  heightResizeObserver = null
+  window.removeEventListener('resize', scheduleMeasurePageHeight)
+})
+
+/**
+ * ==================== 方法 ====================
+ */
+
+/**
+ * 执行钩子函数
+ * @param {string} hookName - 钩子函数名
+ * @param {*} params - 参数
+ * @param {Function} success - 成功回调
+ * @returns {Promise} 处理后的钩子结果
+ */
+async function callHook(hookName, params, success) {
+  if (props[hookName] && typeof props[hookName] === 'function') {
+    const result = props[hookName](params)
+
+    // 如果是 Promise
+    if (result instanceof Promise) {
+      try {
+        const data = await result
+        return success ? success(data) : data
+      }
+      catch (error) {
+        console.error(`Hook ${hookName} error:`, error)
+        // 提交前 BLOCK 增强必须真正阻断保存，不能在异步失败后回退到原始表单继续提交。
+        if (hookName === 'beforeSubmit')
+          throw error
+        return success ? success(params) : params
+      }
+    }
+    else {
+      return success ? success(result) : result
+    }
+  }
+  else {
+    return success ? success(params) : params
+  }
+}
+
+/**
+ * 解析 API 配置
+ * @param {string} key - API 配置键名
+ * @param {string} defaultApi - 默认 API
+ * @param {string} defaultMethod - 默认请求方法
+ * @param {object} urlParams - URL 参数，用于替换 :id 等占位符
+ * @returns {object} { method, url }
+ */
+function parseApiConfig(key, defaultApi, defaultMethod = 'get', urlParams = {}) {
+  const apiConfigValue = props.apiConfig[key]
+  const normalizedUrlParams = normalizeUrlParams(urlParams)
+
+  if (apiConfigValue) {
+    const [method, url] = apiConfigValue.split('@')
+    const finalMethod = method === 'postEncrypt' ? method : method.toLowerCase()
+    let finalUrl = url
+    let hasPlaceholder = false
+    Object.keys(normalizedUrlParams).forEach((paramKey) => {
+      const paramValue = normalizedUrlParams[paramKey]
+      if (!isUsableKeyValue(paramValue)) {
+        return
+      }
+      if (finalUrl.includes(`:${paramKey}`)) {
+        hasPlaceholder = true
+        finalUrl = finalUrl.replaceAll(`:${paramKey}`, paramValue)
+      }
+      if (finalUrl.includes(`{${paramKey}}`)) {
+        hasPlaceholder = true
+        finalUrl = finalUrl.replaceAll(`{${paramKey}}`, paramValue)
+      }
+      if (paramKey === 'id' && /\/id(?=\/|$|\?)/.test(finalUrl)) {
+        hasPlaceholder = true
+        finalUrl = finalUrl.replace(/\/id(?=\/|$|\?)/g, `/${paramValue}`)
+      }
+    })
+    if (!hasPlaceholder && finalMethod === 'get' && Object.keys(normalizedUrlParams).length > 0) {
+      const paramValues = resolveUrlParamValues(normalizedUrlParams).join('/')
+      if (paramValues) {
+        finalUrl = `${finalUrl}/${paramValues}`
+      }
+    }
+    return { method: finalMethod, url: finalUrl }
+  }
+
+  return { method: defaultMethod, url: defaultApi }
+}
+
+function extractApiUrl(apiConfigValue) {
+  if (!apiConfigValue) {
+    return ''
+  }
+  const text = String(apiConfigValue)
+  const parts = text.split('@')
+  return parts.length > 1 ? parts.slice(1).join('@') : text
+}
+
+function normalizeUrlParams(urlParams = {}) {
+  const normalized = { ...(urlParams || {}) }
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  if (rowKey && isUsableKeyValue(normalized[rowKey]) && !isUsableKeyValue(normalized.id))
+    normalized.id = normalized[rowKey]
+  if (rowKey && isUsableKeyValue(normalized.id) && !isUsableKeyValue(normalized[rowKey]))
+    normalized[rowKey] = normalized.id
+  return normalized
+}
+
+function resolveUrlParamValues(urlParams = {}) {
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  if (rowKey && isUsableKeyValue(urlParams[rowKey]))
+    return [urlParams[rowKey]]
+  if (isUsableKeyValue(urlParams.id))
+    return [urlParams.id]
+  return Object.values(urlParams).filter(isUsableKeyValue)
+}
+
+function stableSerialize(value, seen = new WeakSet()) {
+  if (value === undefined)
+    return 'undefined'
+  if (typeof value === 'function' || typeof value === 'symbol')
+    return JSON.stringify(String(value))
+  if (value === null || typeof value !== 'object')
+    return JSON.stringify(value)
+  if (seen.has(value))
+    return '"[Circular]"'
+  seen.add(value)
+  if (Array.isArray(value)) {
+    const result = `[${value.map(item => stableSerialize(item, seen)).join(',')}]`
+    seen.delete(value)
+    return result
+  }
+  const keys = Object.keys(value).sort()
+  const result = `{${keys.map(key => `${JSON.stringify(key)}:${stableSerialize(value[key], seen)}`).join(',')}}`
+  seen.delete(value)
+  return result
+}
+
+function hasFilledSearchParams(params = {}) {
+  return Object.values(params || {}).some((value) => {
+    if (Array.isArray(value))
+      return value.length > 0
+    if (value && typeof value === 'object')
+      return Object.keys(value).length > 0
+    return value !== null && value !== undefined && value !== ''
+  })
+}
+
+function getNestedValue(source, path) {
+  if (!path)
+    return undefined
+  return String(path)
+    .split('.')
+    .filter(Boolean)
+    .reduce((value, key) => value?.[key], source)
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === '')
+    return undefined
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function extractListRows(payload, dataField, depth = 0) {
+  if (Array.isArray(payload))
+    return payload
+  if (!payload || typeof payload !== 'object' || depth > 4)
+    return []
+
+  const configuredRows = getNestedValue(payload, dataField)
+  if (Array.isArray(configuredRows))
+    return configuredRows
+
+  for (const key of ['records', 'list', 'rows', 'items']) {
+    if (Array.isArray(payload[key]))
+      return payload[key]
+  }
+
+  if (Array.isArray(payload.data))
+    return payload.data
+  if (payload.data && typeof payload.data === 'object')
+    return extractListRows(payload.data, dataField, depth + 1)
+
+  return []
+}
+
+function extractListTotal(payload, totalField, fallbackTotal = 0, depth = 0) {
+  if (Array.isArray(payload))
+    return payload.length
+  if (!payload || typeof payload !== 'object' || depth > 4)
+    return fallbackTotal
+
+  const configuredTotal = toFiniteNumber(getNestedValue(payload, totalField))
+  if (configuredTotal !== undefined)
+    return configuredTotal
+
+  for (const key of ['total', 'count', 'itemCount', 'totalCount']) {
+    const total = toFiniteNumber(payload[key])
+    if (total !== undefined)
+      return total
+  }
+
+  if (payload.data && typeof payload.data === 'object')
+    return extractListTotal(payload.data, totalField, fallbackTotal, depth + 1)
+
+  return fallbackTotal
+}
+
+/**
+ * 加载列表数据
+ */
+async function loadList() {
+  if (!customQueryPayload.value && !props.api && !props.apiConfig.list) {
+    console.warn('未配置 API 地址')
+    return
+  }
+
+  tableLoading.value = true
+
+  try {
+    // 构建请求参数
+    let params = {
+      ...searchParams.value,
+      ...props.publicParams,
+    }
+
+    // 分页参数
+    if (props.showPagination) {
+      if (props.listMethod === 'get') {
+        params = {
+          ...params,
+          ...props.publicQuery,
+          pageNum: pagination.value.page,
+          pageSize: pagination.value.pageSize,
+        }
+      }
+      else {
+        params.pageNum = pagination.value.page
+        params.pageSize = pagination.value.pageSize
+      }
+    }
+
+    // 调用 beforeLoadList 钩子
+    params = await callHook('beforeLoadList', params, data => data)
+
+    // 发送请求
+    let response
+    if (customQueryPayload.value && resolvedCustomQueryConfigKey.value) {
+      response = await customQueryExecute(resolvedCustomQueryConfigKey.value, {
+        ...resolveDefaultRequestSortParams(),
+        ...customQueryPayload.value,
+        pageNum: pagination.value.page,
+        pageSize: pagination.value.pageSize,
+      }, {
+        globalLoading: false,
+      })
+    }
+    else {
+      // 解析 API
+      const { method, url } = parseApiConfig('list', props.api, props.listMethod)
+
+      // 确定使用哪种请求方法
+      let requestMethod = method
+      // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
+      const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+      if (useEncrypt) {
+        requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+      }
+      else {
+        requestMethod = method.toLowerCase()
+      }
+
+      if (useEncrypt && requestMethod === 'postEncrypt') {
+        // 使用加密请求
+        response = await postEncrypt(url, params, { globalLoading: false })
+      }
+      else {
+        // 使用普通请求
+        const requestConfig = {
+          method: requestMethod,
+          url,
+          globalLoading: false,
+        }
+
+        if (requestMethod === 'get') {
+          requestConfig.params = params
+        }
+        else {
+          requestConfig.data = params
+          requestConfig.params = props.publicQuery
+        }
+
+        response = await request(requestConfig)
+      }
+    }
+
+    // 提取数据
+    let list = []
+    let total = 0
+
+    const responseData = response?.data ?? response
+    list = extractListRows(responseData, props.listDataField)
+    total = extractListTotal(responseData, props.listTotalField, list.length)
+
+    // 调用 beforeRenderList 钩子
+    list = await callHook('beforeRenderList', list, data => data)
+
+    // 列表动作需要按记录读取流程运行态。否则“发起主流程”只会依赖静态
+    // 配置，流程启动后仍会留在操作列里，也无法正确展示流程状态。
+    list = await enrichDocumentRuntimeRows(list)
+
+    // 更新数据
+    dataSource.value = list
+    pagination.value.itemCount = total
+
+    emit('load-list-success', { list, total })
+  }
+  catch (error) {
+    console.error('加载列表失败:', error)
+    window.$message.error(localizeLabel('加载数据失败'))
+    emit('load-list-error', error)
+  }
+  finally {
+    tableLoading.value = false
+  }
+}
+
+async function enrichDocumentRuntimeRows(list = []) {
+  const objectCode = String(props.businessObjectCode || '').trim()
+  const rows = Array.isArray(list) ? list : []
+  if (!objectCode || !rows.length)
+    return rows
+  const recordIds = rows.map(row => resolveRowKeyValue(row)).filter(isUsableKeyValue)
+  if (!recordIds.length)
+    return rows
+  try {
+    const response = await businessDocumentRuntimeBatch(objectCode, recordIds)
+    const payload = response?.data ?? response ?? {}
+    const runtimeMap = payload && typeof payload === 'object' ? payload : {}
+    return rows.map((row) => {
+      const key = String(resolveRowKeyValue(row))
+      const runtime = runtimeMap[key] || runtimeMap[resolveRowKeyValue(row)]
+      if (!runtime)
+        return row
+      return {
+        ...row,
+        _documentRuntime: runtime,
+        _runtimeActions: Array.isArray(runtime.runtimeActions) ? runtime.runtimeActions : [],
+        _runtimeObjectCode: objectCode,
+      }
+    })
+  }
+  catch (error) {
+    // 流程运行态不是列表数据本身，接口异常不能阻断普通 CRUD 列表。
+    console.warn('[AiCrudPage] 加载列表流程运行态失败:', error?.message || error)
+    return rows
+  }
+}
+
+function resolveDefaultRequestSortParams() {
+  const orderByColumn = props.publicParams?.orderByColumn
+  const isAsc = props.publicParams?.isAsc
+  if (!orderByColumn && !isAsc)
+    return {}
+  return {
+    ...(orderByColumn ? { orderByColumn } : {}),
+    ...(isAsc ? { isAsc } : {}),
+  }
+}
+
+/**
+ * 搜索
+ */
+async function handleSearch(params) {
+  // 调用 beforeSearch 钩子
+  const processedParams = await callHook('beforeSearch', params, data => data)
+
+  // 如果钩子返回 false，中断搜索
+  if (processedParams === false) {
+    return
+  }
+
+  searchParams.value = { ...processedParams }
+  pagination.value.page = 1
+  loadList()
+}
+
+/**
+ * 重置
+ */
+function handleReset() {
+  searchParams.value = {}
+  pagination.value.page = 1
+  loadList()
+}
+
+/**
+ * 刷新列表
+ */
+function handleRefresh() {
+  loadList()
+}
+
+function handleSearchToggle(visible) {
+  searchPanelVisible.value = visible
+}
+
+function handleApplyCustomQuery(payload) {
+  customQueryPayload.value = payload
+  customQueryFields.value = payload?.fields || []
+  if (payload?.renderMode) {
+    activeRenderMode.value = payload.renderMode
+  }
+  pagination.value.page = 1
+  loadList()
+}
+
+function handleClearCustomQuery() {
+  customQueryPayload.value = null
+  customQueryFields.value = []
+  activeRenderMode.value = props.renderMode || 'table'
+  pagination.value.page = 1
+  loadList()
+}
+
+/**
+ * 列表/卡片渲染模式切换
+ */
+function handleRenderModeChange(mode) {
+  activeRenderMode.value = mode
+  emit('render-mode-change', mode)
+}
+
+/**
+ * 翻页
+ */
+function handlePageChange(page) {
+  pagination.value.page = page
+  loadList()
+}
+
+/**
+ * 改变每页条数
+ */
+function handlePageSizeChange(pageSize) {
+  pagination.value.pageSize = pageSize
+  pagination.value.page = 1
+  loadList()
+}
+
+/**
+ * 选中项变化
+ */
+watch(selectedKeys, (newKeys) => {
+  const rows = tableRef.value?.getCheckedRows() || []
+  emit('selection-change', { keys: newKeys, rows })
+})
+
+watch(
+  () => props.renderMode,
+  (mode) => {
+    if (!customQueryPayload.value) {
+      activeRenderMode.value = mode || 'table'
+    }
+  },
+)
+
+watch(
+  () => props.showSearch,
+  (visible) => {
+    searchPanelVisible.value = visible !== false
+  },
+)
+
+watch(
+  () => props.formOnly,
+  (value, oldValue) => {
+    if (value && !oldValue) {
+      handleAdd()
+      return
+    }
+    if (!value && oldValue && !props.lazy)
+      loadList()
+  },
+)
+
+/**
+ * 统一规范化编辑表单回填数据
+ * - number/inputNumber/input-number：字符串 → 数字
+ * - select/radio/checkbox：数字 → 字符串（匹配字典选项的 string value）
+ */
+function normalizeEditData(data) {
+  if (!data || typeof data !== 'object')
+    return data
+  const result = {}
+  for (const [key, value] of Object.entries(data)) {
+    const fieldConfig = props.editSchema.find(f => f.field === key)
+    if (!fieldConfig) {
+      result[key] = value
+      continue
+    }
+    if (isNumberFieldType(fieldConfig.type)) {
+      // 数字字段：字符串转数字
+      if (typeof value === 'string') {
+        result[key] = Number.parseFloat(value)
+      }
+      else if (value === null || value === undefined) {
+        result[key] = 0
+      }
+      else {
+        result[key] = value
+      }
+    }
+    else if (['select', 'radio', 'checkbox'].includes(fieldConfig.type)) {
+      // 字典选择字段：根据 options 的 value 类型或 valueType 配置决定类型转换
+      const isNumberOption = fieldConfig.props?.options?.some?.(o => typeof o.value === 'number')
+        || fieldConfig.valueType === 'number'
+      if (isNumberOption) {
+        // options 的 value 是数字类型，保留数字类型
+        if (typeof value === 'string') {
+          result[key] = Number.parseFloat(value)
+        }
+        else if (value === null || value === undefined) {
+          result[key] = 0
+        }
+        else {
+          result[key] = value
+        }
+      }
+      else {
+        // 默认：数字转字符串
+        if (typeof value === 'number') {
+          result[key] = String(value)
+        }
+        else {
+          result[key] = value
+        }
+      }
+    }
+    else {
+      result[key] = value
+    }
+  }
+  return result
+}
+
+function isMasterDetailPayload(data) {
+  return data && typeof data === 'object' && ('main' in data || 'children' in data)
+}
+
+function resolveChildKey(child) {
+  return child.key || child.modelCode || child.tableName || 'children'
+}
+
+function buildInitialChildrenData() {
+  const result = {}
+  visibleChildrenConfig.value.forEach((child) => {
+    result[resolveChildKey(child)] = []
+  })
+  return result
+}
+
+function normalizeChildrenData(children) {
+  const source = children && typeof children === 'object' ? children : {}
+  const result = {}
+  visibleChildrenConfig.value.forEach((child) => {
+    const key = resolveChildKey(child)
+    result[key] = Array.isArray(source[key]) ? source[key] : []
+  })
+  return result
+}
+
+function applyDetailData(data) {
+  if (hasChildrenConfig.value && isMasterDetailPayload(data)) {
+    formData.value = normalizeEditData({ ...resolveFormDefaultValues(), ...(data.main || {}) })
+    childFormData.value = normalizeChildrenData(data.children)
+    return
+  }
+  formData.value = normalizeEditData({ ...resolveFormDefaultValues(), ...(data || {}) })
+  childFormData.value = buildInitialChildrenData()
+}
+
+function buildMasterDetailSubmitData(data) {
+  if (!hasChildrenConfig.value) {
+    return data
+  }
+  const payload = isMasterDetailPayload(data)
+    ? {
+        main: { ...(data.main || {}) },
+        children: normalizeChildrenData(data.children),
+      }
+    : {
+        main: { ...(data || {}) },
+        children: childFormRef.value?.getValue?.() || childFormData.value || {},
+      }
+  if (modalStatus.value === 'edit') {
+    const key = typeof props.rowKey === 'string' ? props.rowKey : 'id'
+    const idValue = payload.main?.[key] ?? currentRow.value?.[key]
+    if (idValue !== undefined && idValue !== null) {
+      payload.main[key] = idValue
+    }
+  }
+  return payload
+}
+
+function cloneInlineFormValue(value) {
+  if (value === null || value === undefined || typeof value !== 'object')
+    return value
+  try {
+    if (typeof structuredClone === 'function')
+      return structuredClone(value)
+  }
+  catch {}
+  try {
+    return JSON.parse(JSON.stringify(value))
+  }
+  catch {
+    return Array.isArray(value) ? [...value] : { ...value }
+  }
+}
+
+function buildInlineRecordTabKey(status, row) {
+  const idValue = resolveRowKeyValue(row)
+  if (!isUsableKeyValue(idValue))
+    return ''
+  return `${status}:${idValue}`
+}
+
+function findReusableInlineFormTab(status, row) {
+  if (!usesInlineFormWorkspace.value || !isTabWorkspaceMode.value || status === 'add')
+    return null
+  if (!resolvedTabWorkspace.value.reuseRecordTab)
+    return null
+  const key = buildInlineRecordTabKey(status, row)
+  if (!key)
+    return null
+  return inlineFormTabs.value.find(tab => tab.key === key) || null
+}
+
+function activateReusableInlineFormTab(status, row) {
+  const tab = findReusableInlineFormTab(status, row)
+  if (!tab)
+    return false
+  handleInlineFormTabChange(tab.key)
+  return true
+}
+
+function buildInlineFormTabKey(status, row) {
+  if (!isTabWorkspaceMode.value)
+    return 'flat'
+  if (status !== 'add') {
+    const reusableKey = buildInlineRecordTabKey(status, row)
+    if (reusableKey)
+      return reusableKey
+  }
+  inlineFormTabSequence += 1
+  return `${status || 'form'}:${inlineFormTabSequence}`
+}
+
+function openFormContainer(status, title, row = null, context = {}) {
+  if (!usesInlineFormWorkspace.value || props.formOnly) {
+    fieldEventLoadToken.value += 1
+    modalVisible.value = true
+    return true
+  }
+  const existing = findReusableInlineFormTab(status, row)
+  if (existing) {
+    handleInlineFormTabChange(existing.key)
+    return true
+  }
+  if (isTabWorkspaceMode.value && inlineFormTabs.value.length >= resolvedTabWorkspace.value.maxTabs) {
+    window.$message.warning(t('customer.maxFormTabs', { value0: resolvedTabWorkspace.value.maxTabs }))
+    return false
+  }
+
+  const tab = {
+    key: buildInlineFormTabKey(status, row),
+    status,
+    title,
+    row: cloneInlineFormValue(row),
+    context: cloneInlineFormValue(context),
+    formData: cloneInlineFormValue(formData.value || {}),
+    childFormData: cloneInlineFormValue(childFormData.value || {}),
+    detailRuntime: cloneInlineFormValue(detailRuntime.value),
+    detailActiveTab: detailActiveTab.value,
+    offlineDraftId: offlineDraftId.value,
+    offlineBaseRecordVersion: offlineBaseRecordVersion.value,
+    offlineDraftNotice: offlineDraftNotice.value,
+    dirty: false,
+  }
+  if (isTabWorkspaceMode.value) {
+    inlineFormTabs.value = [...inlineFormTabs.value, tab]
+    activeInlineWorkspaceKey.value = tab.key
+  }
+  else {
+    inlineFormTabs.value = [tab]
+  }
+  activeInlineFormTabKey.value = tab.key
+  fieldEventLoadToken.value += 1
+  hydrateInlineFormTab(tab)
+  return true
+}
+
+function hydrateInlineFormTab(tab) {
+  if (!tab)
+    return
+  inlineFormHydrating.value = true
+  modalStatus.value = tab.status || ''
+  modalTitle.value = tab.title || ''
+  currentRow.value = cloneInlineFormValue(tab.row)
+  detailRuntime.value = cloneInlineFormValue(tab.detailRuntime)
+  detailActiveTab.value = tab.detailActiveTab || 'business'
+  offlineDraftId.value = tab.offlineDraftId || ''
+  offlineBaseRecordVersion.value = tab.offlineBaseRecordVersion || ''
+  offlineDraftNotice.value = tab.offlineDraftNotice || ''
+  formData.value = cloneInlineFormValue(tab.formData || {})
+  childFormData.value = cloneInlineFormValue(tab.childFormData || {})
+  nextTick(() => {
+    formRef.value?.restoreValidation()
+    inlineFormHydrating.value = false
+  })
+}
+
+function persistActiveInlineFormTab({ dirty = false } = {}) {
+  if (!usesInlineFormWorkspace.value || inlineFormHydrating.value)
+    return
+  const tab = activeInlineFormTab.value
+  if (!tab)
+    return
+  tab.formData = cloneInlineFormValue(formData.value || {})
+  tab.childFormData = cloneInlineFormValue(childFormData.value || {})
+  tab.detailRuntime = cloneInlineFormValue(detailRuntime.value)
+  tab.detailActiveTab = detailActiveTab.value
+  tab.offlineDraftId = offlineDraftId.value
+  tab.offlineBaseRecordVersion = offlineBaseRecordVersion.value
+  tab.offlineDraftNotice = offlineDraftNotice.value
+  if (dirty)
+    tab.dirty = true
+}
+
+function markActiveInlineFormClean() {
+  const tab = activeInlineFormTab.value
+  if (!tab)
+    return
+  persistActiveInlineFormTab({ dirty: false })
+  tab.dirty = false
+}
+
+function handleInlineFormTabChange(key) {
+  if (!key)
+    return
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  const tab = inlineFormTabs.value.find(item => item.key === key)
+  if (!tab)
+    return
+  activeInlineWorkspaceKey.value = key
+  if (key === activeInlineFormTabKey.value) {
+    hydrateInlineFormTab(tab)
+    return
+  }
+  activeInlineFormTabKey.value = key
+  hydrateInlineFormTab(tab)
+}
+
+function handleInlineWorkspaceListTab() {
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  activeInlineWorkspaceKey.value = INLINE_WORKSPACE_LIST_KEY
+  resetOfflineDraftSession()
+}
+
+function inlineFormTabTitle(tab) {
+  return tab?.title || localizeLabel('表单')
+}
+
+function closeInlineFormTab(key = activeInlineFormTabKey.value, force = false) {
+  const tab = inlineFormTabs.value.find(item => item.key === key)
+  if (!tab)
+    return
+  if (!force && tab.dirty) {
+    window.$dialog.warning({
+      get title() {
+        return localizeLabel('关闭录入页签')
+      },
+      get content() { return localizeLabel('当前页签存在未保存变更，确定关闭吗？') },
+      get positiveText() { return localizeLabel('关闭') },
+      get negativeText() { return localizeLabel('取消') },
+      onPositiveClick: () => closeInlineFormTab(key, true),
+    })
+    return
+  }
+
+  if (activeInlineFormTabKey.value === key) {
+    flushOfflineDraftSave()
+    persistActiveInlineFormTab()
+  }
+
+  const listPaneActive = isTabWorkspaceMode.value && activeInlineWorkspaceKey.value === INLINE_WORKSPACE_LIST_KEY
+  const workspacePaneActive = activeInlineWorkspaceKey.value === key
+  const index = inlineFormTabs.value.findIndex(item => item.key === key)
+  inlineFormTabs.value = inlineFormTabs.value.filter(item => item.key !== key)
+  if (activeInlineFormTabKey.value !== key) {
+    if (workspacePaneActive)
+      activeInlineWorkspaceKey.value = INLINE_WORKSPACE_LIST_KEY
+    return
+  }
+  const nextTab = inlineFormTabs.value[Math.max(0, index - 1)] || inlineFormTabs.value[0]
+  if (nextTab) {
+    activeInlineFormTabKey.value = nextTab.key
+    if (!listPaneActive)
+      activeInlineWorkspaceKey.value = nextTab.key
+    hydrateInlineFormTab(nextTab)
+  }
+  else {
+    activeInlineFormTabKey.value = ''
+    activeInlineWorkspaceKey.value = INLINE_WORKSPACE_LIST_KEY
+    modalStatus.value = ''
+    modalTitle.value = ''
+    currentRow.value = null
+    detailRuntime.value = null
+    resetOfflineDraftSession()
+    formData.value = {}
+    childFormData.value = {}
+    emit('modal-close')
+  }
+}
+
+function handleCloseActiveInlineFormTab() {
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  closeInlineFormTab()
+}
+
+function handleInlineFormCancel() {
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  closeInlineFormTab()
+}
+
+function handleInlineFormSubmitSuccess(response, isEdit) {
+  const tab = activeInlineFormTab.value
+  if (!tab)
+    return
+  const previousKey = tab.key
+  if (!isEdit) {
+    const savedRecord = response?.data && typeof response.data === 'object' ? response.data : response
+    const idValue = resolveRowKeyValue(savedRecord || {})
+    if (isUsableKeyValue(idValue)) {
+      tab.status = 'edit'
+      tab.row = cloneInlineFormValue(savedRecord)
+      tab.title = modalTitle.value === props.addButtonText ? localizeLabel('编辑') : tab.title
+      tab.key = isTabWorkspaceMode.value ? `edit:${idValue}` : tab.key
+      activeInlineFormTabKey.value = tab.key
+      if (activeInlineWorkspaceKey.value === previousKey)
+        activeInlineWorkspaceKey.value = tab.key
+      modalStatus.value = 'edit'
+      currentRow.value = cloneInlineFormValue(savedRecord)
+    }
+  }
+  markActiveInlineFormClean()
+  if (resolvedTabWorkspace.value.closeAfterSave)
+    closeInlineFormTab(tab.key, true)
+}
+
+/**
+ * 新增
+ */
+async function handleAdd(defaultValues = null, options = {}) {
+  if (!hasActionPermission('add'))
+    return false
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  resetOfflineDraftSession()
+  formOnlySubmitted.value = false
+  const presetValues = isPlainRecord(defaultValues)
+    ? defaultValues
+    : null
+  modalTitle.value = options.title || props.addButtonText
+  modalStatus.value = 'add'
+  currentRow.value = null
+  detailRuntime.value = null
+  detailActiveTab.value = 'business'
+
+  // 初始化表单数据，设置默认值
+  const initialData = {}
+  props.editSchema.forEach((field) => {
+    if (field.field) {
+      initialData[field.field] = field.defaultValue ?? null
+    }
+  })
+
+  // 调用 beforeRenderForm 钩子（新增时）
+  const formDataFromHook = await callHook('beforeRenderForm', null, data => data)
+
+  // 合并默认值和钩子返回的数据
+  if (formDataFromHook && typeof formDataFromHook === 'object') {
+    if (hasChildrenConfig.value && isMasterDetailPayload(formDataFromHook)) {
+      formData.value = { ...initialData, ...resolveFormDefaultValues(), ...(formDataFromHook.main || {}), ...(presetValues || {}) }
+      childFormData.value = normalizeChildrenData(formDataFromHook.children)
+    }
+    else {
+      formData.value = { ...initialData, ...resolveFormDefaultValues(), ...formDataFromHook, ...(presetValues || {}) }
+      childFormData.value = buildInitialChildrenData()
+    }
+  }
+  else {
+    formData.value = { ...initialData, ...resolveFormDefaultValues(), ...(presetValues || {}) }
+    childFormData.value = buildInitialChildrenData()
+  }
+
+  if (!presetValues)
+    await restoreOfflineDraft('')
+
+  if (props.formOnly) {
+    fieldEventLoadToken.value += 1
+  }
+  else if (!openFormContainer('add', modalTitle.value, null, options)) {
+    return
+  }
+
+  await nextTick()
+  formRef.value?.restoreValidation()
+  refreshRuntimeFormulas(0)
+  markActiveInlineFormClean()
+
+  emit('add', { defaults: presetValues, context: options })
+  emit('modal-open', { status: 'add', row: null, defaults: presetValues, context: options })
+}
+
+async function handleAddChild(row) {
+  if (!hasActionPermission('add'))
+    return false
+  if (!row) {
+    window.$message.warning(localizeLabel('缺少父级数据，无法添加下级'))
+    return
+  }
+  const parentField = resolveTreeParentField()
+  const parentValue = resolveTreeParentValue(row)
+  if (!isUsableKeyValue(parentValue)) {
+    window.$message.warning(t('customer.missingParent', { value0: parentField }))
+    return
+  }
+  await handleAdd({ [parentField]: parentValue }, { get title() {
+    return localizeLabel('新增下级')
+  }, parentRow: row })
+}
+
+function resolveTreeParentField() {
+  return props.treeConfig?.parentField || props.treeConfig?.filterField || 'parentId'
+}
+
+function resolveTreeParentValue(row = {}) {
+  const keyField = props.treeConfig?.keyField || (typeof props.rowKey === 'string' ? props.rowKey : 'id')
+  const rowKey = typeof props.rowKey === 'string' ? props.rowKey : ''
+  return row?.[keyField] ?? (rowKey ? row?.[rowKey] : undefined) ?? row?.id ?? row?.key ?? row?.targetValue
+}
+
+function isPlainRecord(value) {
+  if (!value || typeof value !== 'object')
+    return false
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
+/**
+ * 编辑
+ */
+async function handleEdit(row) {
+  if (!hasActionPermission('edit'))
+    return false
+  if (activateReusableInlineFormTab('edit', row)) {
+    emit('edit', row)
+    emit('modal-open', { status: 'edit', row })
+    return
+  }
+
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  resetOfflineDraftSession()
+
+  modalTitle.value = row?.__modalTitle || localizeLabel('编辑')
+  modalStatus.value = 'edit'
+  currentRow.value = row
+
+  // 调用 beforeRenderForm 钩子（编辑时）
+  const processedRow = await callHook('beforeRenderForm', row, data => data)
+  const renderRow = mergeHookRowWithOriginal(row, processedRow)
+
+  // 如果需要加载详情
+  if (props.loadDetailOnEdit) {
+    window.$loading.show(localizeLabel('加载中...'))
+    await loadDetail(renderRow)
+    window.$loading.close()
+  }
+  else {
+    // 调用 beforeRenderDetail 钩子
+    const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    applyDetailData(data)
+  }
+
+  // 编辑表单同样需要单据流程运行态，保证发起按钮在流程启动后立即隐藏，
+  // 且表单页与列表页使用同一条流程状态判断链路。
+  await loadDetailRuntime(renderRow)
+
+  offlineBaseRecordVersion.value = readOfflineRecordVersion(renderRow)
+  await restoreOfflineDraft(resolveRowKeyValue(row))
+
+  if (!openFormContainer('edit', modalTitle.value, row))
+    return
+  // 清除上一次潜留的表单校验状态
+  await nextTick()
+  formRef.value?.restoreValidation()
+  refreshRuntimeFormulas(0)
+  markActiveInlineFormClean()
+
+  emit('edit', row)
+  emit('modal-open', { status: 'edit', row })
+}
+
+/**
+ * 查看详情
+ */
+async function handleDetail(row) {
+  if (!hasActionPermission('detail'))
+    return false
+  if (activateReusableInlineFormTab('detail', row)) {
+    emit('detail', row)
+    emit('modal-open', { status: 'detail', row })
+    return
+  }
+
+  flushOfflineDraftSave()
+  persistActiveInlineFormTab()
+  resetOfflineDraftSession()
+
+  modalTitle.value = row?.__modalTitle || localizeLabel('查看详情')
+  modalStatus.value = 'detail'
+  currentRow.value = row
+  detailActiveTab.value = 'business'
+  detailRuntime.value = row?._documentRuntime || null
+
+  const processedRow = await callHook('beforeRenderForm', row, data => data)
+  const renderRow = mergeHookRowWithOriginal(row, processedRow)
+
+  if (props.loadDetailOnEdit) {
+    window.$loading.show(localizeLabel('加载中...'))
+    await loadDetail(renderRow)
+    window.$loading.close()
+  }
+  else {
+    const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    applyDetailData(data)
+  }
+
+  await loadDetailRuntime(renderRow)
+
+  if (!openFormContainer('detail', modalTitle.value, row))
+    return
+  await nextTick()
+  formRef.value?.restoreValidation()
+  markActiveInlineFormClean()
+
+  emit('detail', row)
+  emit('modal-open', { status: 'detail', row })
+}
+
+async function loadDetailRuntime(row) {
+  const objectCode = resolveRuntimeObjectCode({}, row)
+  const recordId = resolveRowKeyValue(row)
+  if (!objectCode || !recordId) {
+    return
+  }
+  detailRuntimeLoading.value = true
+  try {
+    const res = await request.get(`/ai/business/document/${objectCode}/${recordId}/runtime`, { needTip: false })
+    detailRuntime.value = res?.data || null
+  }
+  catch (error) {
+    if (!detailRuntime.value)
+      detailRuntime.value = null
+    console.warn('[AiCrudPage] 加载单据流程运行态失败:', error?.message || error)
+  }
+  finally {
+    detailRuntimeLoading.value = false
+  }
+}
+
+/**
+ * 加载详情
+ */
+async function loadDetail(row) {
+  confirmLoading.value = true
+
+  try {
+    const idValue = resolveRowKeyValue(row)
+    if (!isUsableKeyValue(idValue)) {
+      console.warn('[AiCrudPage] loadDetail id缺失', { rowKey: props.rowKey, rowKeys: Object.keys(row || {}).slice(0, 20), row })
+      window.$message.warning(t('customer.missingDetailKey', { value0: props.rowKey }))
+      confirmLoading.value = false
+      return
+    }
+    const { method, url } = parseApiConfig(
+      'detail',
+      `${props.api}/${idValue}`,
+      'get',
+      { id: idValue },
+    )
+
+    // 确定使用哪种请求方法
+    let requestMethod = method
+    // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
+    const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+    if (useEncrypt) {
+      requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+    }
+    else {
+      requestMethod = method.toLowerCase()
+    }
+
+    // 构建请求参数
+    const requestConfig = {
+      method: requestMethod,
+      url,
+    }
+
+    // 对于 POST 请求，如果 URL 中不包含 ID，则将主键作为 query 参数传递
+    const urlHasId = url.endsWith(`/${idValue}`) || url.includes(`/${idValue}?`) || url.includes(`/${idValue}/`)
+    if ((requestMethod === 'post' || requestMethod === 'postEncrypt') && !urlHasId) {
+      const idKey = props.rowKey
+      requestConfig.params = { [idKey]: idValue }
+    }
+
+    // 发送请求
+    let response
+    if (useEncrypt && requestMethod === 'postEncrypt') {
+      // 使用加密请求
+      response = await postEncrypt(url, {}, { params: requestConfig.params })
+    }
+    else {
+      // 使用普通请求
+      response = await request(requestConfig)
+    }
+
+    // 调用 beforeRenderDetail 钩子
+    const data = await callHook('beforeRenderDetail', response.data, data => data)
+    applyDetailData(data)
+  }
+  catch (error) {
+    console.error('加载详情失败:', error)
+    window.$message.error(localizeLabel('加载详情失败'))
+  }
+  finally {
+    confirmLoading.value = false
+  }
+}
+
+/**
+ * 删除
+ */
+async function handleDelete(row) {
+  if (!hasActionPermission('delete'))
+    return false
+  const rows = [row]
+  const key = resolveRowKeyValue(row)
+  if (!isUsableKeyValue(key)) {
+    console.warn('[AiCrudPage] delete id缺失', { rowKey: props.rowKey, rowKeys: Object.keys(row || {}).slice(0, 20), row })
+    window.$message.warning(t('customer.missingDeleteKey', { value0: props.rowKey }))
+    return
+  }
+  const keys = [key]
+
+  await performDelete(rows, keys, 'delete')
+}
+
+/**
+ * 批量删除
+ */
+async function handleBatchDelete() {
+  if (!hasActionPermission('batchDelete'))
+    return false
+  const rows = tableRef.value?.getCheckedRows() || []
+  const keys = selectedKeys.value
+
+  if (rows.length === 0) {
+    window.$message.warning(localizeLabel('请先选择要删除的数据'))
+    return
+  }
+
+  await performDelete(rows, keys, 'batchDelete')
+}
+
+/**
+ * 执行删除
+ */
+async function performDelete(rows, keys, actionKey) {
+  const shouldContinue = await callHook('beforeDelete', rows, result => result)
+  if (shouldContinue === false)
+    return
+
+  // 固定本次确认范围，不把后续选择变化当成本次删除结果。
+  const deleteKeys = [...keys]
+  const isBatchDelete = actionKey === 'batchDelete'
+
+  function readBatchResult(data) {
+    if (!data || !['successCount', 'failureCount', 'failedIds'].some(key => Object.hasOwn(data, key)))
+      return undefined
+    const { successCount, failureCount, failedIds } = data
+    const requestedIds = new Set(deleteKeys.map(String))
+    if (!Number.isInteger(successCount) || successCount < 0
+      || !Number.isInteger(failureCount) || failureCount < 0
+      || !Array.isArray(failedIds) || failedIds.some(id => typeof id !== 'string' || !requestedIds.has(id))
+      || new Set(failedIds).size !== failedIds.length || failedIds.length !== failureCount
+      || successCount + failureCount !== deleteKeys.length || requestedIds.size !== deleteKeys.length) {
+      return false
+    }
+    return { successCount, failureCount, failedIds: new Set(failedIds) }
+  }
+
+  async function sendDelete(urlParams, data) {
+    const { method, url } = parseApiConfig('delete', props.api, 'delete', urlParams)
+    const options = isBatchDelete ? { needTip: false } : {}
+    const response = method === 'postEncrypt'
+      ? await postEncrypt(url, data, options)
+      : await request({ method: method.toLowerCase(), url, ...(urlParams ? {} : { data }), ...options })
+    if (response?.silentAuthError || isAuthErrorCode(response?.code))
+      throw response
+    return response
+  }
+
+  window.$dialog.warning({
+    get title() {
+      return localizeLabel('确认删除')
+    },
+    content: t('customer.deleteRecords', { value0: deleteKeys.length }),
+    get positiveText() { return localizeLabel('删除') },
+    get negativeText() { return localizeLabel('取消') },
+    onPositiveClick: async () => {
+      if (!hasActionPermission(actionKey))
+        return false
+      const succeeded = new Set()
+      let deleteError
+      try {
+        const deleteApiConfig = props.apiConfig.delete
+        const hasIdPlaceholder = deleteApiConfig && [':id', `:${props.rowKey}`, '{id}', `{${props.rowKey}}`]
+          .some(placeholder => deleteApiConfig.includes(placeholder))
+        if (hasIdPlaceholder) {
+          for (const key of deleteKeys) {
+            try {
+              await sendDelete({ id: key }, key)
+              succeeded.add(key)
+            }
+            catch (error) {
+              deleteError ||= error
+              // 鉴权或传输故障立即停止；未执行项与失败项一起保留选择。
+              if (!isBatchDelete || isAuthErrorCode(error?.code) || error?.code === 'NETWORK_ERROR')
+                break
+            }
+          }
+        }
+        else {
+          try {
+            const response = await sendDelete(undefined, deleteKeys)
+            const result = isBatchDelete ? readBatchResult(response?.data) : undefined
+            if (result === false) {
+              deleteError = { code: 'INVALID_BATCH_DELETE_RESULT', message: localizeLabel('删除失败'), detail: { responseData: response } }
+            }
+            else {
+              deleteKeys.filter(key => !result?.failedIds.has(String(key))).forEach(key => succeeded.add(key))
+            }
+          }
+          catch (error) {
+            // 仅接受当前批删契约；未知错误、非法计数和范围外ID保持真实失败。
+            const result = isBatchDelete && error?.code === 500 && error?.error?.code === 500
+              && (error?.detail?.status === undefined || error.detail.status === 200)
+              ? readBatchResult(error.error.data)
+              : undefined
+            if (result && result.failureCount > 0) {
+              deleteKeys.filter(key => !result.failedIds.has(String(key))).forEach(key => succeeded.add(key))
+            }
+            else {
+              deleteError = error
+            }
+          }
+        }
+
+        if (succeeded.size > 0) {
+          const remainingKeys = deleteKeys.filter(key => !succeeded.has(key))
+          selectedKeys.value = remainingKeys
+          await loadList()
+          tableRef.value?.setCheckedKeys?.(remainingKeys)
+        }
+        if (deleteError)
+          throw deleteError
+        if (succeeded.size === deleteKeys.length) {
+          window.$message.success(localizeLabel('删除成功'))
+        }
+        else {
+          window.$message.warning(`${localizeLabel('删除成功')}：${succeeded.size}；${localizeLabel('删除失败')}：${deleteKeys.length - succeeded.size}`)
+        }
+      }
+      catch (error) {
+        console.error('删除失败:', error)
+        if (isBatchDelete) {
+          const message = error?.message || error?.error?.message || localizeLabel('删除失败')
+          resolveResError(error?.code, succeeded.size ? `${localizeLabel('删除成功')}：${succeeded.size}；${message}` : message, true, error?.detail)
+        }
+        else {
+          window.$message.error(localizeLabel('删除失败'))
+        }
+      }
+    },
+  })
+}
+
+/**
+ * 提交表单
+ */
+async function handleModalConfirm() {
+  if (isDetailMode.value) {
+    if (usesInlineFormWorkspace.value)
+      handleCloseActiveInlineFormTab()
+    else
+      modalVisible.value = false
+    return
+  }
+
+  if (!hasActionPermission(modalStatus.value === 'edit' ? 'edit' : 'add'))
+    return false
+
+  try {
+    await nextTick()
+    await formRef.value?.validate()
+    await childFormRef.value?.validate?.()
+
+    // 调用 beforeSubmit 钩子
+    const latestFormData = formRef.value?.getFormData?.() || formData.value
+    formData.value = latestFormData
+    let data = await callHook('beforeSubmit', { ...latestFormData, ...resolveSubmitDefaultParams() }, data => data)
+
+    if (data === false) {
+      return
+    }
+    data = buildMasterDetailSubmitData(data)
+    data = await callHook('afterBuildSubmitData', data, data => data)
+    if (data === false) {
+      return
+    }
+    // 统一处理时间戳，转换为标准日期格式
+    data = JSON.parse(JSON.stringify(data), (key, value) => {
+      // 判断是否是时间戳（数字且长度在10位（秒）到13位（毫秒）之间）
+      if (typeof value === 'number' && (value.toString().length === 10 || value.toString().length === 13)) {
+        const date = new Date(value.toString().length === 10 ? value * 1000 : value)
+        // 格式化为 yyyy-MM-dd HH:mm:ss
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const hours = String(date.getHours()).padStart(2, '0')
+        const minutes = String(date.getMinutes()).padStart(2, '0')
+        const seconds = String(date.getSeconds()).padStart(2, '0')
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+      }
+      return value
+    })
+
+    confirmLoading.value = true
+
+    const isEdit = modalStatus.value === 'edit'
+    if (!hasActionPermission(isEdit ? 'edit' : 'add'))
+      return false
+
+    // 新增时优先使用 apiConfig.add,其次使用 apiConfig.create
+    let createKey = 'add'
+    if (!isEdit) {
+      if (props.apiConfig.create) {
+        createKey = 'create'
+      }
+      else if (props.apiConfig.add) {
+        createKey = 'add'
+      }
+    }
+
+    const idValue = isEdit ? resolveRowKeyValue(currentRow.value) : null
+    if (isEdit && !isUsableKeyValue(idValue)) {
+      window.$message.warning(t('customer.missingEditKey', { value0: props.rowKey }))
+      return
+    }
+
+    if (offlineFormRuntime.value && isBrowserOffline()) {
+      const draft = saveOfflineDraft(data)
+      if (!draft)
+        throw new Error(offlineDraftNotice.value || localizeLabel('本地草稿保存失败'))
+      const intent = appendOfflineSubmitIntent(draft, data, isEdit, idValue)
+      offlineDraftNotice.value = intent
+        ? localizeLabel('当前网络不可用，已保存本地草稿和待提交意图。联网后请检查并重放。')
+        : localizeLabel('当前网络不可用，仅保存了本地草稿。联网后请手动提交。')
+      persistActiveInlineFormTab({ dirty: true })
+      window.$message.warning(offlineDraftNotice.value)
+      return
+    }
+
+    const { method, url } = parseApiConfig(
+      isEdit ? 'update' : createKey,
+      isEdit ? `${props.api}/${idValue}` : props.api,
+      isEdit ? 'put' : 'post',
+      isEdit ? { id: idValue } : {},
+    )
+
+    // 确定使用哪种请求方法
+    let requestMethod = method
+    // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
+    const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+    if (useEncrypt) {
+      requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+    }
+    else {
+      requestMethod = method.toLowerCase()
+    }
+
+    // 发送请求
+    let response
+    if (useEncrypt && requestMethod === 'postEncrypt') {
+      // 使用加密请求
+      response = await postEncrypt(url, data)
+    }
+    else {
+      // 使用普通请求
+      response = await request({ method: requestMethod, url, data })
+    }
+
+    clearOfflineDraftAfterSubmit()
+    window.$message.success(t('customer.saveSuccess', { value0: isEdit ? localizeLabel('编辑') : localizeLabel('新增') }))
+    if (props.formOnly) {
+      formOnlySubmitted.value = true
+    }
+    else if (usesInlineFormWorkspace.value) {
+      handleInlineFormSubmitSuccess(response, isEdit)
+    }
+    else {
+      modalVisible.value = false
+    }
+
+    await callHook('afterSubmit', { data, response, isEdit }, data => data)
+
+    // 触发提交成功事件
+    emit('submit-success', { data, response, isEdit })
+
+    if (!props.formOnly)
+      loadList()
+  }
+  catch (error) {
+    console.error('提交失败:', error)
+
+    // 前端表单校验失败时 AiForm 已完成滚动和高亮定位，这里不再弹出重复提示
+    if (Array.isArray(error) && error.length > 0) {
+      console.error('验证错误详情:', error)
+    }
+    else {
+      window.$message.error(error?.message || localizeLabel('提交失败'))
+    }
+
+    // 触发提交失败事件
+    emit('submit-error', { error, data: formData.value })
+  }
+  finally {
+    confirmLoading.value = false
+  }
+}
+
+/**
+ * 弹窗取消
+ */
+function handleModalCancel() {
+  modalVisible.value = false
+}
+
+/**
+ * 弹窗关闭后
+ */
+function handleModalClose() {
+  flushOfflineDraftSave()
+  modalStatus.value = ''
+  resetOfflineDraftSession()
+  formData.value = {}
+  childFormData.value = {}
+  currentRow.value = null
+  formRef.value?.restoreValidation()
+
+  emit('modal-close')
+}
+
+function resetFormOnly() {
+  formOnlySubmitted.value = false
+  handleAdd()
+}
+
+/**
+ * 显示导入弹窗
+ */
+function handleShowImport() {
+  if (!hasActionPermission('import'))
+    return false
+  importModalVisible.value = true
+}
+
+/**
+ * 执行导入请求，复用统一 axios 拦截器补齐认证和防重放头。
+ */
+async function executeImport(file, onProgress) {
+  if (!hasActionPermission('import'))
+    throw Object.assign(new Error(localizeLabel('暂无访问权限')), { code: 'CRUD_ACTION_PERMISSION_DENIED' })
+  const { method, url } = parseApiConfig('import', props.importApi, 'post')
+  const requestMethod = method === 'postEncrypt' ? 'post' : method.toLowerCase()
+  const formData = new FormData()
+  formData.append('file', file)
+
+  Object.entries(props.importData || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null)
+      formData.append(key, value)
+  })
+
+  const response = await request({
+    method: requestMethod,
+    url,
+    data: formData,
+    headers: props.importHeaders,
+    encrypt: false,
+    onUploadProgress: (event) => {
+      if (event.total)
+        onProgress?.(Math.round((event.loaded / event.total) * 100))
+    },
+  })
+  return response?.data || response
+}
+
+function handleImportSuccess() {
+  loadList()
+}
+
+/**
+ * 下载导入模板
+ */
+async function handleDownloadTemplate() {
+  if (!hasActionPermission('import'))
+    return false
+  if (!props.importTemplateUrl && !props.apiConfig.importTemplate) {
+    window.$message.warning(localizeLabel('未配置导入模板地址'))
+    return
+  }
+
+  try {
+    const { method, url } = parseApiConfig('importTemplate', props.importTemplateUrl, 'get')
+    const response = await request({
+      method: method === 'postEncrypt' ? 'post' : method.toLowerCase(),
+      url,
+      responseType: 'blob',
+      rawResponse: true,
+      encrypt: false,
+    })
+    downloadBlobResponse(response, props.exportFileName || localizeLabel('导入模板.xlsx'))
+  }
+  catch (error) {
+    console.error('下载导入模板失败:', error)
+    window.$message.error(error?.message || localizeLabel('下载导入模板失败'))
+  }
+}
+
+/**
+ * 导出
+ */
+async function handleExport() {
+  if (!hasActionPermission('export'))
+    return false
+  exportLoading.value = true
+  try {
+    const { method, url } = parseApiConfig('export', props.exportApi || props.api, 'post')
+
+    const params = {
+      ...searchParams.value,
+      ...props.publicParams,
+    }
+
+    // 确定使用哪种请求方法
+    let requestMethod = method
+    // 如果方法明确指定为 postEncrypt，则使用加密请求，不管 isEncrypt 属性
+    const useEncrypt = method === 'postEncrypt' || (props.isEncrypt && method !== 'get')
+    if (useEncrypt) {
+      requestMethod = method === 'postEncrypt' ? 'postEncrypt' : method.toLowerCase()
+    }
+    else {
+      requestMethod = method.toLowerCase()
+    }
+
+    // 发送请求
+    let response
+    if (useEncrypt && requestMethod === 'postEncrypt') {
+      response = await postEncrypt(url, params, { responseType: 'blob', rawResponse: true })
+    }
+    else {
+      response = await request({
+        method: requestMethod,
+        url,
+        data: requestMethod === 'get' ? undefined : params,
+        params: requestMethod === 'get' ? params : undefined,
+        responseType: 'blob',
+        rawResponse: true,
+        encrypt: false,
+      })
+    }
+
+    const asyncExportResult = await resolveAsyncExportResult(response)
+    if (asyncExportResult?.async) {
+      window.$message.success(asyncExportResult.message || localizeLabel('导出任务已提交'))
+      activeExportTaskId.value = asyncExportResult.taskId
+      exportTaskDrawerVisible.value = true
+      exportTaskPagination.value.page = 1
+      await loadExportTasks()
+      pollExportTask(asyncExportResult.taskId)
+      return
+    }
+
+    downloadBlobResponse(response, props.exportFileName || localizeLabel('导出数据.xlsx'))
+    window.$message.success(localizeLabel('导出成功'))
+  }
+  catch (error) {
+    console.error('导出失败:', error)
+    window.$message.error(localizeLabel('导出失败'))
+  }
+  finally {
+    exportLoading.value = false
+  }
+}
+
+async function resolveAsyncExportResult(response) {
+  if (response?.data?.async !== undefined) {
+    return response.data
+  }
+  if (response?.async !== undefined) {
+    return response
+  }
+  const blob = response?.data instanceof Blob ? response.data : response instanceof Blob ? response : null
+  if (blob?.type?.includes('json')) {
+    try {
+      const text = await blob.text()
+      if (!text) {
+        return null
+      }
+      const parsed = JSON.parse(text)
+      if (parsed?.data?.async !== undefined) {
+        return parsed.data
+      }
+      if (parsed?.async !== undefined) {
+        return parsed
+      }
+    }
+    catch (error) {
+      console.warn('解析异步导出响应失败:', error)
+    }
+  }
+  return null
+}
+
+async function handleOpenExportTasks() {
+  if (!hasActionPermission('export'))
+    return false
+  if (!hasExportTaskApi.value) {
+    window.$message.warning(localizeLabel('当前导出接口不支持任务查询'))
+    return
+  }
+  exportTaskDrawerVisible.value = true
+  exportTaskPagination.value.page = 1
+  await loadExportTasks()
+}
+
+async function loadExportTasks() {
+  if (!hasExportTaskApi.value) {
+    return
+  }
+  exportTaskLoading.value = true
+  try {
+    const fallbackUrl = `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks`
+    const { method, url } = props.apiConfig?.exportTasks
+      ? parseApiConfig('exportTasks', '', 'get')
+      : { method: 'get', url: fallbackUrl }
+    const response = await request({
+      method,
+      url,
+      params: {
+        pageNum: exportTaskPagination.value.page,
+        pageSize: exportTaskPagination.value.pageSize,
+      },
+    })
+    const page = response?.data || {}
+    exportTasks.value = page.records || []
+    exportTaskPagination.value.itemCount = page.total || 0
+  }
+  catch (error) {
+    console.error('加载导出任务失败:', error)
+    window.$message.error(error?.message || localizeLabel('加载导出任务失败'))
+  }
+  finally {
+    exportTaskLoading.value = false
+  }
+}
+
+async function pollExportTask(taskId) {
+  clearExportTaskPollTimer()
+  if (!taskId || !hasExportTaskApi.value) {
+    return
+  }
+
+  const fetchTask = async () => {
+    try {
+      const fallbackUrl = `/ai/crud/${resolvedExportTaskConfigKey.value}/export/tasks/${taskId}`
+      const { method, url } = props.apiConfig?.exportTask
+        ? parseApiConfig('exportTask', '', 'get', { taskId })
+        : { method: 'get', url: fallbackUrl }
+      const response = await request({
+        method,
+        url,
+        needTip: false,
+      })
+      const task = response?.data
+      if (!task) {
+        return
+      }
+      upsertExportTask(task)
+      if (isExportTaskRunning(task)) {
+        exportTaskPollTimer.value = window.setTimeout(fetchTask, 2000)
+      }
+      else if (task.status === 'SUCCESS') {
+        window.$message.success(localizeLabel('导出任务已完成'))
+      }
+      else if (task.status === 'FAILED') {
+        window.$message.error(task.errorMessage || localizeLabel('导出任务失败'))
+      }
+    }
+    catch (error) {
+      console.warn('轮询导出任务失败:', error)
+    }
+  }
+
+  await fetchTask()
+}
+
+function upsertExportTask(task) {
+  const index = exportTasks.value.findIndex(item => String(item.id) === String(task.id))
+  if (index >= 0) {
+    exportTasks.value.splice(index, 1, task)
+  }
+  else {
+    exportTasks.value.unshift(task)
+  }
+}
+
+async function handleDownloadExportTask(row) {
+  if (!hasActionPermission('export'))
+    return false
+  if (!row?.fileId) {
+    window.$message.warning(localizeLabel('导出文件还未生成'))
+    return
+  }
+  try {
+    await downloadFile(row.fileId, row.fileName || localizeLabel('导出数据.xlsx'))
+  }
+  catch (error) {
+    console.error('下载导出文件失败:', error)
+    window.$message.error(error?.message || localizeLabel('下载导出文件失败'))
+  }
+}
+
+function handleExportTaskPageChange(page) {
+  exportTaskPagination.value.page = page
+  loadExportTasks()
+}
+
+function handleExportTaskPageSizeChange(pageSize) {
+  exportTaskPagination.value.pageSize = pageSize
+  exportTaskPagination.value.page = 1
+  loadExportTasks()
+}
+
+function clearExportTaskPollTimer() {
+  if (exportTaskPollTimer.value) {
+    window.clearTimeout(exportTaskPollTimer.value)
+    exportTaskPollTimer.value = null
+  }
+}
+
+function isExportTaskRunning(task) {
+  return ['PENDING', 'RUNNING'].includes(task?.status)
+}
+
+function resolveExportTaskStatusText(status) {
+  switch (status) {
+    case 'PENDING':
+      return localizeLabel('排队中')
+    case 'RUNNING':
+      return localizeLabel('导出中')
+    case 'SUCCESS':
+      return localizeLabel('已完成')
+    case 'FAILED':
+      return localizeLabel('失败')
+    default:
+      return localizeLabel('未知')
+  }
+}
+
+function resolveExportTaskTagType(status) {
+  switch (status) {
+    case 'SUCCESS':
+      return 'success'
+    case 'FAILED':
+      return 'error'
+    case 'RUNNING':
+      return 'info'
+    case 'PENDING':
+      return 'warning'
+    default:
+      return 'default'
+  }
+}
+
+function downloadBlobResponse(response, fallbackName) {
+  const blob = response?.data instanceof Blob ? response.data : response
+  if (!(blob instanceof Blob)) {
+    throw new TypeError(localizeLabel('下载响应不是文件流'))
+  }
+
+  const fileName = resolveDownloadFileName(response, fallbackName)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function resolveDownloadFileName(response, fallbackName) {
+  const disposition = response?.headers?.['content-disposition']
+    || response?.headers?.get?.('content-disposition')
+    || ''
+  const utf8Match = disposition.match(/filename\*=utf-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1])
+  }
+  const normalMatch = disposition.match(/filename="?([^";]+)"?/i)
+  if (normalMatch?.[1]) {
+    return decodeURIComponent(normalMatch[1])
+  }
+  return fallbackName
+}
+
+/**
+ * ==================== 暴露方法 ====================
+ */
+defineExpose({
+  /**
+   * 外部触发搜索
+   */
+  search: handleSearch,
+
+  /**
+   * 刷新列表
+   */
+  refresh: loadList,
+
+  /**
+   * 加载列表
+   */
+  loadList,
+
+  /**
+   * 获取选中的行
+   */
+  getSelectedRows: () => tableRef.value?.getCheckedRows() || [],
+
+  /**
+   * 获取选中的键
+   */
+  getSelectedKeys: () => selectedKeys.value,
+
+  /**
+   * 清除选中
+   */
+  clearSelection: () => {
+    selectedKeys.value = []
+    tableRef.value?.clearSelection()
+  },
+
+  /**
+   * 设置选中的键
+   */
+  setSelectedKeys: (keys) => {
+    selectedKeys.value = keys
+    tableRef.value?.setCheckedKeys(keys)
+  },
+
+  /**
+   * 获取表格数据
+   */
+  getTableData: () => dataSource.value,
+
+  /**
+   * 设置表格数据
+   */
+  setTableData: (data) => {
+    dataSource.value = data
+  },
+
+  /**
+   * 打开新增弹窗
+   */
+  showAdd: handleAdd,
+
+  /**
+   * 打开编辑弹窗
+   */
+  showEdit: handleEdit,
+
+  /**
+   * 打开详情弹窗
+   */
+  showDetail: handleDetail,
+
+  /**
+   * 编辑（同 showEdit）
+   */
+  handleEdit,
+
+  /**
+   * 查看详情（同 showDetail）
+   */
+  handleDetail,
+
+  /**
+   * 删除
+   */
+  handleDelete,
+
+  /**
+   * 批量删除
+   */
+  handleBatchDelete,
+
+  /**
+   * 提交当前弹窗表单
+   */
+  submitForm: handleModalConfirm,
+
+  /** 按动作编码触发当前 CRUD 中已发布的受控动作。 */
+  triggerAction: (actionCode, payload = {}) => {
+    const code = String(actionCode || '')
+    const action = [
+      ...(Array.isArray(props.runtimeActions) ? props.runtimeActions : []),
+      ...(Array.isArray(props.toolbarActions) ? props.toolbarActions : []),
+    ].find(item => String(item?.actionCode || item?.key || '') === code)
+    if (!action)
+      throw new Error(t('customer.missingAction', { value0: code }))
+    const row = payload?.row && typeof payload.row === 'object'
+      ? payload.row
+      : payload?.record && typeof payload.record === 'object' ? payload.record : formData.value
+    return handleConfiguredAction(action, row || {}, { skipExtensionHook: true })
+  },
+
+  /**
+   * 关闭弹窗
+   */
+  closeModal: () => {
+    if (usesInlineFormWorkspace.value)
+      handleCloseActiveInlineFormTab()
+    else
+      modalVisible.value = false
+  },
+
+  /**
+   * 获取搜索参数
+   */
+  getSearchParams: () => searchParams.value,
+
+  /**
+   * 设置搜索参数
+   */
+  setSearchParams: (params) => {
+    searchParams.value = params
+  },
+
+  /**
+   * 重置搜索
+   */
+  resetSearch: () => {
+    searchRef.value?.handleReset()
+  },
+})
+
+/**
+ * ==================== 生命周期 ====================
+ */
+onMounted(() => {
+  window.addEventListener('online', handleBrowserOnline)
+  if (props.formOnly) {
+    handleAdd()
+    return
+  }
+  if (!props.lazy) {
+    loadList()
+  }
+})
+
+onBeforeUnmount(() => {
+  flushOfflineDraftSave()
+  window.removeEventListener('online', handleBrowserOnline)
+  clearExportTaskPollTimer()
+  clearRuntimeFormulaTimers()
+})
+
+// 监听公共参数内容变化，避免设计器拖拽尺寸时仅对象引用变化导致重复请求
+watch(() => stableSerialize(props.publicParams || {}), () => {
+  if (props.formOnly)
+    return
+  pagination.value.page = 1
+  loadList()
+})
+
+watch(() => stableSerialize(props.publicQuery || {}), () => {
+  if (props.formOnly)
+    return
+  pagination.value.page = 1
+  loadList()
+})
+</script>
+
+<style scoped>
+.ai-crud-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.ai-crud-page-loading-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(255 255 255 / 64%);
+  backdrop-filter: blur(1px);
+}
+
+.ai-crud-more-button :deep(.n-button__icon) {
+  margin-right: 4px;
+}
+
+.ai-crud-page.is-form-only {
+  overflow: auto;
+  background: #f6f8fb;
+  padding: 16px;
+}
+
+.ai-crud-form-only,
+.ai-crud-form-only-result {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ai-crud-form-only-result {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+}
+
+.form-only-head {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 18px;
+}
+
+.form-only-head h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.form-only-body {
+  padding: 18px;
+}
+
+.form-only-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #e5e7eb;
+  background: #f8fafc;
+  padding: 12px 18px;
+}
+
+.ai-crud-edit-form {
+  --ai-crud-form-item-gap: 4px;
+}
+
+.ai-crud-edit-form :deep(.n-form-item) {
+  --n-feedback-height: 16px;
+  margin-bottom: 0;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-label) {
+  min-height: 32px;
+  display: grid;
+  align-items: center;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-label__asterisk) {
+  align-self: center;
+  line-height: 1;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-blank) {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.ai-crud-edit-form :deep(.n-form-item-feedback-wrapper) {
+  min-height: 16px;
+  font-size: 12px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control) {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control > *) {
+  width: 100%;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control--radio),
+.ai-crud-edit-form :deep(.ai-form-control--radioButton),
+.ai-crud-edit-form :deep(.ai-form-control--checkbox) {
+  min-height: 32px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-control--radio .n-space),
+.ai-crud-edit-form :deep(.ai-form-control--checkbox .n-space) {
+  align-items: center !important;
+}
+
+.ai-crud-edit-form :deep(.ai-form-item--textarea .n-form-item-label),
+.ai-crud-edit-form :deep(.ai-form-item--imageUpload .n-form-item-label),
+.ai-crud-edit-form :deep(.ai-form-item--fileUpload .n-form-item-label) {
+  align-items: flex-start;
+  padding-top: 5px;
+}
+
+.ai-crud-edit-form :deep(.n-input),
+.ai-crud-edit-form :deep(.n-input-number),
+.ai-crud-edit-form :deep(.n-base-selection) {
+  --n-border-radius: 6px;
+}
+
+.ai-crud-edit-form :deep(.ai-form-section-title) {
+  margin-top: 10px;
+}
+
+.ai-crud-edit-form :deep(.af-layout-grid > .n-gi:first-child .ai-form-section-title) {
+  margin-top: 0;
+}
+
+/* 搜索区域 */
+.ai-crud-search {
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+/* 主内容区域 */
+.ai-crud-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.ai-crud-main.has-inline-workspace {
+  gap: 12px;
+}
+
+.ai-crud-main.is-tab-workspace {
+  gap: 0;
+}
+
+/* 工具栏区域 */
+.ai-crud-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-left {
+  flex: 1;
+}
+
+.toolbar-right {
+  flex-shrink: 0;
+}
+
+/* 表格区域 */
+.ai-crud-table {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-crud-main.has-inline-workspace:not(.is-tab-workspace) .ai-crud-table {
+  flex: 1 1 auto;
+  min-height: clamp(220px, 38vh, 460px);
+}
+
+.ai-crud-main.is-tab-workspace .ai-crud-table {
+  flex: 1 1 auto;
+}
+
+.ai-crud-table :deep(.ai-table-wrapper) {
+  height: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-crud-table :deep(.n-data-table-wrapper) {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.ai-crud-table :deep(.n-data-table) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-crud-table :deep(.n-data-table-base-table) {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-crud-table :deep(.n-data-table-base-table-body) {
+  flex: 1 1 auto;
+  min-height: 144px;
+  overflow: hidden;
+}
+
+.ai-crud-table :deep(.n-data-table-empty) {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 表格工具栏 - 不需要额外内边距因为 AiTable 已处理 */
+.ai-crud-table :deep(.ai-table-toolbar) {
+  padding: 6px 12px;
+}
+
+/* 操作列样式 */
+.table-action-column {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* 按钮操作链接样式 */
+:deep(.table-action-link) {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  color: var(--primary-600);
+  cursor: pointer;
+  padding: 1px 3px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+:deep(.table-action-link:hover) {
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+:deep(.table-action-link.disabled),
+:deep(.table-action-link.disabled:hover) {
+  background: transparent;
+  color: var(--text-disabled, #94a3b8);
+  cursor: not-allowed;
+}
+
+:deep(.table-action-link.loading) {
+  color: var(--success-600);
+}
+
+:deep(.table-action-link.type-info) {
+  color: var(--info-600);
+}
+
+:deep(.table-action-link.type-info:hover) {
+  background: var(--info-50);
+  color: var(--info-700);
+}
+
+:deep(.table-action-link.type-success) {
+  color: var(--success-600);
+}
+
+:deep(.table-action-link.type-success:hover) {
+  background: var(--success-50);
+  color: var(--success-700);
+}
+
+:deep(.table-action-link.type-warning) {
+  color: var(--warning-600);
+}
+
+:deep(.table-action-link.type-warning:hover) {
+  background: var(--warning-50);
+  color: var(--warning-700);
+}
+
+:deep(.table-action-link.danger) {
+  color: var(--error-600);
+}
+
+:deep(.table-action-link.danger:hover) {
+  background: var(--error-50);
+  color: var(--error-700);
+}
+
+:deep(.table-action-divider) {
+  color: var(--border-strong);
+  user-select: none;
+}
+
+/* 操作列折叠下拉样式 */
+:deep(.table-action-column .n-dropdown) {
+  min-width: 80px;
+}
+
+.ai-crud-detail-tabs {
+  min-height: 360px;
+}
+
+.ai-crud-detail-tabs :deep(.n-tab-pane) {
+  padding-top: 10px;
+}
+
+.ai-crud-inline-workspace {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+  max-height: min(52vh, 560px);
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  box-shadow: 0 8px 22px rgb(15 23 42 / 8%);
+}
+
+.ai-crud-inline-workspace.is-tab-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: none;
+}
+
+.ai-crud-main.is-form-workspace-active:not(.is-tab-workspace) .ai-crud-inline-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  box-shadow: none;
+}
+
+.ai-crud-workspace-tabs,
+.ai-crud-inline-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 42px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 7px 10px 0;
+  border-bottom: 1px solid var(--border-light);
+  background: #f8fafc;
+  scrollbar-width: thin;
+}
+
+.ai-crud-workspace-tabs {
+  border: 1px solid var(--border-light);
+  border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.inline-form-tab {
+  height: 34px;
+  max-width: 220px;
+  min-width: 104px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  line-height: 1;
+  padding: 0 8px 0 12px;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.inline-form-tab--list {
+  min-width: 72px;
+}
+
+.inline-form-tab:hover {
+  background: #eef2f7;
+  color: var(--text-primary);
+}
+
+.inline-form-tab.active {
+  position: relative;
+  background: var(--bg-primary);
+  border-color: var(--border-light);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.inline-form-tab.active::before {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--primary-500, #2563eb);
+  content: '';
+}
+
+.inline-form-tab__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-form-tab__dirty {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--warning-500, #f59e0b);
+}
+
+.inline-form-tab__close {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+}
+
+.inline-form-tab__close:hover {
+  background: var(--error-50, #fef2f2);
+  color: var(--error-600, #dc2626);
+}
+
+.ai-crud-inline-form-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.inline-form-panel-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.inline-form-panel-head > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.inline-form-panel-head strong {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.inline-form-panel-head span {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.inline-form-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.inline-form-panel-body .ai-crud-detail-tabs {
+  min-height: 0;
+}
+
+.inline-form-panel-footer {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-light);
+  background: #f8fafc;
+}
+
+.export-task-current {
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.export-task-current__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.export-task-current__title {
+  min-width: 0;
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-crud-detail-panels {
+  margin-top: 12px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ai-crud-main {
+    overflow: hidden;
+  }
+
+  .ai-crud-main.has-inline-workspace:not(.is-tab-workspace) .ai-crud-table {
+    flex: 0 0 auto;
+    min-height: 360px;
+  }
+
+  .ai-crud-inline-workspace {
+    max-height: none;
+  }
+
+  .ai-crud-inline-form-panel {
+    min-height: 320px;
+  }
+
+  .inline-form-panel-body {
+    padding: 12px;
+  }
+
+  .inline-form-panel-footer {
+    flex-direction: column-reverse;
+  }
+
+  .inline-form-panel-footer :deep(.n-button) {
+    width: 100%;
+  }
+}
+
+/* 表格内容优化 */
+:deep(.n-data-table) {
+  border-radius: 0;
+}
+
+:deep(.n-data-table .n-data-table-th) {
+  background: var(--bg-secondary) !important;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+:deep(.n-data-table .n-data-table-td) {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+/* 分页器样式 */
+:deep(.n-data-table__pagination) {
+  width: 100%;
+  margin: 0 !important;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+:deep(.n-data-table__pagination .n-pagination) {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 0;
+  justify-content: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 0;
+}
+
+@media (max-width: 768px) {
+  :deep(.n-data-table__pagination .n-pagination) {
+    justify-content: center;
+  }
+
+  :deep(.n-pagination .n-pagination-item) {
+    min-width: 32px;
+    height: 32px;
+    font-size: 13px;
+  }
+
+  :deep(.n-pagination .n-pagination-item__button) {
+    padding: 0 6px;
+  }
+
+  :deep(.n-pagination-size-picker) {
+    font-size: 13px;
+  }
+
+  :deep(.n-pagination-quick-jumper) {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 576px) {
+  :deep(.n-data-table__pagination) {
+    padding: 10px;
+  }
+
+  :deep(.n-data-table__pagination .n-pagination) {
+    gap: 4px;
+  }
+
+  :deep(.n-pagination .n-pagination-item) {
+    min-width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  :deep(.n-pagination .n-pagination-item__button) {
+    padding: 0 4px;
+  }
+}
+</style>

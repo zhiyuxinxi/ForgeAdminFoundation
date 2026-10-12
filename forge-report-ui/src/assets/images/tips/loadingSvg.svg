@@ -1,0 +1,10 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="24" cy="24" r="19" fill="none" stroke="#165DFF" stroke-width="5" stroke-dasharray="119" stroke-dashoffset="119" stroke-linecap="round">
+        <animate attributeName="stroke-dashoffset" from="119" to="0" dur="2s" repeatCount="indefinite" />
+        <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="1s" repeatCount="indefinite" />
+    </circle>
+    <circle cx="24" cy="24" r="14" fill="none" stroke="#00E4FF" stroke-width="5" stroke-dasharray="88" stroke-dashoffset="88" stroke-linecap="round">
+        <animate attributeName="stroke-dashoffset" from="88" to="0" dur="2s" repeatCount="indefinite" />
+        <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="-360 24 24" dur="0.5s" repeatCount="indefinite" />
+    </circle>
+</svg>

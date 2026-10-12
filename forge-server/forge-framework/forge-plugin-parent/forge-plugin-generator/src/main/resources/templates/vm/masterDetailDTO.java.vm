@@ -1,0 +1,30 @@
+package ${packageName}.${moduleName}.dto;
+
+import lombok.Data;
+
+import java.io.Serializable;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * ${functionName}主子表提交DTO
+ *
+ * @author ${author}
+ * @date ${datetime}
+ */
+@Data
+public class ${className}MasterDetailDTO implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 主表数据
+     */
+    private ${className}DTO main;
+
+    /**
+     * 子表数据，key 为子模型编码
+     */
+    private Map<String, List<Map<String, Object>>> children = new LinkedHashMap<>();
+}

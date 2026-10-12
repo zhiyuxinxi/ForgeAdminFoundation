@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.flow.mapper.FlowFillBatchMapper">
+
+    <select id="selectBatchPage" resultType="com.mdframe.forge.starter.flow.entity.FlowFillBatch">
+        SELECT b.*
+        FROM sys_flow_fill_batch b
+        <where>
+            b.deleted = 0
+            <if test="query != null and query.batchName != null and query.batchName != ''">
+                AND b.batch_name LIKE CONCAT('%', #{query.batchName}, '%')
+            </if>
+            <if test="query != null and query.entryCode != null and query.entryCode != ''">
+                AND b.entry_code = #{query.entryCode}
+            </if>
+            <if test="query != null and query.periodKey != null and query.periodKey != ''">
+                AND b.period_key = #{query.periodKey}
+            </if>
+            <if test="query != null and query.status != null and query.status != ''">
+                AND b.status = #{query.status}
+            </if>
+        </where>
+        ORDER BY b.create_time DESC
+    </select>
+</mapper>

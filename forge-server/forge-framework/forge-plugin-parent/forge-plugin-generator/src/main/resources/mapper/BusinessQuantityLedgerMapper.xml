@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessQuantityLedgerMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessQuantityLedger">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="operation_type" property="operationType"/>
+        <result column="account_code" property="accountCode"/>
+        <result column="item_code" property="itemCode"/>
+        <result column="dimension_key" property="dimensionKey"/>
+        <result column="quantity_delta" property="quantityDelta"/>
+        <result column="balance_quantity" property="balanceQuantity"/>
+        <result column="locked_quantity" property="lockedQuantity"/>
+        <result column="target_account_code" property="targetAccountCode"/>
+        <result column="target_item_code" property="targetItemCode"/>
+        <result column="target_dimension_key" property="targetDimensionKey"/>
+        <result column="source_object_code" property="sourceObjectCode"/>
+        <result column="source_record_id" property="sourceRecordId"/>
+        <result column="source_detail_id" property="sourceDetailId"/>
+        <result column="lock_id" property="lockId"/>
+        <result column="correlation_id" property="correlationId"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
+        <result column="remark" property="remark"/>
+        <result column="extra_data" property="extraData"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        operation_type,
+        account_code,
+        item_code,
+        dimension_key,
+        quantity_delta,
+        balance_quantity,
+        locked_quantity,
+        target_account_code,
+        target_item_code,
+        target_dimension_key,
+        source_object_code,
+        source_record_id,
+        source_detail_id,
+        lock_id,
+        correlation_id,
+        idempotency_key,
+        remark,
+        extra_data,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByIdempotencyKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_quantity_ledger
+        WHERE tenant_id = #{tenantId}
+          AND idempotency_key = #{idempotencyKey}
+        ORDER BY create_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectLedgerPage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessQuantityLedgerVO">
+        SELECT
+            id,
+            operation_type AS operationType,
+            account_code AS accountCode,
+            item_code AS itemCode,
+            dimension_key AS dimensionKey,
+            quantity_delta AS quantityDelta,
+            balance_quantity AS balanceQuantity,
+            locked_quantity AS lockedQuantity,
+            target_account_code AS targetAccountCode,
+            target_item_code AS targetItemCode,
+            target_dimension_key AS targetDimensionKey,
+            source_object_code AS sourceObjectCode,
+            source_record_id AS sourceRecordId,
+            source_detail_id AS sourceDetailId,
+            lock_id AS lockId,
+            correlation_id AS correlationId,
+            remark,
+            extra_data AS extraData,
+            create_time AS createTime
+        FROM ai_business_quantity_ledger
+        WHERE tenant_id = #{tenantId}
+        <if test="query.operationType != null and query.operationType != ''">
+          AND operation_type = #{query.operationType}
+        </if>
+        <if test="query.accountCode != null and query.accountCode != ''">
+          AND account_code = #{query.accountCode}
+        </if>
+        <if test="query.itemCode != null and query.itemCode != ''">
+          AND item_code = #{query.itemCode}
+        </if>
+        <if test="query.dimensionKey != null and query.dimensionKey != ''">
+          AND dimension_key = #{query.dimensionKey}
+        </if>
+        <if test="query.sourceObjectCode != null and query.sourceObjectCode != ''">
+          AND source_object_code = #{query.sourceObjectCode}
+        </if>
+        <if test="query.sourceRecordId != null and query.sourceRecordId != ''">
+          AND source_record_id = #{query.sourceRecordId}
+        </if>
+        <if test="query.sourceDetailId != null and query.sourceDetailId != ''">
+          AND source_detail_id = #{query.sourceDetailId}
+        </if>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+</mapper>

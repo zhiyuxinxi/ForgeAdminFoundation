@@ -1,0 +1,817 @@
+<template>
+  <div class="storage-config-page">
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div class="header-left">
+        <div class="title-row">
+          <div class="title-icon storage-icon">
+            <i class="i-material-symbols:cloud-upload-rounded" />
+          </div>
+          <h2 class="page-title">
+            {{ translateUiText("存储配置管理") }}
+          </h2>
+        </div>
+        <div class="header-desc">
+          {{ translateUiText("多存储源配置管理，支持本地/RustFS/腾讯云COS等多种存储方案") }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 存储配置列表 -->
+    <div class="storage-content">
+      <AiCrudPage
+        ref="crudRef"
+        :api-config="{
+          list: 'get@/system/storage/config/page',
+          detail: 'post@/system/storage/config/detail',
+          add: 'post@/system/storage/config',
+          update: 'put@/system/storage/config',
+          delete: 'delete@/system/storage/config/:ids',
+        }"
+        :search-schema="searchSchema"
+        :columns="tableColumns"
+        :edit-schema="editSchema"
+        row-key="id"
+        :add-button-text="translateUiText(&quot;新增存储配置&quot;)"
+        :load-detail-on-edit="true"
+        :edit-grid-cols="2"
+        modal-width="900px"
+        max-height="var(--storage-table-max-height)"
+        :search-y-gap="8"
+        :before-submit="normalizeSubmitData"
+      >
+        <!-- 自定义表单项：允许的文件类型 -->
+        <template #form-allowedTypes="{ value, updateValue }">
+          <div class="file-types-input">
+            <NDynamicTags
+              :value="parseAllowedTypes(value)"
+              @update:value="(tags) => handleFileTypesChange(tags, updateValue)"
+            >
+              <template #input="{ submit, deactivate }">
+                <NInput
+                  ref="inputRef"
+                  v-model:value="fileTypeInput"
+                  type="text"
+                  size="small"
+                  :placeholder="translateUiText(&quot;输入文件类型，如 jpg&quot;)"
+                  @keyup.enter="() => handleSubmitFileType(submit)"
+                  @blur="deactivate()"
+                />
+              </template>
+              <template #trigger="{ activate, disabled }">
+                <NButton
+                  size="small"
+                  type="primary"
+                  dashed
+                  :disabled="disabled"
+                  @click="activate()"
+                >
+                  <template #icon>
+                    <i class="i-material-symbols:add" />
+                  </template>
+                  {{ translateUiText("添加类型") }}
+                </NButton>
+              </template>
+            </NDynamicTags>
+            <div class="text-12 mt-4 text-gray-400">
+              {{ translateUiText("默认类型：") }}{{ DEFAULT_ALLOWED_TYPES }}
+            </div>
+          </div>
+        </template>
+      </AiCrudPage>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { formatUiText } from '@/locales'
+
+import { localizeLabel as translateUiText } from '@/locales'
+
+import { NButton, NDynamicTags, NInput, NTag } from 'naive-ui'
+import { computed, h, ref } from 'vue'
+import { AiCrudPage } from '@/components/ai-form'
+import SystemTableCell from '@/components/common/SystemTableCell.vue'
+import DictTag from '@/components/DictTag.vue'
+import { useDict } from '@/composables/useDict'
+import { request } from '@/utils'
+
+defineOptions({ name: 'StorageConfig' })
+
+const STORAGE_TYPE_DICT = 'sys_file_storage_type'
+const DEFAULT_ALLOWED_TYPES = 'jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,txt,csv,zip,rar,mp4,mp3'
+
+const crudRef = ref(null)
+const inputRef = ref(null)
+const fileTypeInput = ref('')
+
+const { dict } = useDict(STORAGE_TYPE_DICT)
+
+const storageTypeOptions = computed(() => dict.value[STORAGE_TYPE_DICT] || [])
+
+// 搜索表单配置
+const searchSchema = computed(() => [
+  {
+    field: 'configName',
+    label: '配置名称',
+    type: 'input',
+    props: {
+      placeholder: '请输入配置名称',
+    },
+  },
+  {
+    field: 'storageType',
+    label: '存储类型',
+    type: 'select',
+    props: {
+      placeholder: '请选择存储类型',
+      options: storageTypeOptions.value,
+    },
+  },
+  {
+    field: 'enabled',
+    label: '状态',
+    type: 'select',
+    props: {
+      placeholder: '请选择状态',
+      options: [
+        { label: '启用', value: true },
+        { label: '禁用', value: false },
+      ],
+    },
+  },
+])
+
+// 表格列配置
+const tableColumns = computed(() => [
+  {
+    prop: 'configName',
+    label: '存储配置',
+    minWidth: 190,
+    render: row => h(SystemTableCell, {
+      title: row.configName,
+      subtitle: row.isDefault ? '默认配置' : '备用配置',
+      interactive: true,
+      avatar: true,
+      tooltip: `查看存储配置：${row.configName || '-'}`,
+      onActivate: () => crudRef.value?.showDetail(row),
+    }),
+  },
+  {
+    prop: 'storageType',
+    label: '存储类型',
+    width: 120,
+    render: (row) => {
+      return h(DictTag, {
+        options: storageTypeOptions.value,
+        value: row.storageType,
+        size: 'small',
+      })
+    },
+  },
+  {
+    prop: 'endpoint',
+    label: '访问端点',
+    minWidth: 200,
+    showOverflowTooltip: true,
+  },
+  {
+    prop: 'bucketName',
+    label: '存储桶',
+    width: 150,
+  },
+  {
+    prop: 'enabled',
+    label: '状态',
+    width: 80,
+    render: (row) => {
+      return h(NTag, {
+        type: row.enabled ? 'success' : 'default',
+        size: 'small',
+      }, {
+        default: () => row.enabled ? translateUiText("启用") : translateUiText("禁用"),
+      })
+    },
+  },
+  {
+    prop: 'maxFileSize',
+    label: '最大文件(MB)',
+    width: 120,
+  },
+  {
+    prop: 'orderNum',
+    label: '排序',
+    width: 80,
+  },
+  {
+    prop: 'createTime',
+    label: '创建时间',
+    width: 180,
+  },
+  {
+    prop: 'action',
+    label: '操作',
+    width: 160,
+    fixed: 'right',
+    actions: [
+      { label: '编辑', key: 'edit', onClick: handleEdit },
+      { label: '设为默认', key: 'setDefault', onClick: handleSetDefault, visible: row => !row.isDefault },
+      { label: '测试连接', key: 'testConnection', onClick: handleTestConnection },
+      { label: '创建桶', key: 'createBucket', onClick: handleCreateBucket, visible: row => row.storageType !== 'local' },
+      { label: '禁用', key: 'disable', onClick: handleToggleEnabled, visible: row => row.enabled },
+      { label: '启用', key: 'enable', onClick: handleToggleEnabled, visible: row => !row.enabled },
+      { label: '删除', key: 'delete', type: 'error', onClick: handleDelete },
+    ],
+  },
+])
+
+// 编辑表单配置
+const editSchema = computed(() => [
+  // ==================== 基础信息 ====================
+  {
+    type: 'divider',
+    label: '基础信息',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+  },
+  {
+    field: 'configName',
+    label: '配置名称',
+    type: 'input',
+    rules: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+    props: {
+      placeholder: '请输入配置名称，如：阿里云OSS生产环境',
+    },
+  },
+  {
+    field: 'storageType',
+    label: '存储类型',
+    type: 'select',
+    defaultValue: 'local',
+    rules: [{ required: true, message: '请选择存储类型', trigger: 'change' }],
+    props: {
+      placeholder: '请选择存储类型',
+      options: storageTypeOptions.value,
+    },
+  },
+  {
+    field: 'enabled',
+    label: '启用状态',
+    type: 'radio',
+    defaultValue: true,
+    props: {
+      options: [
+        { label: '启用', value: true },
+        { label: '禁用', value: false },
+      ],
+    },
+  },
+  {
+    field: 'orderNum',
+    label: '排序',
+    type: 'number',
+    defaultValue: 0,
+    props: {
+      placeholder: '数字越小越靠前',
+      min: 0,
+    },
+  },
+
+  // ==================== 连接配置 ====================
+  {
+    type: 'divider',
+    label: '连接配置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+    vIf: formData => formData.storageType !== 'local',
+  },
+  {
+    field: 'endpoint',
+    label: '访问端点',
+    type: 'input',
+    span: 2,
+    rules: [
+      {
+        required: true,
+        message: '请输入访问端点',
+        trigger: 'blur',
+        validator: (rule, value, formData) => {
+          if (isEndpointRequired(formData.storageType) && !value) {
+            return new Error(translateUiText("请输入访问端点"))
+          }
+          return true
+        },
+      },
+    ],
+    props: {
+      placeholder: '如：http://127.0.0.1:9000，腾讯云COS无需填写',
+    },
+    vIf: formData => isEndpointRequired(formData.storageType),
+  },
+  {
+    field: 'bucketName',
+    label: '存储桶',
+    type: 'input',
+    rules: [
+      {
+        required: true,
+        message: '请输入存储桶名称',
+        trigger: 'blur',
+        validator: (rule, value, formData) => {
+          if (formData.storageType !== 'local' && !value) {
+            return new Error(translateUiText("请输入存储桶名称"))
+          }
+          return true
+        },
+      },
+    ],
+    props: {
+      placeholder: '腾讯云COS请输入完整桶名，如：forge-files-1250000000',
+    },
+    vIf: formData => formData.storageType !== 'local',
+  },
+  {
+    field: 'region',
+    label: '区域',
+    type: 'input',
+    props: {
+      placeholder: '如：ap-guangzhou',
+    },
+    vIf: formData => ['aliyun', 'tencent', 's3'].includes(formData.storageType),
+  },
+  {
+    field: 'accessKey',
+    label: 'AccessKey',
+    type: 'input',
+    rules: [
+      {
+        required: true,
+        message: '请输入AccessKey',
+        trigger: 'blur',
+        validator: (rule, value, formData) => {
+          if (formData.storageType !== 'local' && !value) {
+            return new Error(translateUiText("请输入AccessKey"))
+          }
+          return true
+        },
+      },
+    ],
+    props: {
+      placeholder: '请输入访问密钥ID',
+    },
+    vIf: formData => formData.storageType !== 'local',
+  },
+  {
+    field: 'secretKey',
+    label: 'SecretKey',
+    type: 'input',
+    rules: [
+      {
+        required: true,
+        message: '请输入SecretKey',
+        trigger: 'blur',
+        validator: (rule, value, formData) => {
+          if (formData.storageType !== 'local' && !value) {
+            return new Error(translateUiText("请输入SecretKey"))
+          }
+          return true
+        },
+      },
+    ],
+    props: {
+      placeholder: '请输入访问密钥Secret',
+      type: 'password',
+      showPasswordOn: 'click',
+    },
+    vIf: formData => formData.storageType !== 'local',
+  },
+  {
+    field: 'useHttps',
+    label: '使用HTTPS',
+    type: 'switch',
+    defaultValue: true,
+    span: 2,
+    vIf: formData => formData.storageType !== 'local',
+  },
+
+  // ==================== 路径配置 ====================
+  {
+    type: 'divider',
+    label: '路径配置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+  },
+  {
+    field: 'basePath',
+    label: '基础路径',
+    type: 'input',
+    props: {
+      placeholder: '文件存储的基础路径，如：/upload 或 /files',
+    },
+  },
+  {
+    field: 'domain',
+    label: '访问域名',
+    type: 'input',
+    props: {
+      placeholder: '文件访问域名，如：https://cdn.example.com',
+    },
+  },
+
+  // ==================== 限制配置 ====================
+  {
+    type: 'divider',
+    label: '限制配置',
+    props: {
+      titlePlacement: 'left',
+    },
+    span: 2,
+  },
+  {
+    field: 'maxFileSize',
+    label: '最大文件(MB)',
+    type: 'number',
+    defaultValue: 100,
+    props: {
+      placeholder: '单位：MB',
+      min: 1,
+      max: 10240,
+    },
+  },
+  {
+    field: 'allowedTypes',
+    label: '允许类型',
+    type: 'slot',
+    slotName: 'allowedTypes',
+    defaultValue: DEFAULT_ALLOWED_TYPES,
+    rules: [
+      {
+        required: true,
+        message: '请配置支持的文件类型',
+        trigger: 'change',
+        validator: (_rule, value) => {
+          if (!parseAllowedTypes(value).length) {
+            return new Error(translateUiText("请配置支持的文件类型"))
+          }
+          return true
+        },
+      },
+    ],
+    span: 2,
+  },
+  {
+    field: 'extraConfig',
+    label: '扩展配置',
+    type: 'textarea',
+    span: 2,
+    props: {
+      placeholder: 'JSON格式的扩展配置（可选）',
+      rows: 3,
+    },
+  },
+])
+
+// 编辑
+function handleEdit(row) {
+  crudRef.value?.showEdit(row)
+}
+
+// 解析允许的文件类型（字符串 -> 数组）
+function parseAllowedTypes(value) {
+  if (!value)
+    return []
+  return [...new Set(value.split(',')
+    .map(normalizeFileType)
+    .filter(Boolean))]
+}
+
+// 处理文件类型标签变化（数组 -> 字符串）
+function handleFileTypesChange(tags, updateValue) {
+  const typesString = normalizeAllowedTypes(tags)
+  updateValue(typesString)
+}
+
+// 处理文件类型提交
+function handleSubmitFileType(submit) {
+  if (fileTypeInput.value && fileTypeInput.value.trim()) {
+    const normalizedType = normalizeFileType(fileTypeInput.value)
+    if (normalizedType) {
+      submit(normalizedType)
+    }
+    fileTypeInput.value = ''
+  }
+}
+
+function normalizeSubmitData(data) {
+  const allowedTypes = normalizeAllowedTypes(parseAllowedTypes(data.allowedTypes))
+  if (!allowedTypes) {
+    window.$message.error(translateUiText("请配置支持的文件类型"))
+    return false
+  }
+  return {
+    ...data,
+    allowedTypes,
+  }
+}
+
+function normalizeAllowedTypes(types) {
+  return [...new Set(types.map(normalizeFileType).filter(Boolean))].join(',')
+}
+
+function normalizeFileType(type) {
+  if (!type)
+    return ''
+  const value = String(type).trim().toLowerCase()
+  return value.startsWith('.') ? value.slice(1) : value
+}
+
+function isEndpointRequired(storageType) {
+  return storageType && !['local', 'tencent'].includes(storageType)
+}
+
+// 删除
+function handleDelete(row) {
+  window.$dialog.warning({
+    title: translateUiText("确认删除"),
+    content: translateUiText("确定要删除该存储配置吗？"),
+    positiveText: translateUiText("确定"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        const res = await request.delete(`/system/storage/config/${row.id}`)
+        if (res.code === 200) {
+          window.$message.success(translateUiText("删除成功"))
+          crudRef.value?.refresh()
+        }
+      }
+      catch {
+        window.$message.error(translateUiText("删除失败"))
+      }
+    },
+  })
+}
+
+// 设为默认
+function handleSetDefault(row) {
+  window.$dialog.info({
+    title: translateUiText("确认操作"),
+    content: formatUiText("确定要将\"{0}\"设置为默认存储配置吗？", [row.configName]),
+    positiveText: translateUiText("确定"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        const res = await request.put(`/system/storage/config/default/${row.id}`)
+        if (res.code === 200) {
+          window.$message.success(translateUiText("设置成功"))
+          crudRef.value?.refresh()
+        }
+      }
+      catch {
+        window.$message.error(translateUiText("设置失败"))
+      }
+    },
+  })
+}
+
+// 启用/禁用
+function handleToggleEnabled(row) {
+  const action = row.enabled ? '禁用' : '启用'
+  window.$dialog.info({
+    title: translateUiText("确认操作"),
+    content: formatUiText("确定要{0}\"{1}\"吗？", [action, row.configName]),
+    positiveText: translateUiText("确定"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        const res = await request.put(`/system/storage/config/enabled/${row.id}/${!row.enabled}`)
+        if (res.code === 200) {
+          window.$message.success(formatUiText("{0}成功", [action]))
+          crudRef.value?.refresh()
+        }
+      }
+      catch {
+        window.$message.error(formatUiText("{0}失败", [action]))
+      }
+    },
+  })
+}
+
+// 测试连接
+async function handleTestConnection(row) {
+  try {
+    const res = await request.post(`/system/storage/config/test/${row.id}`)
+    if (res.code === 200 && res.data) {
+      window.$message.success(translateUiText("连接测试成功"))
+    }
+    else {
+      window.$message.error(translateUiText("连接测试失败"))
+    }
+  }
+  catch (error) {
+    window.$message.error(formatUiText("连接测试失败：{0}", [error.message || translateUiText("未知错误")]))
+  }
+}
+
+// 创建存储桶
+function handleCreateBucket(row) {
+  if (!row.bucketName) {
+    window.$message.warning(translateUiText("请先填写存储桶名称"))
+    return
+  }
+
+  window.$dialog.info({
+    title: translateUiText("确认创建"),
+    content: formatUiText("确定要创建存储桶\"{0}\"吗？", [row.bucketName]),
+    positiveText: translateUiText("确定"),
+    negativeText: translateUiText("取消"),
+    onPositiveClick: async () => {
+      try {
+        const res = await request.post(`/system/storage/config/bucket/${row.id}`)
+        if (res.code === 200 && res.data) {
+          window.$message.success(translateUiText("创建桶成功"))
+        }
+        else {
+          window.$message.error(translateUiText("创建桶失败"))
+        }
+      }
+      catch (error) {
+        window.$message.error(formatUiText("创建桶失败：{0}", [error.message || translateUiText("未知错误")]))
+      }
+    },
+  })
+}
+</script>
+
+<style scoped>
+.storage-config-page {
+  --storage-table-max-height: calc(100vh - 244px);
+  height: 100%;
+  min-height: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* 页面头部 */
+.page-header {
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 17px;
+}
+
+.title-icon.storage-icon {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+}
+
+.page-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.header-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* 存储配置内容 */
+.storage-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+
+.storage-content :deep(.ai-crud-page) {
+  height: 100%;
+  min-height: 0;
+}
+
+.storage-content :deep(.ai-crud-main) {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.storage-content :deep(.ai-search-box) {
+  padding: 10px 12px 2px;
+}
+
+.storage-content :deep(.ai-table-toolbar) {
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.file-types-input {
+  width: 100%;
+}
+
+.file-types-input :deep(.n-dynamic-tags) {
+  width: 100%;
+}
+
+.file-types-input :deep(.n-dynamic-tags .n-tag) {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+/* 深色模式 */
+.dark .page-header {
+  background: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dark .page-title {
+  color: #f1f5f9;
+}
+
+.dark .header-desc {
+  color: #94a3b8;
+}
+
+.dark .storage-content {
+  background: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+  .storage-config-page {
+    --storage-table-max-height: calc(100vh - 190px);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .storage-content {
+    padding: 10px;
+    border-radius: 10px;
+  }
+}
+
+@media (max-height: 720px) {
+  .storage-config-page {
+    --storage-table-max-height: calc(100vh - 184px);
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .page-header {
+    padding: 10px 14px;
+  }
+
+  .header-desc {
+    display: none;
+  }
+
+  .storage-content {
+    padding: 10px 12px;
+  }
+}
+</style>

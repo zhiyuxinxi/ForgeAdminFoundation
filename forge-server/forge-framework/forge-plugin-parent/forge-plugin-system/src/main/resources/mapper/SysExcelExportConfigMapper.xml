@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysExcelExportConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.system.entity.SysExcelExportConfig">
+        <id column="id" property="id"/>
+        <result column="config_key" property="configKey"/>
+        <result column="config_type" property="configType"/>
+        <result column="export_name" property="exportName"/>
+        <result column="export_name_en" property="exportNameEn"/>
+        <result column="sheet_name" property="sheetName"/>
+        <result column="sheet_name_en" property="sheetNameEn"/>
+        <result column="file_name_template" property="fileNameTemplate"/>
+        <result column="file_name_template_en" property="fileNameTemplateEn"/>
+        <result column="data_source_bean" property="dataSourceBean"/>
+        <result column="query_method" property="queryMethod"/>
+        <result column="auto_trans" property="autoTrans"/>
+        <result column="pageable" property="pageable"/>
+        <result column="max_rows" property="maxRows"/>
+        <result column="sort_field" property="sortField"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="status" property="status"/>
+        <result column="include_sample" property="includeSample"/>
+        <result column="allow_import" property="allowImport"/>
+        <result column="remark" property="remark"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        config_key,
+        config_type,
+        export_name,
+        export_name_en,
+        sheet_name,
+        sheet_name_en,
+        file_name_template,
+        file_name_template_en,
+        data_source_bean,
+        query_method,
+        auto_trans,
+        pageable,
+        max_rows,
+        sort_field,
+        sort_order,
+        status,
+        include_sample,
+        allow_import,
+        remark,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectConfigPage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM sys_excel_export_config
+        WHERE 1 = 1
+        <if test="condition != null">
+            <if test="condition.configKey != null and condition.configKey != ''">
+                AND config_key LIKE CONCAT('%', #{condition.configKey}, '%')
+            </if>
+            <if test="condition.exportName != null and condition.exportName != ''">
+                AND export_name LIKE CONCAT('%', #{condition.exportName}, '%')
+            </if>
+            <if test="condition.configType != null and condition.configType != ''">
+                AND config_type = #{condition.configType}
+            </if>
+            <if test="condition.status != null">
+                AND status = #{condition.status}
+            </if>
+        </if>
+        ORDER BY update_time DESC, id DESC
+    </select>
+
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM sys_excel_export_config
+        WHERE config_key = #{configKey}
+        LIMIT 1
+    </select>
+
+    <select id="countByConfigKey" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_excel_export_config
+        WHERE config_key = #{configKey}
+    </select>
+
+    <select id="countByConfigKeyExcludeId" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_excel_export_config
+        WHERE config_key = #{configKey}
+          AND id != #{id}
+    </select>
+
+</mapper>

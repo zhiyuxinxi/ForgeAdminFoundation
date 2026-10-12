@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.TenantMemberDirectoryMapper">
+    <resultMap id="memberMap" type="com.mdframe.forge.starter.core.identity.TenantMember">
+        <constructor>
+            <idArg column="user_id" javaType="java.lang.Long" name="userId"/>
+            <arg column="username" javaType="java.lang.String" name="username"/>
+            <arg column="display_name" javaType="java.lang.String" name="displayName"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="activeMembers">
+        FROM sys_user u
+        INNER JOIN sys_user_tenant membership
+            ON membership.user_id = u.id AND membership.tenant_id = #{tenantId} AND membership.status = 1
+        INNER JOIN sys_tenant tenant
+            ON tenant.id = membership.tenant_id AND tenant.tenant_status = 1 AND tenant.del_flag = 0
+        WHERE u.user_status = 1 AND u.del_flag = 0
+    </sql>
+
+    <sql id="directOrganization">
+        AND EXISTS (
+            SELECT 1 FROM sys_user_org binding
+            INNER JOIN sys_org org
+                ON org.id = binding.org_id AND org.tenant_id = binding.tenant_id
+                AND org.org_status = 1 AND org.del_flag = 0
+            WHERE binding.tenant_id = #{tenantId} AND binding.user_id = u.id
+                AND binding.org_id = #{orgId}
+        )
+    </sql>
+
+    <select id="selectActiveMembers" resultMap="memberMap" useCache="false" flushCache="true">
+        SELECT DISTINCT u.id user_id, u.username, COALESCE(NULLIF(TRIM(u.real_name), ''), u.username) display_name
+        <include refid="activeMembers"/>
+        <choose>
+            <when test="userIds != null and !userIds.isEmpty()">
+                AND u.id IN
+                <foreach collection="userIds" item="userId" open="(" separator="," close=")">#{userId}</foreach>
+            </when>
+            <otherwise>AND 1 = 0</otherwise>
+        </choose>
+        <if test="orgId != null"><include refid="directOrganization"/></if>
+        ORDER BY u.id
+    </select>
+
+    <select id="selectActiveMembersByOrg" resultMap="memberMap" useCache="false" flushCache="true">
+        SELECT DISTINCT u.id user_id, u.username, COALESCE(NULLIF(TRIM(u.real_name), ''), u.username) display_name
+        <include refid="activeMembers"/>
+        <include refid="directOrganization"/>
+        <if test="keyword != null and keyword != ''">
+            AND (u.username LIKE CONCAT('%', #{keyword}, '%') OR u.real_name LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="afterUserId != null">AND u.id &gt; #{afterUserId}</if>
+        ORDER BY u.id
+        LIMIT #{limit}
+    </select>
+</mapper>

@@ -1,0 +1,31 @@
+.DS_Store
+node_modules/
+dist/
+.vitepress/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+**/*.log
+
+# Playwright MCP 临时截图、快照和日志
+.playwright-mcp/
+
+tests/**/coverage/
+tests/e2e/reports
+selenium-debug.log
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.local
+
+package-lock.json
+yarn.lock
+
+# 部署配置（包含敏感信息）
+deploy/.env.deploy
+deploy/.env.*.local

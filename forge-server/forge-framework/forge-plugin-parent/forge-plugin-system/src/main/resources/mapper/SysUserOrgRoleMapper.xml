@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysUserOrgRoleMapper">
+
+    <select id="selectActiveRoleIdsByUserOrg" resultType="java.lang.Long">
+        SELECT DISTINCT uor.role_id
+        FROM sys_user_org_role uor
+        INNER JOIN sys_role r
+            ON r.id = uor.role_id
+           AND r.tenant_id = uor.tenant_id
+           AND r.role_status = 1
+           AND r.del_flag = 0
+        LEFT JOIN sys_role_org ro
+            ON ro.tenant_id = uor.tenant_id
+           AND ro.role_id = uor.role_id
+           AND ro.org_id = uor.org_id
+        WHERE uor.tenant_id = #{tenantId}
+          AND uor.user_id = #{userId}
+          AND uor.org_id = #{orgId}
+          AND (r.org_scope_type = 1 OR ro.id IS NOT NULL)
+        ORDER BY uor.role_id ASC
+    </select>
+
+    <select id="selectUserOrgRoleIds" resultType="java.lang.Long">
+        SELECT DISTINCT uor.role_id
+        FROM sys_user_org_role uor
+        INNER JOIN sys_role r
+            ON r.id = uor.role_id
+           AND r.tenant_id = uor.tenant_id
+           AND r.del_flag = 0
+        WHERE uor.tenant_id = #{tenantId}
+          AND uor.user_id = #{userId}
+          AND uor.org_id = #{orgId}
+        ORDER BY uor.role_id ASC
+    </select>
+
+    <select id="selectUserIdsByRoleIds" resultType="java.lang.Long">
+        SELECT DISTINCT uor.user_id
+        FROM sys_user_org_role uor
+        INNER JOIN sys_user u
+            ON u.id = uor.user_id
+           AND u.user_status = 1
+           AND u.del_flag = 0
+        INNER JOIN sys_user_tenant sut
+            ON sut.user_id = uor.user_id
+           AND sut.tenant_id = uor.tenant_id
+           AND sut.status = 1
+        INNER JOIN sys_role r
+            ON r.id = uor.role_id
+           AND r.tenant_id = uor.tenant_id
+           AND r.role_status = 1
+           AND r.del_flag = 0
+        LEFT JOIN sys_role_org ro
+            ON ro.tenant_id = uor.tenant_id
+           AND ro.role_id = uor.role_id
+           AND ro.org_id = uor.org_id
+        WHERE uor.tenant_id = #{tenantId}
+          AND uor.org_id = #{orgId}
+          AND (r.org_scope_type = 1 OR ro.id IS NOT NULL)
+          AND uor.role_id IN
+        <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+            #{roleId}
+        </foreach>
+    </select>
+
+    <select id="selectRoleNamesByUserOrg" resultType="java.lang.String">
+        SELECT r.role_name
+        FROM sys_user_org_role uor
+        INNER JOIN sys_role r
+            ON r.id = uor.role_id
+           AND r.tenant_id = uor.tenant_id
+           AND r.del_flag = 0
+        WHERE uor.tenant_id = #{tenantId}
+          AND uor.user_id = #{userId}
+          AND uor.org_id = #{orgId}
+        GROUP BY r.id, r.role_name, r.sort
+        ORDER BY r.sort ASC, r.role_name ASC
+    </select>
+</mapper>

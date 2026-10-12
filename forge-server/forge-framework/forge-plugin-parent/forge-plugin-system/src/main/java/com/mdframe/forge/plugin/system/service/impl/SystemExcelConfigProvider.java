@@ -1,0 +1,42 @@
+package com.mdframe.forge.plugin.system.service.impl;
+
+import com.mdframe.forge.plugin.system.entity.SysExcelColumnConfig;
+import com.mdframe.forge.plugin.system.mapper.SysExcelColumnConfigMapper;
+import com.mdframe.forge.starter.excel.model.ExcelColumnConfig;
+import com.mdframe.forge.starter.excel.spi.ExcelConfigProvider;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Excel列配置提供者实现
+ * 从数据库读取列配置
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class SystemExcelConfigProvider implements ExcelConfigProvider {
+
+    private final SysExcelColumnConfigMapper columnConfigMapper;
+
+    @Override
+    public List<ExcelColumnConfig> getColumnConfigs(String configKey) {
+        List<SysExcelColumnConfig> configList = columnConfigMapper.selectByConfigKey(configKey);
+
+        if (configList == null || configList.isEmpty()) {
+            log.warn("未找到列配置: {}", configKey);
+            return null;
+        }
+
+        // 转换为 ExcelColumnConfig
+        return configList.stream().map(config -> {
+            ExcelColumnConfig columnConfig = new ExcelColumnConfig();
+            BeanUtils.copyProperties(config, columnConfig);
+            return columnConfig;
+        }).collect(Collectors.toList());
+    }
+}

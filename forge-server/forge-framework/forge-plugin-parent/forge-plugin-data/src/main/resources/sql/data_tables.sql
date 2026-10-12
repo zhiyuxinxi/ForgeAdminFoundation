@@ -1,0 +1,246 @@
+-- 平台数据连接表
+CREATE TABLE IF NOT EXISTS `ai_report_data_connection` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `connection_code` varchar(64) NOT NULL COMMENT '连接编码',
+  `connection_name` varchar(100) NOT NULL COMMENT '连接名称',
+  `db_type` varchar(32) NOT NULL COMMENT '数据库类型：MYSQL/POSTGRESQL/ORACLE/SQLSERVER',
+  `driver_class_name` varchar(200) NOT NULL COMMENT '驱动类名',
+  `jdbc_url` varchar(1000) NOT NULL COMMENT 'JDBC连接地址',
+  `username` varchar(128) NOT NULL COMMENT '用户名',
+  `password_cipher` varchar(500) DEFAULT NULL COMMENT '密码密文',
+  `schema_name` varchar(128) DEFAULT NULL COMMENT '模式名/数据库名',
+  `test_sql` varchar(200) NOT NULL DEFAULT 'SELECT 1' COMMENT '测试SQL',
+  `pool_config_json` json DEFAULT NULL COMMENT '连接池配置JSON',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `create_by` varchar(64) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` varchar(64) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_connection_code_tenant` (`tenant_id`, `connection_code`),
+  KEY `idx_data_connection_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据连接';
+
+-- 平台数据集表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dataset` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dataset_code` varchar(64) NOT NULL COMMENT '数据集编码',
+  `dataset_name` varchar(100) NOT NULL COMMENT '数据集名称',
+  `connection_id` bigint NOT NULL COMMENT '数据连接ID',
+  `category_id` bigint DEFAULT NULL COMMENT '分类ID',
+  `dataset_type` varchar(20) NOT NULL COMMENT '数据集类型：TABLE/SQL',
+  `table_name` varchar(200) DEFAULT NULL COMMENT '单表模式表名',
+  `sql_text` longtext DEFAULT NULL COMMENT 'SQL模式查询SQL',
+  `param_schema_json` json DEFAULT NULL COMMENT '参数定义JSON',
+  `default_order_json` json DEFAULT NULL COMMENT '默认排序JSON',
+  `max_rows` int NOT NULL DEFAULT 1000 COMMENT '最大返回行数',
+  `timeout_seconds` int NOT NULL DEFAULT 15 COMMENT '查询超时时间秒',
+  `cache_enabled` tinyint NOT NULL DEFAULT 0 COMMENT '是否启用缓存：1是 0否',
+  `cache_ttl_seconds` int DEFAULT NULL COMMENT '缓存秒数',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `publish_status` tinyint NOT NULL DEFAULT 0 COMMENT '发布状态：0未发布 1已发布 2已下架',
+  `access_mode` varchar(20) NOT NULL DEFAULT 'PUBLIC' COMMENT '访问模式：PUBLIC公开 PRIVATE私有',
+  `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `create_by` varchar(64) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` varchar(64) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dataset_code_tenant` (`tenant_id`, `dataset_code`),
+  KEY `idx_data_dataset_connection` (`tenant_id`, `connection_id`),
+  KEY `idx_data_dataset_category` (`tenant_id`, `category_id`),
+  KEY `idx_data_dataset_status` (`tenant_id`, `status`),
+  KEY `idx_data_dataset_publish_status` (`tenant_id`, `publish_status`),
+  KEY `idx_data_dataset_access_mode` (`tenant_id`, `access_mode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据集';
+
+-- 平台数据集授权表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dataset_acl` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dataset_id` bigint NOT NULL COMMENT '数据集ID',
+  `subject_type` varchar(20) NOT NULL COMMENT '授权主体类型：USER/ROLE/ORG',
+  `subject_id` bigint NOT NULL COMMENT '授权主体ID',
+  `access_level` varchar(20) NOT NULL DEFAULT 'QUERY' COMMENT '访问级别：VIEW/QUERY/MANAGE',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dataset_acl_subject` (`tenant_id`, `dataset_id`, `subject_type`, `subject_id`, `access_level`),
+  KEY `idx_data_dataset_acl_dataset` (`tenant_id`, `dataset_id`),
+  KEY `idx_data_dataset_acl_subject` (`tenant_id`, `subject_type`, `subject_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据集授权';
+
+-- 平台数据集行权限配置表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dataset_row_scope` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dataset_id` bigint NOT NULL COMMENT '数据集ID',
+  `enabled` tinyint NOT NULL DEFAULT 0 COMMENT '是否启用：1是 0否',
+  `scope_mode` varchar(32) NOT NULL DEFAULT 'SYSTEM_DATA_SCOPE' COMMENT '行权限模式：SYSTEM_DATA_SCOPE跟随系统数据权限',
+  `tenant_column` varchar(128) DEFAULT NULL COMMENT '租户字段名/表达式',
+  `org_column` varchar(128) DEFAULT NULL COMMENT '组织字段名/表达式',
+  `user_column` varchar(128) DEFAULT NULL COMMENT '用户字段名/表达式',
+  `region_column` varchar(128) DEFAULT NULL COMMENT '行政区划字段名/表达式',
+  `region_strategy` varchar(32) NOT NULL DEFAULT 'SELF_AND_DESCENDANTS' COMMENT '行政区划策略：SELF/SELF_AND_CHILDREN/SELF_AND_DESCENDANTS',
+  `remark` varchar(500) DEFAULT NULL COMMENT '备注',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dataset_row_scope` (`tenant_id`, `dataset_id`),
+  KEY `idx_data_dataset_row_scope_enabled` (`tenant_id`, `enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据集行权限配置';
+
+-- 平台数据集分类表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dataset_category` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `parent_id` bigint DEFAULT NULL COMMENT '父分类ID',
+  `level` int NOT NULL DEFAULT 1 COMMENT '层级',
+  `ancestors` varchar(500) NOT NULL DEFAULT '0/' COMMENT '祖先路径',
+  `category_code` varchar(64) NOT NULL COMMENT '分类编码',
+  `category_name` varchar(100) NOT NULL COMMENT '分类名称',
+  `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `create_by` bigint DEFAULT NULL COMMENT '创建人ID',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门ID',
+  `update_by` bigint DEFAULT NULL COMMENT '更新人ID',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dataset_category_code_tenant` (`tenant_id`, `category_code`),
+  KEY `idx_data_dataset_category_parent` (`tenant_id`, `parent_id`),
+  KEY `idx_data_dataset_category_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据集分类';
+
+-- 平台数据集字段表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dataset_field` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dataset_id` bigint NOT NULL COMMENT '数据集ID',
+  `field_name` varchar(128) NOT NULL COMMENT '字段名/SQL别名',
+  `field_label` varchar(128) DEFAULT NULL COMMENT '字段显示名',
+  `source_column` varchar(128) DEFAULT NULL COMMENT '来源列名',
+  `db_type` varchar(100) DEFAULT NULL COMMENT '数据库字段类型',
+  `data_type` varchar(32) NOT NULL DEFAULT 'STRING' COMMENT '标准类型：STRING/NUMBER/DATE/DATETIME/BOOLEAN',
+  `field_role` varchar(20) NOT NULL DEFAULT 'DIMENSION' COMMENT '字段角色：DIMENSION/MEASURE',
+  `default_agg` varchar(20) DEFAULT NULL COMMENT '默认聚合：SUM/COUNT/AVG/MAX/MIN',
+  `query_enabled` tinyint NOT NULL DEFAULT 1 COMMENT '是否可筛选',
+  `display_enabled` tinyint NOT NULL DEFAULT 1 COMMENT '是否可展示',
+  `sensitive_level` varchar(20) NOT NULL DEFAULT 'NONE' COMMENT '敏感级别：NONE/MASK/HIDDEN',
+  `mask_rule` varchar(100) DEFAULT NULL COMMENT '脱敏规则',
+  `dict_type` varchar(100) DEFAULT NULL COMMENT '字典类型',
+  `date_format` varchar(64) DEFAULT NULL COMMENT '日期展示格式',
+  `data_unit` varchar(32) DEFAULT NULL COMMENT '数据计量单位',
+  `dimension_id` bigint DEFAULT NULL COMMENT '绑定维度ID',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `create_by` varchar(64) DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` varchar(64) DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dataset_field` (`tenant_id`, `dataset_id`, `field_name`),
+  KEY `idx_data_dataset_field_dataset` (`tenant_id`, `dataset_id`),
+  KEY `idx_data_dataset_field_dimension` (`tenant_id`, `dimension_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台数据集字段';
+
+-- 平台维度表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dimension` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dimension_code` varchar(64) NOT NULL COMMENT '维度编码',
+  `dimension_name` varchar(100) NOT NULL COMMENT '维度名称',
+  `source_type` varchar(20) NOT NULL DEFAULT 'MANUAL' COMMENT '来源类型：MANUAL/SQL',
+  `connection_id` bigint DEFAULT NULL COMMENT 'SQL来源数据连接ID',
+  `sql_text` longtext DEFAULT NULL COMMENT 'SQL来源查询语句',
+  `value_column` varchar(128) DEFAULT NULL COMMENT '值字段列名',
+  `label_column` varchar(128) DEFAULT NULL COMMENT '显示字段列名',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `last_sync_time` datetime DEFAULT NULL COMMENT '最近同步时间',
+  `description` varchar(500) DEFAULT NULL COMMENT '描述',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dimension_code_tenant` (`tenant_id`, `dimension_code`),
+  KEY `idx_data_dimension_source` (`tenant_id`, `source_type`),
+  KEY `idx_data_dimension_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台维度';
+
+-- 平台维度值表
+CREATE TABLE IF NOT EXISTS `ai_report_data_dimension_item` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `dimension_id` bigint NOT NULL COMMENT '维度ID',
+  `item_value` varchar(255) NOT NULL COMMENT '维度值',
+  `item_label` varchar(255) NOT NULL COMMENT '维度显示值',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `extra_json` json DEFAULT NULL COMMENT '扩展信息JSON',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_dimension_item_value` (`tenant_id`, `dimension_id`, `item_value`),
+  KEY `idx_data_dimension_item_dimension` (`tenant_id`, `dimension_id`),
+  KEY `idx_data_dimension_item_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台维度值';
+
+-- 平台业务定义表
+CREATE TABLE IF NOT EXISTS `ai_report_data_business_definition` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `business_code` varchar(64) NOT NULL COMMENT '业务编码',
+  `business_name` varchar(100) NOT NULL COMMENT '业务名称',
+  `business_desc` text NOT NULL COMMENT '业务定义描述',
+  `analysis_goal` text DEFAULT NULL COMMENT '分析目标',
+  `metric_definition` text DEFAULT NULL COMMENT '指标口径',
+  `dimension_definition` text DEFAULT NULL COMMENT '分析维度',
+  `usage_guide` text DEFAULT NULL COMMENT 'AI使用建议',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '状态：1启用 0禁用',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_business_code_tenant` (`tenant_id`, `business_code`),
+  KEY `idx_data_business_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台业务定义';
+
+-- 平台业务定义数据集绑定表
+CREATE TABLE IF NOT EXISTS `ai_report_data_business_dataset` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `tenant_id` bigint NOT NULL DEFAULT 1 COMMENT '租户ID',
+  `business_id` bigint NOT NULL COMMENT '业务定义ID',
+  `dataset_id` bigint NOT NULL COMMENT '数据集ID',
+  `is_primary` tinyint NOT NULL DEFAULT 0 COMMENT '是否主数据集：1是 0否',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `usage_remark` varchar(500) DEFAULT NULL COMMENT '数据集用途说明',
+  `create_by` bigint DEFAULT NULL COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `create_dept` bigint DEFAULT NULL COMMENT '创建部门',
+  `update_by` bigint DEFAULT NULL COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_data_business_dataset` (`tenant_id`, `business_id`, `dataset_id`),
+  KEY `idx_data_business_dataset_business` (`tenant_id`, `business_id`),
+  KEY `idx_data_business_dataset_dataset` (`tenant_id`, `dataset_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='平台业务定义数据集绑定';

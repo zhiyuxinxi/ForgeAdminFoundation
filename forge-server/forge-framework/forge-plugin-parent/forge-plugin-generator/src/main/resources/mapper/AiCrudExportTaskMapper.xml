@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.AiCrudExportTaskMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCrudExportTask">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="config_key" property="configKey"/>
+        <result column="export_name" property="exportName"/>
+        <result column="file_name" property="fileName"/>
+        <result column="file_id" property="fileId"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="status" property="status"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="exported_count" property="exportedCount"/>
+        <result column="progress" property="progress"/>
+        <result column="query_params" property="queryParams"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="finish_time" property="finishTime"/>
+        <result column="expire_time" property="expireTime"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        config_key,
+        export_name,
+        file_name,
+        file_id,
+        file_size,
+        status,
+        total_count,
+        exported_count,
+        progress,
+        query_params,
+        error_message,
+        finish_time,
+        expire_time,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectTaskPage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_export_task
+        WHERE tenant_id = #{tenantId}
+          AND create_by = #{createBy}
+          AND config_key = #{configKey}
+        ORDER BY create_time DESC
+    </select>
+
+    <select id="selectTaskById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_export_task
+        WHERE tenant_id = #{tenantId}
+          AND create_by = #{createBy}
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectConfigValue" resultType="java.lang.String">
+        SELECT config_value
+        FROM sys_config
+        WHERE config_key = #{configKey}
+          AND tenant_id IN (#{tenantId}, 1)
+          AND del_flag = 0
+        ORDER BY CASE WHEN tenant_id = #{tenantId} THEN 0 ELSE 1 END
+        LIMIT 1
+    </select>
+</mapper>

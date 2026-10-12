@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysFileGroupMapper">
+
+    <select id="selectGroupWithFileCount" resultType="com.mdframe.forge.plugin.system.entity.SysFileGroup">
+        SELECT
+            g.id,
+            g.group_name AS groupName,
+            g.group_type AS groupType,
+            g.icon,
+            COALESCE(COUNT(f.id), 0) AS fileCount
+        FROM sys_file_group g
+        LEFT JOIN sys_file_metadata f
+            ON g.id = f.group_id
+            AND f.tenant_id = g.tenant_id
+            AND f.status = 1
+        WHERE g.deleted = 0
+          AND g.status = 1
+        GROUP BY g.id, g.group_name, g.group_type, g.icon
+        ORDER BY g.sort
+    </select>
+
+    <select id="selectFileStatistics" resultType="java.util.Map">
+        SELECT
+            COUNT(*) AS total,
+            SUM(CASE WHEN f.mime_type LIKE 'image/%' THEN 1 ELSE 0 END) AS imageCount,
+            SUM(CASE WHEN f.mime_type LIKE 'application/%' THEN 1 ELSE 0 END) AS documentCount,
+            SUM(CASE WHEN f.mime_type LIKE 'video/%' THEN 1 ELSE 0 END) AS videoCount,
+            SUM(CASE WHEN f.mime_type LIKE 'audio/%' THEN 1 ELSE 0 END) AS audioCount
+        FROM sys_file_metadata f
+        WHERE f.status = 1
+    </select>
+
+</mapper>

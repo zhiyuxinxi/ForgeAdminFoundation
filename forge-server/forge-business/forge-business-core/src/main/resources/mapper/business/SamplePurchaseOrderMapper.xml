@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.business.core.purchase.mapper.SamplePurchaseOrderMapper">
+
+    <resultMap id="PurchaseOrderVOMap" type="com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="order_no" property="orderNo" />
+        <result column="title" property="title" />
+        <result column="supplier_name" property="supplierName" />
+        <result column="amount_cent" property="amountCent" />
+        <result column="purchase_items" property="purchaseItems" />
+        <result column="need_date" property="needDate" />
+        <result column="status" property="status" />
+        <result column="applicant_id" property="applicantId" />
+        <result column="applicant_name" property="applicantName" />
+        <result column="applicant_dept_id" property="applicantDeptId" />
+        <result column="applicant_dept_name" property="applicantDeptName" />
+        <result column="business_key" property="businessKey" />
+        <result column="process_instance_id" property="processInstanceId" />
+        <result column="dept_leader_id" property="deptLeaderId" />
+        <result column="dept_leader_name" property="deptLeaderName" />
+        <result column="engineering_manager_id" property="engineeringManagerId" />
+        <result column="engineering_manager_name" property="engineeringManagerName" />
+        <result column="countersign_user_ids" property="countersignUserIds" />
+        <result column="countersign_user_names" property="countersignUserNames" />
+        <result column="cc_role_keys" property="ccRoleKeys" />
+        <result column="arrival_list_file_ids" property="arrivalListFileIds" />
+        <result column="applicant_modify_remark" property="applicantModifyRemark" />
+        <result column="dept_leader_remark" property="deptLeaderRemark" />
+        <result column="engineering_manager_remark" property="engineeringManagerRemark" />
+        <result column="countersign_remark" property="countersignRemark" />
+        <result column="reject_reason" property="rejectReason" />
+        <result column="remark" property="remark" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="create_dept" property="createDept" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <sql id="BaseColumns">
+        po.id,
+        po.tenant_id,
+        po.order_no,
+        po.title,
+        po.supplier_name,
+        po.amount_cent,
+        po.purchase_items,
+        po.need_date,
+        po.status,
+        po.applicant_id,
+        po.applicant_name,
+        po.applicant_dept_id,
+        po.applicant_dept_name,
+        po.business_key,
+        po.process_instance_id,
+        po.dept_leader_id,
+        COALESCE(dept_user.real_name, dept_user.username) AS dept_leader_name,
+        po.engineering_manager_id,
+        COALESCE(engineering_user.real_name, engineering_user.username) AS engineering_manager_name,
+        po.countersign_user_ids,
+        (
+            SELECT GROUP_CONCAT(COALESCE(cu.real_name, cu.username) ORDER BY cu.id SEPARATOR ',')
+            FROM sys_user cu
+            WHERE FIND_IN_SET(cu.id, po.countersign_user_ids)
+              AND cu.del_flag = 0
+        ) AS countersign_user_names,
+        po.cc_role_keys,
+        po.arrival_list_file_ids,
+        po.applicant_modify_remark,
+        po.dept_leader_remark,
+        po.engineering_manager_remark,
+        po.countersign_remark,
+        po.reject_reason,
+        po.remark,
+        po.create_by,
+        po.create_time,
+        po.create_dept,
+        po.update_by,
+        po.update_time
+    </sql>
+
+    <select id="selectPage" resultMap="PurchaseOrderVOMap">
+        SELECT
+        <include refid="BaseColumns" />
+        FROM sample_purchase_order po
+        LEFT JOIN sys_user dept_user ON dept_user.id = po.dept_leader_id AND dept_user.del_flag = 0
+        LEFT JOIN sys_user engineering_user ON engineering_user.id = po.engineering_manager_id AND engineering_user.del_flag = 0
+        WHERE po.tenant_id = #{tenantId}
+          AND po.del_flag = '0'
+        <if test="query != null and query.orderNo != null and query.orderNo != ''">
+            AND po.order_no LIKE CONCAT('%', #{query.orderNo}, '%')
+        </if>
+        <if test="query != null and query.title != null and query.title != ''">
+            AND po.title LIKE CONCAT('%', #{query.title}, '%')
+        </if>
+        <if test="query != null and query.supplierName != null and query.supplierName != ''">
+            AND po.supplier_name LIKE CONCAT('%', #{query.supplierName}, '%')
+        </if>
+        <if test="query != null and query.status != null and query.status != ''">
+            AND po.status = #{query.status}
+        </if>
+        ORDER BY po.update_time DESC, po.id DESC
+    </select>
+
+    <select id="selectDetail" resultMap="PurchaseOrderVOMap">
+        SELECT
+        <include refid="BaseColumns" />
+        FROM sample_purchase_order po
+        LEFT JOIN sys_user dept_user ON dept_user.id = po.dept_leader_id AND dept_user.del_flag = 0
+        LEFT JOIN sys_user engineering_user ON engineering_user.id = po.engineering_manager_id AND engineering_user.del_flag = 0
+        WHERE po.tenant_id = #{tenantId}
+          AND po.del_flag = '0'
+          AND po.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectDetailsByIds" resultMap="PurchaseOrderVOMap">
+        SELECT
+        <include refid="BaseColumns" />
+        FROM sample_purchase_order po
+        LEFT JOIN sys_user dept_user ON dept_user.id = po.dept_leader_id AND dept_user.del_flag = 0
+        LEFT JOIN sys_user engineering_user ON engineering_user.id = po.engineering_manager_id AND engineering_user.del_flag = 0
+        WHERE po.tenant_id = #{tenantId}
+          AND po.del_flag = '0'
+          AND po.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY po.update_time DESC, po.id DESC
+    </select>
+
+    <select id="selectByBusinessKey" resultType="com.mdframe.forge.business.core.purchase.domain.SamplePurchaseOrder">
+        SELECT
+            id,
+            tenant_id,
+            order_no,
+            title,
+            supplier_name,
+            amount_cent,
+            purchase_items,
+            need_date,
+            status,
+            del_flag,
+            applicant_id,
+            applicant_name,
+            applicant_dept_id,
+            applicant_dept_name,
+            business_key,
+            process_instance_id,
+            dept_leader_id,
+            engineering_manager_id,
+            countersign_user_ids,
+            cc_role_keys,
+            arrival_list_file_ids,
+            applicant_modify_remark,
+            dept_leader_remark,
+            engineering_manager_remark,
+            countersign_remark,
+            reject_reason,
+            remark,
+            create_by,
+            create_time,
+            create_dept,
+            update_by,
+            update_time
+        FROM sample_purchase_order
+        WHERE tenant_id = #{tenantId}
+          AND business_key = #{businessKey}
+          AND del_flag = '0'
+        ORDER BY update_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectActiveTaskDefKeysByBusinessKeys" resultType="java.util.Map">
+        SELECT
+            business_key AS businessKey,
+            task_def_key AS taskDefKey
+        FROM sys_flow_task
+        WHERE tenant_id = #{tenantId}
+          AND status IN (0, 1)
+          AND business_key IN
+        <foreach collection="businessKeys" item="businessKey" open="(" separator="," close=")">
+            #{businessKey}
+        </foreach>
+        ORDER BY create_time DESC, id DESC
+    </select>
+</mapper>

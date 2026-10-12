@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysTenantMapper">
+
+    <update id="clearBusinessDatasource">
+        UPDATE sys_tenant
+        SET default_business_datasource_id = NULL, default_business_datasource_code = NULL
+        WHERE id = #{tenantId} AND del_flag = 0
+    </update>
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.system.entity.SysTenant">
+        <id column="id" property="id" />
+        <result column="tenant_name" property="tenantName" />
+        <result column="contact_person" property="contactPerson" />
+        <result column="contact_phone" property="contactPhone" />
+        <result column="user_limit" property="userLimit" />
+        <result column="tenant_status" property="tenantStatus" />
+        <result column="expire_time" property="expireTime" />
+        <result column="tenant_desc" property="tenantDesc" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+        <result column="theme_config" property="themeConfig" />
+        <result column="system_theme" property="systemTheme" />
+        <result column="system_layout" property="systemLayout" />
+        <result column="system_logo" property="systemLogo" />
+        <result column="system_name" property="systemName" />
+        <result column="browser_title" property="browserTitle" />
+        <result column="browser_icon" property="browserIcon" />
+        <result column="default_business_datasource_id" property="defaultBusinessDatasourceId" />
+        <result column="default_business_datasource_code" property="defaultBusinessDatasourceCode" />
+        <result column="del_flag" property="delFlag" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        id, tenant_name, contact_person, contact_phone, user_limit, tenant_status,
+        expire_time, tenant_desc, create_by, create_time, update_by, update_time,theme_config,system_theme,system_layout,system_logo,system_name,browser_title,browser_icon,
+        default_business_datasource_id, default_business_datasource_code, del_flag
+    </sql>
+
+    <select id="selectEnabledTenantById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List" />
+        FROM sys_tenant
+        WHERE id = #{tenantId}
+          AND tenant_status = 1
+          AND del_flag = 0
+        LIMIT 1
+    </select>
+
+    <select id="countUsersByTenant" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_user
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = 0
+    </select>
+
+    <select id="countUserTenantBindings" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM sys_user_tenant
+        WHERE tenant_id = #{tenantId}
+    </select>
+
+</mapper>

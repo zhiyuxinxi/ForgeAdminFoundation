@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.business.core.demo.mapper.BusinessDatasourceDemoMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.business.core.demo.domain.BusinessDatasourceDemoRecord">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="title" property="title" />
+        <result column="route_key" property="routeKey" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="create_dept" property="createDept" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <update id="createTable">
+        CREATE TABLE IF NOT EXISTS business_datasource_demo (
+            id bigint NOT NULL COMMENT '主键ID',
+            tenant_id bigint NOT NULL DEFAULT 1 COMMENT '租户编号',
+            title varchar(128) NOT NULL COMMENT '标题',
+            route_key varchar(128) DEFAULT NULL COMMENT 'dynamic-datasource路由Key',
+            create_by bigint DEFAULT NULL COMMENT '创建人ID',
+            create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+            create_dept bigint DEFAULT NULL COMMENT '创建部门ID',
+            update_by bigint DEFAULT NULL COMMENT '更新人ID',
+            update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+            PRIMARY KEY (id),
+            KEY idx_business_datasource_demo_tenant (tenant_id, create_time)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='租户业务数据源路由演示表'
+    </update>
+
+    <insert id="insertRecord">
+        INSERT INTO business_datasource_demo (
+            id, tenant_id, title, route_key, create_by, create_time, create_dept, update_by, update_time
+        ) VALUES (
+            #{record.id}, #{record.tenantId}, #{record.title}, #{record.routeKey}, #{record.createBy},
+            #{record.createTime}, #{record.createDept}, #{record.updateBy}, #{record.updateTime}
+        )
+    </insert>
+
+    <select id="selectRecent" resultMap="BaseResultMap">
+        SELECT id, tenant_id, title, route_key, create_by, create_time, create_dept, update_by, update_time
+        FROM business_datasource_demo
+        WHERE tenant_id = #{tenantId}
+        ORDER BY create_time DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectDatabaseName" resultType="java.lang.String">
+        SELECT DATABASE()
+    </select>
+</mapper>

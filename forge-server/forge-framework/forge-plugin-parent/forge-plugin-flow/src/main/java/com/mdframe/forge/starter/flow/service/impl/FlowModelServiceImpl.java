@@ -1,0 +1,762 @@
+package com.mdframe.forge.starter.flow.service.impl;
+
+import com.mdframe.forge.starter.core.i18n.UiMessages;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.flow.entity.FlowBusiness;
+import com.mdframe.forge.starter.flow.entity.FlowModel;
+import com.mdframe.forge.starter.flow.mapper.FlowBusinessMapper;
+import com.mdframe.forge.starter.flow.mapper.FlowModelMapper;
+import com.mdframe.forge.starter.flow.service.FlowModelService;
+import com.mdframe.forge.starter.flow.event.FlowModelPublishEvent;
+import com.mdframe.forge.starter.flow.helper.BpmnXmlUtils;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import lombok.extern.slf4j.Slf4j;
+import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.common.engine.impl.util.io.BytesStreamSource;
+import org.flowable.engine.HistoryService;
+import org.flowable.engine.ProcessEngineConfiguration;
+import org.flowable.engine.RepositoryService;
+import org.flowable.engine.RuntimeService;
+import org.flowable.engine.repository.Deployment;
+import org.flowable.engine.repository.ProcessDefinition;
+import org.flowable.image.ProcessDiagramGenerator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * 流程模型服务实现
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class FlowModelServiceImpl extends ServiceImpl<FlowModelMapper, FlowModel> implements FlowModelService {
+
+    @Autowired(required = false)
+    private RepositoryService repositoryService;
+
+    @Autowired(required = false)
+    private RuntimeService runtimeService;
+
+    @Autowired(required = false)
+    private HistoryService historyService;
+
+    @Autowired
+    private FlowBusinessMapper flowBusinessMapper;
+    
+    @Autowired(required = false)
+    private ProcessEngineConfiguration processEngineConfiguration;
+    
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Override
+    public IPage<FlowModel> pageFlowModel(Page<FlowModel> page, String modelName, String category, Integer status) {
+        String currentUsername = SessionHelper.getUsername();
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            return new Page<>(page.getCurrent(), page.getSize());
+        }
+        return this.getBaseMapper().selectModelPage(page, modelName, category, status, currentUsername);
+    }
+
+    @Override
+    public List<FlowModel> getEnabledModels(String category) {
+        Long tenantId = SessionHelper.getTenantId();
+        if (tenantId == null || tenantId <= 0) {
+            log.warn("查询流程模型目录时缺少可信租户上下文");
+            return List.of();
+        }
+        return this.getBaseMapper().selectEnabledModels(tenantId, category);
+    }
+
+    @Override
+    public Map<String, Object> getStatusStatistics(String modelName, String category) {
+        String currentUsername = SessionHelper.getUsername();
+        if (currentUsername == null || currentUsername.isEmpty()) {
+            return emptyStatusStatistics();
+        }
+
+        Map<String, Object> raw = this.getBaseMapper().selectStatusStatistics(modelName, category, currentUsername);
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", readCount(raw, "total"));
+        result.put("designing", readCount(raw, "designing"));
+        result.put("deployed", readCount(raw, "deployed"));
+        result.put("suspended", readCount(raw, "suspended"));
+        result.put("disabled", readCount(raw, "disabled"));
+        return result;
+    }
+
+    private Map<String, Object> emptyStatusStatistics() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", 0L);
+        result.put("designing", 0L);
+        result.put("deployed", 0L);
+        result.put("suspended", 0L);
+        result.put("disabled", 0L);
+        return result;
+    }
+
+    private long readCount(Map<String, Object> raw, String key) {
+        if (raw == null || raw.isEmpty()) {
+            return 0L;
+        }
+        Object value = raw.get(key);
+        if (value == null) {
+            value = raw.get(key.toUpperCase(Locale.ROOT));
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value == null) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FlowModel createModel(FlowModel flowModel) {
+        flowModel.setDesignerType(normalizeDesignerType(flowModel.getDesignerType()));
+        // 新建流程统一使用 Redis 事件通知；管理端不再暴露通知方式选择。
+        flowModel.setNotifyType("redis");
+        // 模型 Key 是系统技术标识，始终由服务端生成，不能接受用户提交的值。
+        flowModel.setModelKey(generateModelKey());
+        if (flowModel.getBpmnXml() != null && !flowModel.getBpmnXml().isBlank()) {
+            flowModel.setBpmnXml(normalizeBpmnXml(flowModel.getBpmnXml(), "创建流程模型"));
+        }
+        
+        // 检查Key是否重复
+        if (checkModelKeyExists(flowModel.getModelKey(), null)) {
+            throw new RuntimeException(UiMessages.translate("模型Key已存在：") + flowModel.getModelKey());
+        }
+        
+        // 初始状态为设计态
+        flowModel.setStatus(0);
+        flowModel.setVersion(1);
+        flowModel.setDelFlag(0);
+        flowModel.setCreateTime(LocalDateTime.now());
+        flowModel.setUpdateTime(LocalDateTime.now());
+        flowModel.setCreateBy(SessionHelper.getLoginUser().getUsername());
+        save(flowModel);
+        log.info("创建流程模型成功：{}", flowModel.getModelKey());
+        return flowModel;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FlowModel updateModel(FlowModel flowModel) {
+        FlowModel existing = getById(flowModel.getId());
+        if (existing == null) {
+            throw new RuntimeException("流程模型不存在");
+        }
+        if (flowModel.getDesignerType() == null || flowModel.getDesignerType().isBlank()) {
+            flowModel.setDesignerType(normalizeDesignerType(existing.getDesignerType()));
+        } else {
+            flowModel.setDesignerType(normalizeDesignerType(flowModel.getDesignerType()));
+        }
+        
+        // 已发布的模型不允许修改Key
+        if (existing.getStatus() == 1 && !existing.getModelKey().equals(flowModel.getModelKey())) {
+            throw new RuntimeException("已发布的模型不允许修改Key");
+        }
+        if (flowModel.getBpmnXml() != null && !flowModel.getBpmnXml().isBlank()) {
+            flowModel.setBpmnXml(normalizeBpmnXml(flowModel.getBpmnXml(), "更新流程模型"));
+        }
+        flowModel.setLastUpdateBy(SessionHelper.getLoginUser().getUsername());
+        flowModel.setUpdateTime(LocalDateTime.now());
+        updateById(flowModel);
+        log.info("更新流程模型成功：{}", flowModel.getModelKey());
+        return flowModel;
+    }
+
+    private String normalizeDesignerType(String designerType) {
+        return "business".equals(designerType) ? "business" : "approval";
+    }
+
+    private String generateModelKey() {
+        String modelKey;
+        do {
+            modelKey = "model_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        } while (checkModelKeyExists(modelKey, null));
+        return modelKey;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteModel(String id) {
+        FlowModel model = getById(id);
+        if (model != null) {
+            validateNoProcessData(model);
+
+            // 如果已部署，删除部署
+            if (model.getDeploymentId() != null && !model.getDeploymentId().isEmpty() && repositoryService != null) {
+                try {
+                    repositoryService.deleteDeployment(model.getDeploymentId(), false);
+                } catch (Exception e) {
+                    log.warn("删除流程模型部署失败：modelKey={}, deploymentId={}",
+                            model.getModelKey(), model.getDeploymentId(), e);
+                    throw new BusinessException(500, UiMessages.translate("删除流程部署失败：") + e.getMessage());
+                }
+            }
+            removeById(id);
+            log.info("删除流程模型成功：{}", model.getModelKey());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String deployModel(String id) {
+        return deployModel(id, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String deployModel(String id, String changeDescription) {
+        FlowModel model = getById(id);
+        if (model == null) {
+            throw new RuntimeException("流程模型不存在");
+        }
+        
+        if (model.getBpmnXml() == null || model.getBpmnXml().isEmpty()) {
+            throw new RuntimeException("请先设计流程图");
+        }
+        
+        // 检查 BPMN XML 是否包含图形信息
+        String bpmnXml = model.getBpmnXml();
+        if (!bpmnXml.contains("BPMNDiagram") && !bpmnXml.contains("bpmndi:BPMNDiagram")) {
+            log.error("BPMN XML 缺少图形信息，无法部署。XML 长度: {}, 内容预览: {}",
+                    bpmnXml.length(),
+                    bpmnXml.length() > 500 ? bpmnXml.substring(0, 500) + "..." : bpmnXml);
+            throw new RuntimeException("流程图数据不完整，缺少图形坐标信息。请在流程设计器中重新设计流程图并保存后再部署。");
+        }
+        
+        // 将 BPMN XML 中的 process id 替换为 modelKey，确保启动流程时能找到正确的流程定义
+        String modelKey = model.getModelKey();
+        String originalProcessId = extractProcessKey(bpmnXml);
+        bpmnXml = replaceProcessId(bpmnXml, modelKey);
+        bpmnXml = normalizeBpmnXml(bpmnXml, "部署流程模型");
+        if (Objects.equals(originalProcessId, modelKey)) {
+            log.debug("流程ID已与模型Key一致：{}", modelKey);
+        } else {
+            log.info("已将流程ID替换为：{}", modelKey);
+        }
+
+        validateSequenceFlowRefs(bpmnXml);
+
+        try {
+            if (repositoryService == null) {
+                throw new RuntimeException("Flowable未初始化");
+            }
+            
+            // 如果已发布，增加版本号后重新部署
+            int newVersion = model.getVersion();
+            if (model.getStatus() == 1) {
+                // 已发布的模型，版本号+1后重新部署
+                newVersion = model.getVersion() + 1;
+                log.info("重新部署流程模型：{}，新版本：{}", model.getModelKey(), newVersion);
+            } else {
+                // 未发布的模型，使用当前版本
+                newVersion = model.getVersion() > 0 ? model.getVersion() : 1;
+            }
+            
+            String deploymentKey = model.getModelKey() + "_v" + newVersion;
+            String bpmnResourceName = model.getModelKey() + ".bpmn20.xml";
+            
+            // 生成流程图（使用替换后的 bpmnXml）
+            byte[] diagramBytes = null;
+            String diagramResourceName = model.getModelKey() + ".png";
+            try {
+                diagramBytes = generateProcessDiagram(bpmnXml);
+                if (diagramBytes != null) {
+                    log.info("成功生成流程图：{}，大小：{} bytes", diagramResourceName, diagramBytes.length);
+                }
+            } catch (Exception e) {
+                log.warn("生成流程图失败，将跳过流程图资源：{}", e.getMessage());
+            }
+            
+            // 创建部署（使用替换后的 bpmnXml）
+            Deployment deployment;
+            if (diagramBytes != null) {
+                // 部署 BPMN XML 和流程图
+                deployment = repositoryService.createDeployment()
+                        .name(model.getModelName())
+                        .key(deploymentKey)
+                        .addString(bpmnResourceName, bpmnXml)
+                        .addBytes(diagramResourceName, diagramBytes)
+                        .deploy();
+            } else {
+                // 仅部署 BPMN XML
+                deployment = repositoryService.createDeployment()
+                        .name(model.getModelName())
+                        .key(deploymentKey)
+                        .addString(bpmnResourceName, bpmnXml)
+                        .deploy();
+            }
+            
+            // 获取流程定义
+            ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
+                    .deploymentId(deployment.getId())
+                    .singleResult();
+            
+            // 更新模型状态
+            model.setDeploymentId(deployment.getId());
+            model.setDeploymentKey(deploymentKey);
+            model.setProcessDefinitionId(processDefinition != null ? processDefinition.getId() : null);
+            model.setVersion(newVersion);
+            model.setBpmnXml(bpmnXml);
+            model.setStatus(1);
+            model.setDeployTime(LocalDateTime.now());
+            updateById(model);
+
+            eventPublisher.publishEvent(new FlowModelPublishEvent(this, model, changeDescription));
+            
+            log.info("部署流程模型成功：{}，部署ID：{}", model.getModelKey(), deployment.getId());
+            return deployment.getId();
+            
+        } catch (Exception e) {
+            log.error("部署流程模型失败", e);
+            throw new RuntimeException(UiMessages.translate("部署失败：") + e.getMessage());
+        }
+    }
+    
+    /**
+     * 生成流程图
+     */
+    private byte[] generateProcessDiagram(String bpmnXml) {
+        if (processEngineConfiguration == null) {
+            log.warn("ProcessEngineConfiguration 未注入，无法生成流程图");
+            return null;
+        }
+        
+        try {
+            // 打印 BPMN XML 内容用于调试（只打印前500字符）
+            if (bpmnXml != null && bpmnXml.length() > 0) {
+                String preview = bpmnXml.length() > 500 ? bpmnXml.substring(0, 500) + "..." : bpmnXml;
+                log.info("BPMN XML 内容预览: {}", preview);
+                log.info("BPMN XML 是否包含 BPMNDiagram: {}", bpmnXml.contains("BPMNDiagram"));
+                log.info("BPMN XML 是否包含 bpmndi:BPMNDiagram: {}", bpmnXml.contains("bpmndi:BPMNDiagram"));
+            }
+            
+            // 解析 BPMN XML（第三个参数 true 表示解析图形信息）
+            BpmnModel bpmnModel = new org.flowable.bpmn.converter.BpmnXMLConverter()
+                    .convertToBpmnModel(new BytesStreamSource(bpmnXml.getBytes(java.nio.charset.StandardCharsets.UTF_8)), false, true);
+            
+            // 打印解析结果
+            log.info("BPMN 模型解析完成，进程数: {}", bpmnModel.getProcesses() != null ? bpmnModel.getProcesses().size() : 0);
+            log.info("LocationMap 大小: {}", bpmnModel.getLocationMap() != null ? bpmnModel.getLocationMap().size() : 0);
+            log.info("FlowLocationMap 大小: {}", bpmnModel.getFlowLocationMap() != null ? bpmnModel.getFlowLocationMap().size() : 0);
+            
+            // 检查是否有图形信息
+            if (bpmnModel.getLocationMap() == null || bpmnModel.getLocationMap().isEmpty()) {
+                log.warn("BPMN 模型没有图形坐标信息，无法生成流程图");
+                return null;
+            }
+            
+            // 使用流程图生成器生成图片
+            ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
+            
+            // 设置中文字体
+            String activityFontName = "宋体";
+            String labelFontName = "宋体";
+            String annotationFontName = "宋体";
+            
+            // 生成流程图（无高亮）
+            try (InputStream diagramStream = diagramGenerator.generateDiagram(
+                    bpmnModel,
+                    "png",
+                    Collections.emptyList(),  // 无高亮已完成节点
+                    Collections.emptyList(),  // 无高亮当前节点
+                    activityFontName,
+                    labelFontName,
+                    annotationFontName,
+                    null,
+                    1.0,
+                    true
+            )) {
+            
+                if (diagramStream != null) {
+                    java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = diagramStream.read(buffer)) != -1) {
+                        output.write(buffer, 0, bytesRead);
+                    }
+                    return output.toByteArray();
+                }
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("生成流程图失败", e);
+            return null;
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void suspendModel(String id) {
+        FlowModel model = getById(id);
+        if (model == null) {
+            throw new RuntimeException("流程模型不存在");
+        }
+        
+        if (model.getStatus() != 1) {
+            throw new RuntimeException("只有已发布的模型才能挂起");
+        }
+        
+        // 挂起Flowable流程定义
+        if (model.getProcessDefinitionId() != null && repositoryService != null) {
+            repositoryService.suspendProcessDefinitionById(model.getProcessDefinitionId());
+        }
+        
+        model.setStatus(2); // 已挂起
+        updateById(model);
+        log.info("挂起流程模型：{}", model.getModelKey());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void activateModel(String id) {
+        FlowModel model = getById(id);
+        if (model == null) {
+            throw new RuntimeException("流程模型不存在");
+        }
+        
+        if (model.getStatus() != 2) {
+            throw new RuntimeException("只有已挂起的模型才能激活");
+        }
+        
+        // 激活Flowable流程定义
+        if (model.getProcessDefinitionId() != null && repositoryService != null) {
+            repositoryService.activateProcessDefinitionById(model.getProcessDefinitionId());
+        }
+        
+        model.setStatus(1); // 已发布
+        updateById(model);
+        log.info("激活流程模型：{}", model.getModelKey());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void disableModel(String id) {
+        FlowModel model = getById(id);
+        if (model != null) {
+            model.setStatus(3); // 已禁用
+            updateById(model);
+            log.info("禁用流程模型：{}", model.getModelKey());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void enableModel(String id) {
+        FlowModel model = getById(id);
+        if (model != null) {
+            model.setStatus(0); // 设计态
+            updateById(model);
+            log.info("启用流程模型：{}", model.getModelKey());
+        }
+    }
+
+    @Override
+    public FlowModel getModelDetail(String id) {
+        return getById(id);
+    }
+
+    @Override
+    public FlowModel getModelByKey(String modelKey) {
+        LambdaQueryWrapper<FlowModel> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FlowModel::getModelKey, modelKey);
+        return getOne(wrapper);
+    }
+
+    @Override
+    public List<Map<String, Object>> getModelVersions(String modelKey) {
+        // 查询Flowable中的历史版本
+        if (repositoryService == null) {
+            return Collections.emptyList();
+        }
+        
+        List<ProcessDefinition> definitions = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey(modelKey)
+                .orderByProcessDefinitionVersion()
+                .desc()
+                .list();
+        
+        return definitions.stream().map(pd -> {
+            Map<String, Object> version = new HashMap<>();
+            version.put("id", pd.getId());
+            version.put("key", pd.getKey());
+            version.put("name", pd.getName());
+            version.put("version", pd.getVersion());
+            version.put("deploymentId", pd.getDeploymentId());
+            version.put("suspended", pd.isSuspended());
+            // 从Deployment获取部署时间
+            try {
+                if (pd.getDeploymentId() != null) {
+                    var deployment = repositoryService.createDeploymentQuery()
+                            .deploymentId(pd.getDeploymentId())
+                            .singleResult();
+                    if (deployment != null) {
+                        version.put("deploymentTime", deployment.getDeploymentTime());
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("获取部署时间失败", e);
+            }
+            return version;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FlowModel importModel(String bpmnXml, String modelName, String category) {
+        if (bpmnXml == null || bpmnXml.isEmpty()) {
+            throw new RuntimeException("BPMN XML不能为空");
+        }
+        
+        // 从XML中提取流程Key
+        bpmnXml = normalizeBpmnXml(bpmnXml, "导入流程模型");
+        String modelKey = extractProcessKey(bpmnXml);
+        if (modelKey == null) {
+            modelKey = "imported_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        }
+        
+        // 检查Key是否重复
+        if (checkModelKeyExists(modelKey, null)) {
+            modelKey = modelKey + "_" + System.currentTimeMillis();
+        }
+        
+        FlowModel model = new FlowModel();
+        model.setModelKey(modelKey);
+        model.setModelName(modelName != null ? modelName : "导入的流程");
+        model.setCategory(category);
+        model.setDesignerType("business");
+        model.setBpmnXml(bpmnXml);
+        model.setStatus(0);
+        model.setVersion(1);
+        model.setDelFlag(0);
+        model.setCreateTime(LocalDateTime.now());
+        model.setUpdateTime(LocalDateTime.now());
+        model.setCreateBy(SessionHelper.getLoginUser().getUsername());
+        save(model);
+        log.info("导入流程模型成功：{}", model.getModelKey());
+        return model;
+    }
+
+    @Override
+    public String exportModel(String id) {
+        FlowModel model = getById(id);
+        if (model == null) {
+            throw new RuntimeException("流程模型不存在");
+        }
+        return model.getBpmnXml();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public FlowModel copyModel(String id, String newName) {
+        FlowModel source = getById(id);
+        if (source == null) {
+            throw new RuntimeException("源模型不存在");
+        }
+        
+        String newKey = source.getModelKey() + "_copy_" + System.currentTimeMillis();
+        
+        FlowModel newModel = new FlowModel();
+        newModel.setModelKey(newKey);
+        newModel.setModelName(newName);
+        newModel.setCategory(source.getCategory());
+        newModel.setDescription(source.getDescription());
+        newModel.setFlowType(source.getFlowType());
+        newModel.setDesignerType(normalizeDesignerType(source.getDesignerType()));
+        newModel.setFormType(source.getFormType());
+        newModel.setFormId(source.getFormId());
+        newModel.setFormJson(source.getFormJson());
+        newModel.setNotifyType(source.getNotifyType());
+        newModel.setWebhookUrl(source.getWebhookUrl());
+        newModel.setTodoDetailUrlTemplate(source.getTodoDetailUrlTemplate());
+        newModel.setNotifyConfig(source.getNotifyConfig());
+        newModel.setBpmnXml(normalizeBpmnXml(source.getBpmnXml(), "复制流程模型"));
+        newModel.setStatus(0);
+        newModel.setVersion(1);
+        newModel.setDelFlag(0);
+        newModel.setCreateTime(LocalDateTime.now());
+        newModel.setCreateBy(SessionHelper.getLoginUser().getUsername());
+        newModel.setUpdateTime(LocalDateTime.now());
+        
+        save(newModel);
+        log.info("复制流程模型成功，源模型：{}，新模型：{}", source.getModelKey(), newModel.getModelKey());
+        return newModel;
+    }
+
+    @Override
+    public boolean checkModelKeyExists(String modelKey, String excludeId) {
+        LambdaQueryWrapper<FlowModel> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(FlowModel::getModelKey, modelKey);
+        if (excludeId != null && !excludeId.isEmpty()) {
+            wrapper.ne(FlowModel::getId, excludeId);
+        }
+        return count(wrapper) > 0;
+    }
+
+    /**
+     * 从BPMN XML中提取流程Key
+     */
+    private String extractProcessKey(String bpmnXml) {
+        try {
+            // 简单解析，提取process id
+            int start = bpmnXml.indexOf("<bpmn:process id=\"");
+            if (start == -1) {
+                start = bpmnXml.indexOf("<process id=\"");
+            }
+            if (start == -1) {
+                return null;
+            }
+            
+            start = bpmnXml.indexOf("id=\"", start) + 4;
+            int end = bpmnXml.indexOf("\"", start);
+            return bpmnXml.substring(start, end);
+        } catch (Exception e) {
+            log.warn("提取流程Key失败", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 将 BPMN XML 中的 process id 替换为 modelKey
+     * 这样启动流程时使用 modelKey 就能找到正确的流程定义
+     */
+    private String replaceProcessId(String bpmnXml, String modelKey) {
+        try {
+            // 提取当前的 process id
+            String currentProcessId = extractProcessKey(bpmnXml);
+            if (currentProcessId == null) {
+                log.warn("无法提取当前流程ID，跳过替换");
+                return bpmnXml;
+            }
+            
+            if (currentProcessId.equals(modelKey)) {
+                log.debug("流程ID已经是 {}，无需替换", modelKey);
+                return bpmnXml;
+            }
+            
+            log.info("将流程ID从 {} 替换为 {}", currentProcessId, modelKey);
+            
+            // 替换 process id（需要替换多个地方）
+            // 1. <bpmn:process id="xxx" 或 <process id="xxx"
+            // 2. bpmnElement="xxx" 在 BPMNPlane 中
+            // 3. 可能还有其他引用
+            
+            // 替换 <bpmn:process id="xxx"
+            bpmnXml = bpmnXml.replace(
+                    "<bpmn:process id=\"" + currentProcessId + "\"",
+                    "<bpmn:process id=\"" + modelKey + "\"");
+            
+            // 替换 <process id="xxx"（无命名空间的情况）
+            bpmnXml = bpmnXml.replace(
+                    "<process id=\"" + currentProcessId + "\"",
+                    "<process id=\"" + modelKey + "\"");
+            
+            // 替换 BPMNPlane 中的 bpmnElement
+            bpmnXml = bpmnXml.replace(
+                    "bpmnElement=\"" + currentProcessId + "\"",
+                    "bpmnElement=\"" + modelKey + "\"");
+            
+            return bpmnXml;
+        } catch (Exception e) {
+            log.warn("替换流程ID失败", e);
+            return bpmnXml;
+        }
+    }
+    
+    private void validateSequenceFlowRefs(String bpmnXml) {
+        java.util.regex.Pattern flowPattern = java.util.regex.Pattern.compile(
+                "<(?:bpmn:)?sequenceFlow\\b([^>]*?)/?>",
+                java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Pattern idPattern = java.util.regex.Pattern.compile("\\bid=\"([^\"]*)\"");
+        java.util.regex.Pattern targetRefPattern = java.util.regex.Pattern.compile("\\btargetRef=\"([^\"]*)\"");
+        java.util.regex.Pattern sourceRefPattern = java.util.regex.Pattern.compile("\\bsourceRef=\"([^\"]*)\"");
+        
+        java.util.regex.Matcher matcher = flowPattern.matcher(bpmnXml);
+        while (matcher.find()) {
+            String flowElement = matcher.group(0);
+            String attrs = matcher.group(1);
+            
+            java.util.regex.Matcher idMatcher = idPattern.matcher(flowElement);
+            String flowId = idMatcher.find() ? idMatcher.group(1) : "unknown";
+            
+            boolean hasTargetRef = targetRefPattern.matcher(attrs).find();
+            boolean hasSourceRef = sourceRefPattern.matcher(attrs).find();
+            
+            if (!hasTargetRef || !hasSourceRef) {
+                String missing = !hasTargetRef ? "targetRef" : "sourceRef";
+                log.error("BPMN sequenceFlow [{}] 缺少 {} 属性，XML 片段: {}",
+                        flowId, missing, flowElement);
+                throw new RuntimeException(String.format(
+                        UiMessages.translate("流程图数据不完整：连线 [%s] 缺少 %s 属性。") +
+                        "请在流程设计器中检查所有连线是否完整连接到目标节点，重新保存后再部署。",
+                        flowId, missing));
+            }
+        }
+    }
+
+    private void validateNoProcessData(FlowModel model) {
+        String modelKey = model.getModelKey();
+        if (modelKey == null || modelKey.trim().isEmpty()) {
+            return;
+        }
+
+        long businessCount = flowBusinessMapper.selectCount(new LambdaQueryWrapper<FlowBusiness>()
+                .eq(FlowBusiness::getProcessDefKey, modelKey));
+        long runningCount = 0L;
+        if (runtimeService != null) {
+            runningCount = runtimeService.createProcessInstanceQuery()
+                    .processDefinitionKey(modelKey)
+                    .count();
+        }
+        long historyCount = 0L;
+        if (historyService != null) {
+            historyCount = historyService.createHistoricProcessInstanceQuery()
+                    .processDefinitionKey(modelKey)
+                    .count();
+        }
+
+        if (businessCount > 0 || runningCount > 0 || historyCount > 0) {
+            throw new BusinessException(400, String.format(
+                    UiMessages.translate("流程模型「%s」下已有流程数据（业务记录 %d 条、运行中实例 %d 条、历史实例 %d 条），请先在流程监控中清理相关流程后再删除模型"),
+                    model.getModelName() != null ? model.getModelName() : modelKey,
+                    businessCount,
+                    runningCount,
+                    historyCount));
+        }
+    }
+
+    private String normalizeBpmnXml(String bpmnXml, String operation) {
+        BpmnXmlUtils.ModelNormalizationResult result = BpmnXmlUtils.normalizeModel(bpmnXml);
+        if (!result.duplicateFlowRepairs().isEmpty()) {
+            log.warn("{}：已自动清理 BPMN 重复连线，{}", operation, result.duplicateFlowSummary());
+        }
+        if (!result.normalizedNodeIds().isEmpty()) {
+            log.warn("{}：已自动清理 BPMN 旧版会签表达式，节点={}",
+                    operation, result.normalizedNodeIds());
+        }
+        return result.bpmnXml();
+    }
+}

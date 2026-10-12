@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.datascope.mapper.DataScopeRegionMapper">
+
+    <select id="selectAllRegions" resultType="com.mdframe.forge.starter.datascope.model.DataScopeRegionInfo">
+        SELECT
+            code,
+            parent_code AS parentCode
+        FROM sys_region_code
+    </select>
+
+</mapper>

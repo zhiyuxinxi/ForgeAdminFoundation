@@ -1,0 +1,380 @@
+<template>
+  <div class="callback-container">
+    <div class="callback-card">
+      <div class="callback-icon">
+        <i v-if="loading" class="ai-icon:loader animate-spin" />
+        <i v-else-if="success" class="ai-icon:check-circle" style="color: #22C55E" />
+        <i v-else class="ai-icon:x-circle" style="color: #EF4444" />
+      </div>
+      <h2 class="callback-title">
+        {{ message }}
+      </h2>
+      <p class="callback-desc">
+        {{ detailMessage }}
+      </p>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import mainApi from '@/api'
+
+import { localizeLabel } from '@/locales'
+import { useAppStore, useAuthStore, usePermissionStore, useTenantStore, useUserStore } from '@/store'
+import { lStorage } from '@/utils'
+import { initKeyExchange } from '@/utils/crypto/key-exchange'
+import { request } from '@/utils/http'
+import { applyTenantConfig } from '@/utils/tenant-config'
+import api from './api'
+
+const authStore = useAuthStore()
+const userStore = useUserStore()
+const appStore = useAppStore()
+const router = useRouter()
+const route = useRoute()
+const userClient = import.meta.env.VITE_USER_CLIENT || 'pc'
+const LOGIN_TENANT_STORAGE_KEY = 'login_selected_tenant_id'
+const SOCIAL_TENANT_MAP_KEY = 'login_social_tenant_map'
+
+const loading = ref(true)
+const success = ref(false)
+const message = ref(localizeLabel('正在处理授权...'))
+const detailMessage = ref(localizeLabel('请稍候...'))
+
+function normalizeTenantId(value) {
+  if (Array.isArray(value)) {
+    const first = value.find(item => item !== null && item !== undefined && item !== '')
+    return normalizeTenantId(first)
+  }
+  if (value === null || value === undefined || value === '')
+    return null
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function getSocialTenantMap() {
+  return lStorage.get(SOCIAL_TENANT_MAP_KEY) || {}
+}
+
+function setSocialTenantMap(map) {
+  lStorage.set(SOCIAL_TENANT_MAP_KEY, map)
+}
+
+function resolveSocialTenantId(state) {
+  const map = getSocialTenantMap()
+  const mappedTenantId = normalizeTenantId(map[state])
+  if (state && Object.prototype.hasOwnProperty.call(map, state)) {
+    delete map[state]
+    setSocialTenantMap(map)
+  }
+  return mappedTenantId ?? normalizeTenantId(lStorage.get(LOGIN_TENANT_STORAGE_KEY)) ?? null
+}
+
+async function handleCallback() {
+  const { code, state } = route.query
+
+  // state 格式: [bind_]platform_randomUUID
+  let platform = null
+  let isBind = false
+  const stateCode = state
+  if (state && state.includes('_')) {
+    if (state.startsWith('bind_')) {
+      isBind = true
+      const afterPrefix = state.substring(5)
+      const parts = afterPrefix.split('_')
+      platform = parts[0]
+    }
+    else {
+      const parts = state.split('_')
+      platform = parts[0]
+    }
+  }
+
+  if (!code || !state || !platform) {
+    loading.value = false
+    success.value = false
+    message.value = localizeLabel('授权参数缺失')
+    detailMessage.value = localizeLabel('缺少必要的授权参数，请重新尝试')
+    setTimeout(() => {
+      router.push(isBind ? '/profile' : '/login')
+    }, 2000)
+    return
+  }
+
+  // 绑定流程
+  if (isBind) {
+    try {
+      const bindRes = await request.post('/social/bind', {
+        platform,
+        code,
+        state: stateCode,
+      })
+
+      if (bindRes.code === 200) {
+        loading.value = false
+        success.value = true
+        message.value = localizeLabel('绑定成功')
+        detailMessage.value = localizeLabel('正在返回个人中心...')
+        setTimeout(() => {
+          router.push('/profile')
+        }, 1500)
+      }
+      else {
+        loading.value = false
+        success.value = false
+        message.value = localizeLabel('绑定失败')
+        detailMessage.value = bindRes.msg || localizeLabel('三方账号绑定失败')
+        setTimeout(() => {
+          router.push('/profile')
+        }, 2000)
+      }
+    }
+    catch (error) {
+      console.error('三方账号绑定失败:', error)
+      loading.value = false
+      success.value = false
+      message.value = localizeLabel('绑定异常')
+      detailMessage.value = localizeLabel('处理绑定时发生错误，请重新尝试')
+      setTimeout(() => {
+        router.push('/profile')
+      }, 2000)
+    }
+    return
+  }
+
+  // 登录流程
+  try {
+    const tenantId = resolveSocialTenantId(stateCode)
+    const callbackRes = await api.socialCallback({
+      platform,
+      code,
+      state: stateCode,
+      tenantId,
+      userClient,
+    })
+
+    if (callbackRes.code !== 200 || !callbackRes.data) {
+      loading.value = false
+      success.value = false
+      message.value = localizeLabel('授权失败')
+      detailMessage.value = callbackRes.msg || localizeLabel('第三方平台授权失败')
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
+      return
+    }
+
+    // 服务端换票成功，只返回一次性登录票据，不再下发三方用户明细
+    const ticketData = callbackRes.data
+    message.value = localizeLabel('正在登录...')
+
+    const loginParams = {
+      authType: 'oauth2',
+      socialTicket: ticketData.socialTicket,
+      connectionCode: ticketData.connectionCode,
+      tenantId: tenantId ?? ticketData.tenantId,
+      userClient,
+      appId: import.meta.env.VITE_APP_ID || 'forge_pc_001',
+    }
+
+    const loginRes = await api.login(loginParams)
+
+    if (loginRes.code !== 200) {
+      loading.value = false
+      success.value = false
+      message.value = localizeLabel('登录失败')
+      detailMessage.value = loginRes.msg || localizeLabel('系统登录失败，请重新尝试')
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
+      return
+    }
+
+    await onLoginSuccess(loginRes.data)
+
+    loading.value = false
+    success.value = true
+    message.value = localizeLabel('登录成功')
+    detailMessage.value = localizeLabel('正在跳转到首页...')
+  }
+  catch (error) {
+    console.error('三方登录回调处理失败:', error)
+    loading.value = false
+    success.value = false
+    message.value = localizeLabel('登录异常')
+    detailMessage.value = localizeLabel('处理登录时发生错误，请重新尝试')
+    setTimeout(() => {
+      router.push('/login')
+    }, 2000)
+  }
+}
+
+async function onLoginSuccess(data = {}) {
+  authStore.resetLoginState({ resetAuth: false })
+  const accessToken = data.accessToken || data.token
+
+  if (accessToken) {
+    authStore.setToken({
+      accessToken,
+      tokenType: data.tokenType || 'Bearer',
+      expiresIn: data.expiresIn,
+    })
+
+    try {
+      await initKeyExchange(request, accessToken)
+    }
+    catch (error) {
+      console.warn('密钥交换失败，将使用降级方案:', error)
+    }
+  }
+
+  if (data.userInfo) {
+    const loginUser = data.userInfo
+    userStore.setUser({
+      id: loginUser.userId,
+      username: loginUser.username,
+      nickName: loginUser.realName || loginUser.username,
+      email: loginUser.email,
+      phone: loginUser.phone,
+      avatar: loginUser.avatar,
+      userType: loginUser.userType,
+      userStatus: loginUser.userStatus,
+      tenantId: loginUser.tenantId,
+      tenantName: loginUser.tenantName,
+      tenantIds: loginUser.tenantIds || [],
+      roleIds: loginUser.roleIds || [],
+      roleKeys: loginUser.roleKeys || [],
+      permissions: loginUser.permissions || [],
+      apiPermissions: loginUser.apiPermissions || [],
+      orgIds: loginUser.orgIds || [],
+      mainOrgId: loginUser.mainOrgId,
+      roles: loginUser.roleKeys ? Array.from(loginUser.roleKeys) : [],
+      userInfo: loginUser,
+    })
+    lStorage.set('userInfo', loginUser)
+  }
+
+  try {
+    await loadAndSetMenuData()
+
+    // 通知父窗口登录成功
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'SOCIAL_LOGIN_SUCCESS',
+        data: {
+          accessToken,
+          token: accessToken,
+          tokenType: data.tokenType,
+          expiresIn: data.expiresIn,
+        },
+      }, '*')
+      // 关闭子窗口
+      window.close()
+    }
+    else {
+      // 如果没有父窗口，直接跳转
+      const defaultRedirectPath = import.meta.env.VITE_HOME_PATH || '/'
+      router.push(defaultRedirectPath)
+    }
+  }
+  catch (error) {
+    console.error(error)
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'SOCIAL_LOGIN_FAILED',
+        error: error.message,
+      }, '*')
+      window.close()
+    }
+    else {
+      router.push('/login')
+    }
+  }
+}
+
+async function loadAndSetMenuData() {
+  try {
+    const permissionStore = usePermissionStore()
+    const tenantStore = useTenantStore()
+    const tenantConfig = await tenantStore.loadTenantConfig(userStore.userInfo?.tenantId)
+    await applyTenantConfig(tenantConfig, appStore)
+
+    const res = await mainApi.getMenu(1)
+    if (res.code === 200 && res.data) {
+      permissionStore.setMenuData(res.data)
+    }
+
+    let waitCount = 0
+    while (!permissionStore.menuDataLoaded && waitCount < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      waitCount++
+    }
+  }
+  catch (error) {
+    console.error('获取菜单数据失败:', error)
+  }
+}
+
+onMounted(() => {
+  handleCallback()
+})
+</script>
+
+<style scoped>
+.callback-container {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #bfdbfe 100%);
+}
+
+.callback-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  max-width: 400px;
+}
+
+.callback-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  font-size: 2rem;
+}
+
+.callback-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.callback-desc {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

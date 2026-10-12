@@ -1,0 +1,186 @@
+import { defineStore } from 'pinia'
+import { AIStoreType, AIHistoryItem, ChatMessage, AIProviderOption } from './aiStore.d'
+import type { AiChatSession } from '@/api/ai'
+import { AIGenerateResponse } from '@/api/ai/ai.d'
+import type { GenerateValidationSummary } from '@/components/FgAI/generateValidation'
+import { StorageEnum } from '@/enums/storageEnum'
+import { getLocalStorage, setLocalStorage } from '@/utils/storage'
+
+const MAX_GENERATE_HISTORY = 20
+
+interface AddHistoryOptions {
+  businessDefinitionId?: number | string
+  businessName?: string
+  providerName?: string
+  modelName?: string
+  validationSummary?: GenerateValidationSummary
+}
+
+function loadGenerateHistory(): AIHistoryItem[] {
+  const history = getLocalStorage(StorageEnum.GO_AI_GENERATE_HISTORY)
+  if (!Array.isArray(history)) return []
+  return history.slice(0, MAX_GENERATE_HISTORY) as AIHistoryItem[]
+}
+
+function persistGenerateHistory(history: AIHistoryItem[]) {
+  setLocalStorage(StorageEnum.GO_AI_GENERATE_HISTORY, history.slice(0, MAX_GENERATE_HISTORY))
+}
+
+export const useAIStore = defineStore({
+  id: 'useAIStore',
+  state: (): AIStoreType => ({
+    generating: false,
+    streaming: false,
+    streamingText: '',
+    lastPrompt: '',
+    lastResponse: null,
+    generateHistory: loadGenerateHistory(),
+    chatMessages: [],
+    chatSessions: [],
+    currentSessionId: null,
+    aiPanelVisible: false,
+    selectedProvider: null,
+    _abortController: null as AbortController | null
+  }),
+  getters: {
+    getGenerating(): boolean {
+      return this.generating
+    },
+    getStreaming(): boolean {
+      return this.streaming
+    },
+    getStreamingText(): string {
+      return this.streamingText
+    },
+    getLastPrompt(): string {
+      return this.lastPrompt
+    },
+    getLastResponse(): AIGenerateResponse | null {
+      return this.lastResponse
+    },
+    getGenerateHistory(): AIHistoryItem[] {
+      return this.generateHistory
+    },
+    getChatMessages(): ChatMessage[] {
+      return this.chatMessages
+    },
+    getAIPanelVisible(): boolean {
+      return this.aiPanelVisible
+    },
+    getSelectedProvider(): AIProviderOption | null {
+      return this.selectedProvider
+    }
+  },
+  actions: {
+    setGenerating(value: boolean) {
+      this.generating = value
+    },
+    setStreaming(value: boolean) {
+      this.streaming = value
+    },
+    setStreamingText(value: string) {
+      this.streamingText = value
+    },
+    appendStreamingText(chunk: string) {
+      this.streamingText += chunk
+      // 更新最后一条 assistant 消息的内容（使用 splice 触发响应式更新）
+      const idx = this.chatMessages.length - 1
+      if (this.chatMessages[idx] && this.chatMessages[idx].role === 'assistant' && this.chatMessages[idx].streaming) {
+        this.chatMessages[idx].content += chunk
+      }
+    },
+    getAbortController(): AbortController {
+      if (!this._abortController) {
+        this._abortController = new AbortController()
+      }
+      return this._abortController
+    },
+    abortGenerating() {
+      if (this._abortController) {
+        this._abortController.abort()
+        this._abortController = null
+      }
+      this.generating = false
+      // 取消最后一条消息的 streaming 状态
+      const lastMsg = this.chatMessages[this.chatMessages.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant' && lastMsg.streaming) {
+        lastMsg.streaming = false
+      }
+    },
+    setLastPrompt(prompt: string) {
+      this.lastPrompt = prompt
+    },
+    setLastResponse(response: AIGenerateResponse | null) {
+      this.lastResponse = response
+    },
+    addHistory(prompt: string, response: AIGenerateResponse, options?: AddHistoryOptions) {
+      this.generateHistory.unshift({
+        id: `ai-history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        prompt,
+        response,
+        timestamp: Date.now(),
+        businessDefinitionId: options?.businessDefinitionId,
+        businessName: options?.businessName,
+        providerName: options?.providerName,
+        modelName: options?.modelName,
+        validationSummary: options?.validationSummary
+      })
+      // 最多保留 20 条历史
+      if (this.generateHistory.length > 20) {
+        this.generateHistory = this.generateHistory.slice(0, 20)
+      }
+      persistGenerateHistory(this.generateHistory)
+    },
+    addChatMessage(msg: ChatMessage) {
+      this.chatMessages.push(msg)
+    },
+    setChatMessages(messages: ChatMessage[]) {
+      this.chatMessages = messages
+    },
+    setChatSessions(sessions: AiChatSession[]) {
+      this.chatSessions = sessions
+    },
+    setCurrentSessionId(sessionId: string | null) {
+      this.currentSessionId = sessionId
+    },
+    updateLastAssistantMessage(content: string, canvasResponse?: AIGenerateResponse | null, reasoningData?: Partial<ChatMessage>) {
+      const lastMsg = this.chatMessages[this.chatMessages.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant') {
+        lastMsg.content = content
+        lastMsg.streaming = false
+        if (canvasResponse !== undefined) {
+          lastMsg.canvasResponse = canvasResponse
+        }
+        if (reasoningData) {
+          if (reasoningData.reasoning !== undefined) {
+            lastMsg.reasoning = reasoningData.reasoning
+          }
+          if (reasoningData.isReasoning !== undefined) {
+            lastMsg.isReasoning = reasoningData.isReasoning
+          }
+          if (reasoningData.reasoningTime !== undefined) {
+            lastMsg.reasoningTime = reasoningData.reasoningTime
+          }
+          if (reasoningData.progressSteps !== undefined) {
+            lastMsg.progressSteps = reasoningData.progressSteps
+          }
+          if (reasoningData.validationSummary !== undefined) {
+            lastMsg.validationSummary = reasoningData.validationSummary
+          }
+        }
+      }
+    },
+    clearChat() {
+      this.chatMessages = []
+      this.currentSessionId = null
+      this.streamingText = ''
+      this.abortGenerating()
+    },
+    setAIPanelVisible(value: boolean) {
+      this.aiPanelVisible = value
+    },
+    setSelectedProvider(value: AIProviderOption | null) {
+      this.selectedProvider = value
+    }
+  }
+})

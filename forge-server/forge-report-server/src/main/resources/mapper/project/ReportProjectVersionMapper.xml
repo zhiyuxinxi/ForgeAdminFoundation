@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.report.project.mapper.ReportProjectVersionMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.report.project.domain.ReportProjectVersion">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="project_id" property="projectId" />
+        <result column="project_name" property="projectName" />
+        <result column="version_no" property="versionNo" />
+        <result column="version_name" property="versionName" />
+        <result column="operation_type" property="operationType" />
+        <result column="source_version_id" property="sourceVersionId" />
+        <result column="publisher_id" property="publisherId" />
+        <result column="publisher_name" property="publisherName" />
+        <result column="publish_time" property="publishTime" />
+        <result column="publish_url" property="publishUrl" />
+        <result column="index_img" property="indexImg" />
+        <result column="canvas_width" property="canvasWidth" />
+        <result column="canvas_height" property="canvasHeight" />
+        <result column="background_color" property="backgroundColor" />
+        <result column="component_data" property="componentData" />
+        <result column="remark" property="remark" />
+        <result column="create_dept" property="createDept" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <select id="selectVersionPage" resultMap="BaseResultMap">
+        SELECT id,
+               tenant_id,
+               project_id,
+               project_name,
+               version_no,
+               version_name,
+               operation_type,
+               source_version_id,
+               publisher_id,
+               publisher_name,
+               publish_time,
+               publish_url,
+               index_img,
+               canvas_width,
+               canvas_height,
+               background_color,
+               remark,
+               create_dept,
+               create_by,
+               create_time,
+               update_by,
+               update_time
+        FROM ai_report_project_version
+        WHERE tenant_id = #{tenantId}
+          AND project_id = #{projectId}
+        ORDER BY version_no DESC, create_time DESC
+    </select>
+
+    <select id="selectMaxVersionNo" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(version_no), 0)
+        FROM ai_report_project_version
+        WHERE tenant_id = #{tenantId}
+          AND project_id = #{projectId}
+    </select>
+
+</mapper>

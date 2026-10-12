@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.message.mapper.SysMessageReceiverMapper">
+
+    <select id="selectReceiverStatsByMessageIds"
+            resultType="com.mdframe.forge.plugin.message.domain.vo.ReceiverStatVO">
+        SELECT
+            message_id AS messageId,
+            COUNT(*) AS receiverCount,
+            SUM(CASE WHEN read_flag = 1 THEN 1 ELSE 0 END) AS readCount,
+            SUM(CASE WHEN read_flag = 0 THEN 1 ELSE 0 END) AS unreadCount
+        FROM sys_message_receiver
+        WHERE message_id IN
+        <foreach collection="messageIds" item="messageId" open="(" separator="," close=")">
+            #{messageId}
+        </foreach>
+        GROUP BY message_id
+    </select>
+
+    <select id="selectReceiversWithUserInfo"
+            resultType="com.mdframe.forge.plugin.message.domain.vo.ReceiverVO">
+        SELECT r.user_id, u.real_name as user_name, o.org_name, r.read_flag, r.read_time
+            FROM sys_message_receiver r
+            LEFT JOIN sys_user u
+                ON r.user_id = u.id
+               AND u.del_flag = 0
+            LEFT JOIN sys_user_org so on so.user_id = u.id and so.is_main = '1'
+            LEFT JOIN sys_org o
+                ON so.org_id = o.id
+               AND o.tenant_id = so.tenant_id
+               AND o.del_flag = 0
+            WHERE r.message_id = #{messageId}
+    </select>
+    <select id="selectUserWebMessages" resultType="com.mdframe.forge.plugin.message.domain.vo.MessageVO">
+        SELECT m.id, m.title, m.content, m.type, m.send_channel, r.read_flag, r.read_time, m.create_time, m.biz_type, m.biz_key
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON r.message_id = m.id
+        WHERE r.user_id = #{userId}
+        AND m.send_channel = 'WEB'
+        <if test='readFlag != null'> AND r.read_flag = #{readFlag} </if>
+        <if test="type != null and type != ''"> AND m.type = #{type} </if>
+        <if test="keyword != null and keyword != ''"> AND (m.title LIKE CONCAT('%', #{keyword}, '%') OR m.content LIKE CONCAT('%', #{keyword}, '%')) </if>
+        <if test="startTime != null and startTime != ''"> AND m.create_time &gt;= #{startTime} </if>
+        <if test="endTime != null and endTime != ''"> AND m.create_time &lt;= #{endTime} </if>
+        ORDER BY r.create_time DESC
+    </select>
+
+    <select id="selectUnreadWebMessageTypes" resultType="java.lang.String">
+        SELECT m.type
+        FROM sys_message_receiver r
+        INNER JOIN sys_message m ON r.message_id = m.id
+        WHERE r.user_id = #{userId}
+          AND r.read_flag = 0
+          AND m.send_channel = 'WEB'
+    </select>
+
+    <update id="markWebMessagesReadByBiz">
+        UPDATE sys_message_receiver r
+        INNER JOIN sys_message m ON r.message_id = m.id
+        SET r.read_flag = 1,
+            r.read_time = #{readTime}
+        WHERE m.biz_type = #{bizType}
+          AND m.biz_key = #{bizKey}
+          AND m.send_channel = 'WEB'
+          AND r.read_flag = 0
+    </update>
+
+    <update id="markMessagesReadBatch">
+        UPDATE sys_message_receiver
+        SET read_flag = 1,
+            read_time = #{readTime}
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND read_flag = 0
+        <choose>
+            <when test="messageIds != null and !messageIds.isEmpty()">
+                AND message_id IN
+                <foreach collection="messageIds" item="messageId" open="(" separator="," close=")">
+                    #{messageId}
+                </foreach>
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </update>
+
+    <update id="markAllMessagesRead">
+        UPDATE sys_message_receiver
+        SET read_flag = 1,
+            read_time = #{readTime}
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND read_flag = 0
+    </update>
+
+    <update id="updateDeliveryResult">
+        UPDATE sys_message_receiver
+        SET delivery_status = #{deliveryStatus},
+            delivery_attempts = IFNULL(delivery_attempts, 0) + 1,
+            external_id = #{externalId},
+            last_error_code = #{lastErrorCode},
+            last_attempt_time = #{lastAttemptTime},
+            next_retry_time = #{nextRetryTime}
+        WHERE message_id = #{messageId}
+          AND user_id = #{userId}
+    </update>
+
+    <select id="selectFailedDeliveriesDue"
+            resultType="com.mdframe.forge.plugin.message.domain.entity.SysMessageReceiver">
+        SELECT r.*
+        FROM sys_message_receiver r
+        WHERE r.tenant_id = #{tenantId}
+          AND r.delivery_status = 'FAILED'
+          AND r.next_retry_time IS NOT NULL
+          AND r.next_retry_time &lt;= #{now}
+        ORDER BY r.next_retry_time ASC
+        LIMIT #{limitSize}
+    </select>
+</mapper>

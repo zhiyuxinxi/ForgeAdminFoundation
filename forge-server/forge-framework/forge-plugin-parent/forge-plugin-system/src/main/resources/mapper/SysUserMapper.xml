@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.SysUserMapper">
+
+    <!-- 通用查询映射结果 -->
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.system.entity.SysUser">
+        <id column="id" property="id" />
+        <result column="tenant_id" property="tenantId" />
+        <result column="username" property="username" />
+        <result column="real_name" property="realName" />
+        <result column="user_type" property="userType" />
+        <result column="user_client" property="userClient" />
+        <result column="email" property="email" />
+        <result column="phone" property="phone" />
+        <result column="id_card" property="idCard" />
+        <result column="gender" property="gender" />
+        <result column="password" property="password" />
+        <result column="salt" property="salt" />
+        <result column="user_status" property="userStatus" />
+        <result column="avatar" property="avatar" />
+        <result column="region_code" property="regionCode" />
+        <result column="last_login_time" property="lastLoginTime" />
+        <result column="last_login_ip" property="lastLoginIp" />
+        <result column="login_count" property="loginCount" />
+        <result column="force_password_change" property="forcePasswordChange" />
+        <result column="remark" property="remark" />
+        <result column="create_dept" property="createDept" />
+        <result column="del_flag" property="delFlag" />
+        <result column="org_name" property="orgName" />
+        <result column="post_name" property="postName" />
+        <result column="tenant_name" property="tenantName" />
+        <result column="dept_name" property="deptName" />
+        <result column="create_by" property="createBy" />
+        <result column="create_time" property="createTime" />
+        <result column="update_by" property="updateBy" />
+        <result column="update_time" property="updateTime" />
+    </resultMap>
+
+    <!-- 通用查询结果列 -->
+    <sql id="Base_Column_List">
+        u.id,
+        <choose>
+            <when test="query != null and query.tenantId != null">
+                #{query.tenantId} AS tenant_id,
+            </when>
+            <otherwise>
+                u.tenant_id,
+            </otherwise>
+        </choose>
+        u.username, u.real_name,
+        <choose>
+            <when test="query != null and query.tenantId != null">
+                CASE WHEN u.user_type = 0 THEN 0 WHEN sut_current.member_type = 1 THEN 1 ELSE 2 END AS user_type,
+            </when>
+            <otherwise>
+                u.user_type,
+            </otherwise>
+        </choose>
+        u.user_client, u.email, u.phone,
+        u.id_card, u.gender, u.password, u.salt, u.user_status, u.avatar, u.region_code,
+        u.last_login_time, u.last_login_ip, u.login_count, u.force_password_change, u.remark, u.create_dept,
+        u.create_by, u.create_time, u.update_by, u.update_time, u.del_flag,
+        COALESCE(tenant_names.tenant_names, t.tenant_name) AS tenant_name,
+        orgs.org_name, orgs.org_name AS dept_name,
+        posts.post_name
+    </sql>
+
+    <!-- 通用查询条件 -->
+    <sql id="queryCondition">
+        AND u.del_flag = 0
+        <if test="query.tenantId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM sys_user_tenant sut
+                WHERE sut.user_id = u.id
+                  AND sut.tenant_id = #{query.tenantId}
+                  AND sut.status = 1
+            )
+        </if>
+        <if test="query.username != null and query.username != ''">
+            AND u.username LIKE CONCAT('%', #{query.username}, '%')
+        </if>
+        <if test="query.realName != null and query.realName != ''">
+            AND u.real_name LIKE CONCAT('%', #{query.realName}, '%')
+        </if>
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (u.username LIKE CONCAT('%', #{query.keyword}, '%')
+                 OR u.real_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query.userType != null">
+            AND u.user_type = #{query.userType}
+        </if>
+        <if test="query.phone != null and query.phone != ''">
+            AND u.phone = #{query.phone}
+        </if>
+        <if test="query.userStatus != null">
+            AND u.user_status = #{query.userStatus}
+        </if>
+        <if test="query.createDept != null">
+            AND u.create_dept = #{query.createDept}
+        </if>
+        <if test="query.postId != null">
+            AND EXISTS (
+                SELECT 1
+                FROM sys_user_post up
+                INNER JOIN sys_post p
+                    ON p.id = up.post_id
+                   AND p.tenant_id = up.tenant_id
+                   AND p.del_flag = 0
+                WHERE up.user_id = u.id
+                  AND up.post_id = #{query.postId}
+                <if test="query.tenantId != null">
+                  AND up.tenant_id = #{query.tenantId}
+                </if>
+            )
+        </if>
+        <!-- 组织ID过滤：默认查询该组织及其子组织；directOrgOnly=true 时只查直接成员 -->
+        <if test="query.orgId != null">
+            <choose>
+                <when test="query.directOrgOnly != null and query.directOrgOnly">
+                    AND u.id IN (
+                        SELECT uo.user_id
+                        FROM sys_user_org uo
+                        INNER JOIN sys_org o
+                            ON o.id = uo.org_id
+                           AND o.tenant_id = uo.tenant_id
+                           AND o.del_flag = 0
+                        WHERE
+                        <if test="query.tenantId != null">
+                            uo.tenant_id = #{query.tenantId} AND
+                        </if>
+                        uo.org_id = #{query.orgId}
+                    )
+                </when>
+                <otherwise>
+                    AND u.id IN (
+                        SELECT uo.user_id
+                        FROM sys_user_org uo
+                        WHERE
+                        <if test="query.tenantId != null">
+                            uo.tenant_id = #{query.tenantId} AND
+                        </if>
+                        uo.org_id IN (
+                            SELECT id FROM sys_org WHERE del_flag = 0 AND
+                            <if test="query.tenantId != null">
+                                tenant_id = #{query.tenantId} AND
+                            </if>
+                            (id = #{query.orgId} OR FIND_IN_SET(#{query.orgId}, ancestors) > 0)
+                        )
+                    )
+                </otherwise>
+            </choose>
+        </if>
+        <!-- 行政区划过滤（支持虚拟组织ALL后缀） -->
+        <if test="query.regionCode != null and query.regionCode != '' and query.regionCode.contains('ALL')">
+            AND (u.region_code = REPLACE(#{query.regionCode},'ALL','')
+                 OR u.region_code IN (SELECT code FROM sys_region_code WHERE parent_code = REPLACE(#{query.regionCode},'ALL','')))
+        </if>
+        <if test="query.regionCode != null and query.regionCode != '' and !query.regionCode.contains('ALL')">
+            AND u.region_code = #{query.regionCode}
+        </if>
+    </sql>
+
+    <!-- 分页查询用户列表 -->
+    <select id="selectUserPage" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List" />
+        FROM sys_user u
+        LEFT JOIN sys_tenant t
+            ON t.id = u.tenant_id
+           AND t.del_flag = 0
+        <if test="query.tenantId != null">
+            LEFT JOIN sys_user_tenant sut_current
+                ON sut_current.user_id = u.id
+               AND sut_current.tenant_id = #{query.tenantId}
+               AND sut_current.status = 1
+        </if>
+        LEFT JOIN (
+            SELECT sut.user_id,
+                   GROUP_CONCAT(tn.tenant_name ORDER BY sut.is_default DESC, tn.id ASC SEPARATOR ',') AS tenant_names
+            FROM sys_user_tenant sut
+            INNER JOIN sys_tenant tn
+                ON tn.id = sut.tenant_id
+               AND tn.del_flag = 0
+            WHERE sut.status = 1
+              AND tn.tenant_status = 1
+            GROUP BY sut.user_id
+        ) tenant_names ON tenant_names.user_id = u.id
+        LEFT JOIN (
+            SELECT uo.user_id, GROUP_CONCAT(o.org_name ORDER BY o.sort SEPARATOR ',') AS org_name
+            FROM sys_user_org uo
+            LEFT JOIN sys_org o
+                ON o.id = uo.org_id
+               AND o.tenant_id = uo.tenant_id
+               AND o.del_flag = 0
+            <where>
+                <if test="query.tenantId != null">
+                    uo.tenant_id = #{query.tenantId}
+                </if>
+            </where>
+            GROUP BY uo.user_id
+        ) orgs ON orgs.user_id = u.id
+        LEFT JOIN (
+            SELECT up.user_id, GROUP_CONCAT(p.post_name ORDER BY p.sort SEPARATOR ',') AS post_name
+            FROM sys_user_post up
+            LEFT JOIN sys_post p
+                ON p.id = up.post_id
+               AND p.del_flag = 0
+            <where>
+                <if test="query.tenantId != null">
+                    up.tenant_id = #{query.tenantId}
+                </if>
+            </where>
+            GROUP BY up.user_id
+        ) posts ON posts.user_id = u.id
+        <where>
+            <include refid="queryCondition" />
+        </where>
+        ORDER BY u.create_time DESC
+    </select>
+
+    <!-- 导出查询用户列表（不分页） -->
+    <select id="selectExportList" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List" />
+        FROM sys_user u
+        LEFT JOIN sys_tenant t
+            ON t.id = u.tenant_id
+           AND t.del_flag = 0
+        <if test="query.tenantId != null">
+            LEFT JOIN sys_user_tenant sut_current
+                ON sut_current.user_id = u.id
+               AND sut_current.tenant_id = #{query.tenantId}
+               AND sut_current.status = 1
+        </if>
+        LEFT JOIN (
+            SELECT sut.user_id,
+                   GROUP_CONCAT(tn.tenant_name ORDER BY sut.is_default DESC, tn.id ASC SEPARATOR ',') AS tenant_names
+            FROM sys_user_tenant sut
+            INNER JOIN sys_tenant tn
+                ON tn.id = sut.tenant_id
+               AND tn.del_flag = 0
+            WHERE sut.status = 1
+              AND tn.tenant_status = 1
+            GROUP BY sut.user_id
+        ) tenant_names ON tenant_names.user_id = u.id
+        LEFT JOIN (
+            SELECT uo.user_id, GROUP_CONCAT(o.org_name ORDER BY o.sort SEPARATOR ',') AS org_name
+            FROM sys_user_org uo
+            LEFT JOIN sys_org o
+                ON o.id = uo.org_id
+               AND o.tenant_id = uo.tenant_id
+               AND o.del_flag = 0
+            <where>
+                <if test="query.tenantId != null">
+                    uo.tenant_id = #{query.tenantId}
+                </if>
+            </where>
+            GROUP BY uo.user_id
+        ) orgs ON orgs.user_id = u.id
+        LEFT JOIN (
+            SELECT up.user_id, GROUP_CONCAT(p.post_name ORDER BY p.sort SEPARATOR ',') AS post_name
+            FROM sys_user_post up
+            LEFT JOIN sys_post p
+                ON p.id = up.post_id
+               AND p.del_flag = 0
+            <where>
+                <if test="query.tenantId != null">
+                    up.tenant_id = #{query.tenantId}
+                </if>
+            </where>
+            GROUP BY up.user_id
+        ) posts ON posts.user_id = u.id
+        <where>
+            <include refid="queryCondition" />
+        </where>
+        ORDER BY u.create_time DESC
+    </select>
+
+    <select id="selectByUsernameForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.username = #{username}
+          AND u.del_flag = 0
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <select id="selectByPhoneForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.phone = #{phone}
+          AND u.del_flag = 0
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <select id="selectEligibleUsersByVerifiedPhone" resultMap="BaseResultMap">
+        SELECT u.id, u.tenant_id, u.username, u.real_name, u.user_type,
+               u.user_client, u.email, u.phone, u.user_status, u.avatar,
+               u.region_code, u.force_password_change, u.create_time, u.del_flag
+        FROM sys_user u
+        WHERE u.phone = #{phone}
+          AND u.del_flag = 0
+          AND u.user_status = 1
+          AND COALESCE(u.force_password_change, 0) = 0
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 2
+    </select>
+
+    <select id="selectByEmailForLogin" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.email = #{email}
+          AND u.del_flag = 0
+        <if test="tenantId != null">
+          AND (
+              u.tenant_id = #{tenantId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM sys_user_tenant sut
+                  WHERE sut.user_id = u.id
+                    AND sut.tenant_id = #{tenantId}
+                    AND sut.status = 1
+              )
+          )
+        </if>
+        <choose>
+            <when test="tenantId != null">
+                ORDER BY CASE WHEN u.tenant_id = #{tenantId} THEN 0 ELSE 1 END, u.id ASC
+            </when>
+            <otherwise>
+                ORDER BY CASE WHEN u.tenant_id = 1 THEN 0 ELSE 1 END, u.id ASC
+            </otherwise>
+        </choose>
+        LIMIT 1
+    </select>
+
+    <!-- 协同目录同步：按手机号/邮箱查询租户内未删除用户（身份冲突检测，仅限本租户） -->
+    <select id="selectActiveUsersByPhoneOrEmail" resultMap="BaseResultMap">
+        SELECT u.*
+        FROM sys_user u
+        WHERE u.tenant_id = #{tenantId}
+          AND u.del_flag = 0
+          AND (
+              (#{phone} IS NOT NULL AND u.phone = #{phone})
+              OR (#{email} IS NOT NULL AND u.email = #{email})
+          )
+        ORDER BY u.id ASC
+    </select>
+
+    <!-- 协同目录同步：仅更新同步拥有的资料字段，不触碰密码/状态/角色等本地资产 -->
+    <update id="updateUserProfileBySync">
+        UPDATE sys_user
+        <set>
+            <if test="realName != null and realName != ''">real_name = #{realName},</if>
+            <if test="avatar != null and avatar != ''">avatar = #{avatar},</if>
+            <if test="email != null and email != ''">email = #{email},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            update_time = NOW()
+        </set>
+        WHERE id = #{userId}
+          AND tenant_id = #{tenantId}
+          AND del_flag = 0
+    </update>
+
+</mapper>

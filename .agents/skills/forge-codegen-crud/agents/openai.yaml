@@ -1,0 +1,4 @@
+interface:
+  display_name: "Forge CRUD Codegen"
+  short_description: "Generate Forge-compliant CRUD modules"
+  default_prompt: "Use $forge-codegen-crud to generate a Forge-compliant single-table CRUD module with Flyway SQL, dictionaries, Excel config, and menu resources."

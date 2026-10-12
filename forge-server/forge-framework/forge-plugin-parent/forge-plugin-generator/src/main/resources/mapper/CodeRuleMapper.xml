@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.CodeRuleMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCodeRule">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="rule_code" property="ruleCode"/>
+        <result column="rule_name" property="ruleName"/>
+        <result column="scene" property="scene"/>
+        <result column="category" property="category"/>
+        <result column="source_object_id" property="sourceObjectId"/>
+        <result column="source_object_code" property="sourceObjectCode"/>
+        <result column="template" property="template"/>
+        <result column="reset_policy" property="resetPolicy"/>
+        <result column="seq_length" property="seqLength"/>
+        <result column="status" property="status"/>
+        <result column="builtin" property="builtin"/>
+        <result column="in_code_list" property="inCodeList"/>
+        <result column="version_no" property="versionNo"/>
+        <result column="legacy_compat_enabled" property="legacyCompatEnabled"/>
+        <result column="remark" property="remark"/>
+        <result column="options" property="options"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        rule_code,
+        rule_name,
+        scene,
+        category,
+        source_object_id,
+        source_object_code,
+        template,
+        reset_policy,
+        seq_length,
+        status,
+        builtin,
+        in_code_list,
+        version_no,
+        legacy_compat_enabled,
+        remark,
+        options,
+        del_flag,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectRulePage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+        <if test="ruleCode != null and ruleCode != ''">
+            AND rule_code LIKE CONCAT('%', #{ruleCode}, '%')
+        </if>
+        <if test="ruleName != null and ruleName != ''">
+            AND rule_name LIKE CONCAT('%', #{ruleName}, '%')
+        </if>
+        <if test="scene != null and scene != ''">
+            AND scene = #{scene}
+        </if>
+        <if test="category != null and category != ''">
+            AND category = #{category}
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY builtin DESC, update_time DESC, id DESC
+    </select>
+
+    <select id="selectDetailPage" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.CodeRuleDetailVO">
+        SELECT rule.id,
+               rule.tenant_id AS tenantId,
+               rule.rule_code AS ruleCode,
+               rule.rule_name AS ruleName,
+               rule.scene,
+               rule.category,
+               rule.source_object_id AS sourceObjectId,
+               rule.source_object_code AS sourceObjectCode,
+               rule.template,
+               rule.status,
+               rule.builtin,
+               rule.in_code_list AS inCodeList,
+               rule.version_no AS versionNo,
+               rule.remark,
+               rule.create_time AS createTime,
+               rule.update_time AS updateTime,
+               (SELECT COUNT(1)
+                FROM ai_code_rule_segment segment
+                WHERE segment.tenant_id = rule.tenant_id
+                  AND segment.rule_id = rule.id
+                  AND segment.del_flag = '0') AS segmentCount,
+               CASE WHEN EXISTS (
+                   SELECT 1
+                   FROM ai_code_rule_segment segment
+                   WHERE segment.tenant_id = rule.tenant_id
+                     AND segment.rule_id = rule.id
+                     AND segment.del_flag = '0'
+               ) THEN 'STRUCTURED' ELSE 'LEGACY' END AS compatibilityMode
+        FROM ai_code_rule rule
+        WHERE rule.tenant_id = #{tenantId}
+          AND rule.del_flag = '0'
+        <if test="ruleCode != null and ruleCode != ''">
+            AND rule.rule_code LIKE CONCAT('%', #{ruleCode}, '%')
+        </if>
+        <if test="ruleName != null and ruleName != ''">
+            AND rule.rule_name LIKE CONCAT('%', #{ruleName}, '%')
+        </if>
+        <if test="category != null and category != ''">
+            AND rule.category = #{category}
+        </if>
+        <if test="status != null">
+            AND rule.status = #{status}
+        </if>
+        ORDER BY rule.builtin DESC, rule.update_time DESC, rule.id DESC
+    </select>
+
+    <select id="selectEnabledList" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND status = 1
+        <if test="scene != null and scene != ''">
+            AND (
+                scene = #{scene}
+                OR scene = 'COMMON'
+                <if test="sourceObjectCode != null and sourceObjectCode != ''">
+                    OR source_object_code = #{sourceObjectCode}
+                </if>
+            )
+        </if>
+        <choose>
+            <when test="sourceObjectCode != null and sourceObjectCode != ''">
+                AND (source_object_code IS NULL OR source_object_code = '' OR source_object_code = #{sourceObjectCode})
+            </when>
+            <otherwise>
+                AND (source_object_code IS NULL OR source_object_code = '')
+            </otherwise>
+        </choose>
+        <if test="selectableOnly != null and selectableOnly">
+            AND in_code_list = 1
+        </if>
+        ORDER BY builtin DESC, rule_code ASC
+    </select>
+
+    <select id="selectByRuleCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND rule_code = #{ruleCode}
+        LIMIT 1
+    </select>
+
+    <select id="selectByRuleId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="countRuleCodeHistory" resultType="int">
+        SELECT COUNT(1)
+        FROM ai_code_rule
+        WHERE tenant_id = #{tenantId}
+          AND rule_code = #{ruleCode}
+        <if test="excludeId != null">
+            AND id != #{excludeId}
+        </if>
+    </select>
+
+</mapper>

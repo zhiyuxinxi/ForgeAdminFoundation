@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id" property="targetId"/>
+        <result column="target_code" property="targetCode"/>
+        <result column="binding_type" property="bindingType"/>
+        <result column="binding_key" property="bindingKey"/>
+        <result column="binding_name" property="bindingName"/>
+        <result column="binding_config" property="bindingConfig"/>
+        <result column="description" property="description"/>
+        <result column="status" property="status"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        target_type,
+        target_id,
+        target_code,
+        binding_type,
+        binding_key,
+        binding_name,
+        binding_config,
+        description,
+        status,
+        sort_order,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectBindingList" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingVO">
+        SELECT
+          id AS id,
+          target_type AS targetType,
+          target_id AS targetId,
+          target_code AS targetCode,
+          binding_type AS bindingType,
+          binding_key AS bindingKey,
+          binding_name AS bindingName,
+          binding_config AS bindingConfig,
+          description AS description,
+          status AS status,
+          sort_order AS sortOrder,
+          create_time AS createTime,
+          update_time AS updateTime
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+        <if test="query != null and query.targetType != null and query.targetType != ''">
+          AND target_type = #{query.targetType}
+        </if>
+        <if test="query != null and query.targetId != null">
+          AND target_id = #{query.targetId}
+        </if>
+        <if test="query != null and query.targetCode != null and query.targetCode != ''">
+          AND target_code = #{query.targetCode}
+        </if>
+        <if test="query != null and query.bindingType != null and query.bindingType != ''">
+          AND binding_type = #{query.bindingType}
+        </if>
+        <if test="query != null and query.status != null">
+          AND status = #{query.status}
+        </if>
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <select id="selectBindingById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="countByScope" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND target_type = #{targetType}
+          AND target_code = #{targetCode}
+          AND binding_type = #{bindingType}
+          AND binding_key = #{bindingKey}
+        <if test="excludeId != null">
+          AND id != #{excludeId}
+        </if>
+    </select>
+
+    <delete id="deleteByBatchScope">
+        DELETE FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND target_type = #{targetType}
+          AND target_code = #{targetCode}
+        <if test="bindingTypes != null and bindingTypes.size() > 0">
+          AND binding_type IN
+          <foreach collection="bindingTypes" item="bindingType" open="(" separator="," close=")">
+            #{bindingType}
+          </foreach>
+        </if>
+    </delete>
+
+    <select id="selectBindingStatsByCapabilityType" resultType="java.util.Map">
+        SELECT
+          COUNT(1) AS totalCount,
+          SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS runnableCount
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND binding_type = #{capabilityType}
+    </select>
+
+    <select id="selectBindingByTypeAndCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND target_type = #{targetType}
+          AND target_code = #{targetCode}
+          AND binding_type = #{bindingType}
+        ORDER BY status DESC,
+                 CASE WHEN binding_key IS NULL OR binding_key = '' THEN 1 ELSE 0 END,
+                 CASE WHEN binding_config IS NULL OR binding_config = '' THEN 1 ELSE 0 END,
+                 sort_order ASC,
+                 update_time DESC,
+                 id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectFlowBindingsByModelKey" resultType="com.mdframe.forge.plugin.generator.vo.businessapp.BusinessBindingSummaryVO">
+        SELECT
+          b.id AS bindingId,
+          COALESCE(NULLIF(b.binding_key, ''), #{modelKey}) AS flowModelKey,
+          b.binding_name AS bindingName,
+          b.target_code AS objectCode,
+          COALESCE(o.object_name, b.target_code) AS objectName,
+          s.suite_name AS suiteName,
+          CASE
+            WHEN JSON_VALID(o.options) AND JSON_UNQUOTE(JSON_EXTRACT(o.options, '$.codeApp')) = 'true' THEN 1
+            WHEN JSON_VALID(o.designer_options) AND JSON_UNQUOTE(JSON_EXTRACT(o.designer_options, '$.codeApp')) = 'true' THEN 1
+            ELSE 0
+          END AS codeApp,
+          CONCAT(
+            '/app-center/object/', b.target_code, '/designer?panel=flow-app',
+            CASE
+              WHEN JSON_VALID(o.options) AND JSON_UNQUOTE(JSON_EXTRACT(o.options, '$.codeApp')) = 'true' THEN '&amp;codeApp=1'
+              WHEN JSON_VALID(o.designer_options) AND JSON_UNQUOTE(JSON_EXTRACT(o.designer_options, '$.codeApp')) = 'true' THEN '&amp;codeApp=1'
+              ELSE ''
+            END
+          ) AS entryRoute
+        FROM ai_business_binding b
+        LEFT JOIN ai_business_object o
+          ON o.tenant_id = b.tenant_id
+         AND o.object_code = b.target_code
+         AND o.del_flag = '0'
+        LEFT JOIN ai_business_suite s
+          ON s.tenant_id = o.tenant_id
+         AND s.suite_code = o.suite_code
+         AND s.del_flag = '0'
+        WHERE b.tenant_id = #{tenantId}
+          AND b.target_type = 'OBJECT'
+          AND b.binding_type = 'FLOW'
+          AND b.status = 1
+          AND o.id IS NOT NULL
+          AND (
+            b.binding_key = #{modelKey}
+            OR (
+              JSON_VALID(b.binding_config)
+              AND JSON_UNQUOTE(JSON_EXTRACT(b.binding_config, '$.flowModelKey')) = #{modelKey}
+            )
+          )
+        ORDER BY COALESCE(o.sort_order, 0) ASC, b.sort_order ASC, b.id ASC
+    </select>
+
+    <select id="selectByApplication" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Columns"/>
+        FROM ai_business_binding
+        WHERE tenant_id = #{tenantId}
+          AND target_type = 'APPLICATION'
+          AND target_id = #{applicationId}
+        ORDER BY sort_order ASC, binding_type ASC, binding_key ASC, id ASC
+    </select>
+
+    <update id="restoreApplicationBinding">
+        UPDATE ai_business_binding
+        SET binding_config = #{bindingConfig},
+            status = #{status},
+            sort_order = #{sortOrder},
+            update_time = NOW()
+        WHERE tenant_id = #{tenantId}
+          AND target_type = 'APPLICATION'
+          AND target_id = #{applicationId}
+          AND id = #{bindingId}
+    </update>
+
+</mapper>

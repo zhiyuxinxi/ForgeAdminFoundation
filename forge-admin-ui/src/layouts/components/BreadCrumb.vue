@@ -1,0 +1,81 @@
+<template>
+  <n-breadcrumb>
+    <n-breadcrumb-item v-if="!breadItems?.length" :clickable="false">
+      {{ localizeLabel(route.meta.title) }}
+    </n-breadcrumb-item>
+    <n-breadcrumb-item
+      v-for="(item, index) of breadItems"
+      v-else
+      :key="item.code"
+      :clickable="!!item.path"
+      @click="handleItemClick(item)"
+    >
+      <n-dropdown
+        :options="index < breadItems.length - 1 ? getDropOptions(item.children) : []"
+        @select="handleDropSelect"
+      >
+        <div class="flex items-center">
+          <i :class="item.icon" class="mr-8" />
+          {{ localizeLabel(item.name, item.labelI18n) }}
+        </div>
+      </n-dropdown>
+    </n-breadcrumb-item>
+  </n-breadcrumb>
+</template>
+
+<script setup>
+import { useMenu } from '@/composables'
+import { localizeLabel } from '@/locales'
+import { usePermissionStore } from '@/store'
+
+const router = useRouter()
+const route = useRoute()
+const permissionStore = usePermissionStore()
+const { handleMenuSelect: baseHandleMenuSelect } = useMenu()
+
+const breadItems = ref([])
+watch(
+  () => route.name,
+  (v) => {
+    breadItems.value = findMatchs(permissionStore.permissions, v)
+  },
+  { immediate: true },
+)
+
+function findMatchs(tree, code, parents = []) {
+  for (const item of tree) {
+    if (item.code === code) {
+      return [...parents, item]
+    }
+    if (item.children?.length) {
+      const found = findMatchs(item.children, code, [...parents, item])
+      if (found) {
+        return found
+      }
+    }
+  }
+  return null
+}
+
+function handleItemClick(item) {
+  if (item.path && item.code !== route.name) {
+    baseHandleMenuSelect(item.code, item.path)
+  }
+}
+
+function getDropOptions(list = []) {
+  return list
+    .filter(item => item.show)
+    .map(child => ({
+      label: localizeLabel(child.name, child.labelI18n),
+      key: child.code,
+      icon: () => h('i', { class: child.icon }),
+    }))
+}
+
+function handleDropSelect(code) {
+  if (code && code !== route.name) {
+    router.push({ name: code })
+  }
+}
+</script>

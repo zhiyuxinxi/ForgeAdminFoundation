@@ -1,0 +1,571 @@
+package com.mdframe.forge.plugin.system.service.impl;
+
+import cn.dev33.satoken.session.SaSession;
+import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.http.useragent.UserAgent;
+import cn.hutool.http.useragent.UserAgentUtil;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.mdframe.forge.plugin.system.entity.SysOnlineUser;
+import com.mdframe.forge.plugin.system.entity.SysUser;
+import com.mdframe.forge.plugin.system.mapper.SysOnlineUserMapper;
+import com.mdframe.forge.plugin.system.mapper.SysUserMapper;
+import com.mdframe.forge.plugin.system.service.ISysOnlineUserService;
+import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
+import com.mdframe.forge.starter.websocket.domain.WebSocketMessage;
+import com.mdframe.forge.starter.websocket.enums.MessageType;
+import com.mdframe.forge.starter.websocket.service.IMessagePushService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.util.*;
+
+/**
+ * 在线用户管理服务实现
+ * 基于数据库持久化
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class SysOnlineUserServiceImpl extends ServiceImpl<SysOnlineUserMapper,SysOnlineUser> implements ISysOnlineUserService {
+
+    private final SysOnlineUserMapper sysOnlineUserMapper;
+    private final IMessagePushService messagePushService;
+    private final SysUserMapper sysUserMapper;
+
+    @Override
+    public void addOnlineUser(String tokenValue, Object loginId) {
+        try {
+            Long userId = parseLoginId(loginId);
+            if (userId == null) {
+                log.warn("无法解析在线用户loginId: {}", loginId);
+                return;
+            }
+
+            SysUser sysUser = TenantContextHolder.executeIgnore(() -> sysUserMapper.selectById(userId));
+            if (sysUser == null) {
+                log.warn("无法获取在线用户信息, loginId: {}", loginId);
+                return;
+            }
+            LoginUser loginUser = resolveLoginUser(tokenValue);
+
+            // 获取请求信息
+            String ipAddress = getClientIp();
+            String userAgentStr = getUserAgent();
+            UserAgent userAgent = UserAgentUtil.parse(userAgentStr);
+
+            // 构建在线用户信息
+            SysOnlineUser sysOnlineUser = SysOnlineUser.builder()
+                    .tokenValue(tokenValue)
+                    .userId(sysUser.getId())
+                    .username(resolveUsername(loginUser, sysUser))
+                    .realName(resolveRealName(loginUser, sysUser))
+                    .deptName(loginUser != null ? loginUser.getDeptName() : null)
+                    .ipAddress(ipAddress)
+                    .loginLocation(getLoginLocation(ipAddress))
+                    .browser(userAgent.getBrowser().getName())
+                    .os(userAgent.getOs().getName())
+                    .loginTime(LocalDateTime.now())
+                    .lastActivityTime(LocalDateTime.now())
+                    .expireTime(LocalDateTime.now().plusSeconds(StpUtil.getTokenTimeout(tokenValue)))
+                    .status(1) // 在线状态
+                    .tenantId(resolveTenantId(loginUser, sysUser))
+                    .build();
+
+            persistOnlineUser(sysOnlineUser);
+
+            log.info("添加在线用户成功: userId={}, username={}",
+                    sysUser.getId(), sysUser.getUsername());
+        } catch (Exception e) {
+            log.error("添加在线用户失败: loginId={}", loginId, e);
+        }
+    }
+
+    private Long parseLoginId(Object loginId) {
+        if (loginId == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(String.valueOf(loginId));
+        } catch (NumberFormatException e) {
+            log.warn("在线用户loginId不是有效数字: {}", loginId);
+            return null;
+        }
+    }
+
+    private LoginUser resolveLoginUser(String tokenValue) {
+        if (StrUtil.isBlank(tokenValue)) {
+            return null;
+        }
+        try {
+            SaSession tokenSession = StpUtil.getTokenSessionByToken(tokenValue);
+            Object loginUserObj = tokenSession == null ? null : tokenSession.get("loginUser");
+            return loginUserObj instanceof LoginUser ? (LoginUser) loginUserObj : null;
+        } catch (Exception e) {
+            log.debug("读取token session中的loginUser失败", e);
+            return null;
+        }
+    }
+
+    private String resolveUsername(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && StrUtil.isNotBlank(loginUser.getUsername())) {
+            return loginUser.getUsername();
+        }
+        return sysUser.getUsername();
+    }
+
+    private String resolveRealName(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && StrUtil.isNotBlank(loginUser.getRealName())) {
+            return loginUser.getRealName();
+        }
+        return sysUser.getRealName();
+    }
+
+    private Long resolveTenantId(LoginUser loginUser, SysUser sysUser) {
+        if (loginUser != null && loginUser.getTenantId() != null) {
+            return loginUser.getTenantId();
+        }
+        return sysUser.getTenantId();
+    }
+
+    @Override
+    public void removeOnlineUser(String tokenValue) {
+        try {
+            LambdaUpdateWrapper<SysOnlineUser> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(SysOnlineUser::getTokenValue, tokenValue)
+                    .eq(SysOnlineUser::getStatus, 1)
+                    .set(SysOnlineUser::getStatus, 0) // 离线
+                    .set(SysOnlineUser::getLogoutTime, LocalDateTime.now())
+                    .set(SysOnlineUser::getLogoutType, 1); // 主动登出
+
+            if (executeWithTokenTenant(tokenValue,
+                    () -> sysOnlineUserMapper.update(null, updateWrapper))) {
+                log.info("移除在线用户成功");
+            }
+        } catch (Exception e) {
+            log.error("移除在线用户失败", e);
+        }
+    }
+
+    @Override
+    public void updateLastActivityTime(String tokenValue) {
+        try {
+            LambdaUpdateWrapper<SysOnlineUser> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(SysOnlineUser::getTokenValue, tokenValue)
+                    .set(SysOnlineUser::getLastActivityTime, LocalDateTime.now());
+
+            executeWithTokenTenant(tokenValue,
+                    () -> sysOnlineUserMapper.update(null, updateWrapper));
+        } catch (Exception e) {
+            log.error("更新最后活动时间失败", e);
+        }
+    }
+
+    @Override
+    public IPage<SysOnlineUser> getOnlineUsersPage(Page<SysOnlineUser> page, String username) {
+        try {
+            IPage<SysOnlineUser> result = sysOnlineUserMapper.selectOnlineUsersPage(page, username);
+            
+            // 检查是否被封禁
+            for (SysOnlineUser user : result.getRecords()) {
+                user.setBanned(StpUtil.isDisable(user.getUserId()));
+            }
+            
+            return result;
+        } catch (Exception e) {
+            log.error("获取在线用户分页列表失败", e);
+            return new Page<>();
+        }
+    }
+
+    @Override
+    public List<SysOnlineUser> getOnlineUsers(String username) {
+        try {
+            List<SysOnlineUser> sysOnlineUsers = sysOnlineUserMapper.selectOnlineUsers(username);
+            
+            // 检查是否被封禁
+            for (SysOnlineUser user : sysOnlineUsers) {
+                user.setBanned(StpUtil.isDisable(user.getUserId()));
+            }
+            
+            return sysOnlineUsers;
+        } catch (Exception e) {
+            log.error("获取在线用户列表失败", e);
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public SysOnlineUser getOnlineUser(String tokenValue) {
+        return sysOnlineUserMapper.selectActiveByTokenValue(tokenValue);
+    }
+
+    @Override
+    public void kickoutUser(String tokenValue) {
+        Long userId = null;
+        try {
+            // 先通知前端
+            SysOnlineUser sysOnlineUser = getOnlineUser(tokenValue);
+            if (sysOnlineUser != null) {
+                userId = sysOnlineUser.getUserId();
+                notifyUserKickout(tokenValue, sysOnlineUser.getUserId());
+                
+                // 更新数据库状态
+                LambdaUpdateWrapper<SysOnlineUser> updateWrapper = new LambdaUpdateWrapper<>();
+                updateWrapper.eq(SysOnlineUser::getTokenValue, tokenValue)
+                        .set(SysOnlineUser::getStatus, 0)
+                        .set(SysOnlineUser::getLogoutTime, LocalDateTime.now())
+                        .set(SysOnlineUser::getLogoutType, 2); // 被踢下线
+                
+                sysOnlineUserMapper.update(null, updateWrapper);
+            }
+            
+            // 踢下线
+            StpUtil.kickoutByTokenValue(tokenValue);
+            log.info("强制用户下线成功: userId={}", userId);
+        } catch (Exception e) {
+            log.error("强制用户下线失败: userId={}", userId, e);
+            throw new RuntimeException("强制下线失败", e);
+        }
+    }
+
+    @Override
+    public void kickoutSession(Long sessionId) {
+        SysOnlineUser onlineUser = requireActiveSession(sessionId);
+        kickoutUser(onlineUser.getTokenValue());
+    }
+
+    @Override
+    public void batchKickoutSessions(List<Long> sessionIds) {
+        if (sessionIds == null || sessionIds.isEmpty()) {
+            return;
+        }
+        List<SysOnlineUser> onlineUsers = sessionIds.stream()
+                .distinct()
+                .map(this::requireActiveSession)
+                .toList();
+        for (SysOnlineUser onlineUser : onlineUsers) {
+            try {
+                kickoutUser(onlineUser.getTokenValue());
+            } catch (Exception e) {
+                log.error("批量强制下线失败: sessionId={}", onlineUser.getId(), e);
+            }
+        }
+    }
+
+    @Override
+    public void banUser(Long userId, long banSeconds, String reason) {
+        requireTenantUser(userId);
+        try {
+            // 封禁用户
+            StpUtil.disable(userId, banSeconds);
+            
+            // 踢出所有在线会话
+            kickoutAllSessions(userId, null);
+            
+            // 通知用户被封禁
+            notifyUserBanned(userId, banSeconds);
+            
+            log.info("封禁用户成功: userId={}, banSeconds={}, reason={}", userId, banSeconds, reason);
+        } catch (Exception e) {
+            log.error("封禁用户失败: userId={}", userId, e);
+            throw new RuntimeException("封禁用户失败", e);
+        }
+    }
+
+    @Override
+    public void unbanUser(Long userId) {
+        requireTenantUser(userId);
+        try {
+            StpUtil.untieDisable(userId);
+            log.info("解封用户成功: userId={}", userId);
+        } catch (Exception e) {
+            log.error("解封用户失败: userId={}", userId, e);
+            throw new RuntimeException("解封用户失败", e);
+        }
+    }
+
+    @Override
+    public void notifyUserKickout(String tokenValue, Object loginId) {
+        try {
+            Map<String, Object> data = new HashMap<>();
+            data.put("userId", loginId);
+
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type(MessageType.AUTH_KICKOUT.getCode())
+                    .title("强制下线通知")
+                    .message("您已被管理员强制下线")
+                    .data(data)
+                    .level("warning")
+                    .requireConfirm(true)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+            
+            messagePushService.pushToUser(String.valueOf(loginId), message);
+            log.info("通知用户被踢下线: loginId={}", loginId);
+        } catch (Exception e) {
+            log.error("通知用户被踢下线失败: loginId={}", loginId, e);
+        }
+    }
+
+    @Override
+    public void notifyUserReplaced(String tokenValue, Object loginId) {
+        try {
+            // 先更新数据库状态为被顶下线
+            LambdaUpdateWrapper<SysOnlineUser> updateWrapper = new LambdaUpdateWrapper<>();
+            updateWrapper.eq(SysOnlineUser::getTokenValue, tokenValue)
+                    .set(SysOnlineUser::getStatus, 0)
+                    .set(SysOnlineUser::getLogoutTime, LocalDateTime.now())
+                    .set(SysOnlineUser::getLogoutType, 3); // 被顶下线
+
+            if (!executeWithTokenTenant(tokenValue,
+                    () -> sysOnlineUserMapper.update(null, updateWrapper))) {
+                return;
+            }
+            
+            // 推送通知
+            Map<String, Object> data = new HashMap<>();
+            data.put("userId", loginId);
+            
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type(MessageType.AUTH_REPLACED.getCode())
+                    .title("账号被顶下线")
+                    .message("您的账号在其他地方登录,当前会话已失效")
+                    .data(data)
+                    .level("warning")
+                    .requireConfirm(true)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+            
+            messagePushService.pushToUser(String.valueOf(loginId), message);
+            log.info("通知用户被顶下线: loginId={}", loginId);
+        } catch (Exception e) {
+            log.error("通知用户被顶下线失败: loginId={}", loginId, e);
+        }
+    }
+
+    @Override
+    public void notifyUserBanned(Object loginId, long disableTime) {
+        try {
+            long minutes = disableTime / 60;
+            String timeText = minutes > 60
+                    ? (minutes / 60) + "小时"
+                    : minutes + "分钟";
+            
+            Map<String, Object> data = new HashMap<>();
+            data.put("disableTime", disableTime);
+            data.put("disableMinutes", minutes);
+            data.put("userId", loginId);
+            
+            WebSocketMessage message = WebSocketMessage.builder()
+                    .type(MessageType.AUTH_BANNED.getCode())
+                    .title("账号封禁通知")
+                    .message("您的账号已被封禁,封禁时长: " + timeText)
+                    .data(data)
+                    .level("error")
+                    .requireConfirm(true)
+                    .timestamp(System.currentTimeMillis())
+                    .build();
+            
+            messagePushService.pushToUser(String.valueOf(loginId), message);
+            log.info("通知用户被封禁: loginId={}, disableTime={}", loginId, disableTime);
+        } catch (Exception e) {
+            log.error("通知用户被封禁失败: loginId={}", loginId, e);
+        }
+    }
+
+    @Override
+    public List<String> getUserTokens(Long userId) {
+        return sysOnlineUserMapper.selectActiveTokenValuesByUserId(userId);
+    }
+
+    @Override
+    public List<Long> getUserSessionIds(Long userId) {
+        requireTenantUser(userId);
+        return sysOnlineUserMapper.selectActiveSessionIdsByUserId(userId);
+    }
+
+    @Override
+    public void kickoutAllSessions(Long userId, String excludeToken) {
+        List<String> tokens = getUserTokens(userId);
+        for (String token : tokens) {
+            if (!token.equals(excludeToken)) {
+                try {
+                    kickoutUser(token);
+                } catch (Exception e) {
+                    log.error("踢出会话失败: userId={}", userId, e);
+                }
+            }
+        }
+    }
+    
+    @Override
+    public List<SysOnlineUser> getOnlineUsersByClient(String clientType) {
+        List<SysOnlineUser> result = new ArrayList<>();
+        
+        List<String> tokens = StpUtil.searchTokenValue("", 0, -1, false);
+        for (String token : tokens) {
+            try {
+                SaSession session = StpUtil.getTokenSessionByToken(token);
+                LoginUser loginUser = (LoginUser) session.get("loginUser");
+                
+                if (loginUser != null && loginUser.getUserClient() != null
+                    && loginUser.getUserClient().equals(clientType)) {
+                    SysOnlineUser onlineUser = sysOnlineUserMapper.selectActiveByTokenValue(token);
+                    if (onlineUser != null) {
+                        result.add(onlineUser);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("获取token session失败", e);
+            }
+        }
+        
+        return result;
+    }
+    
+    @Override
+    public void kickoutByClient(Long userId, String clientType) {
+        requireTenantUser(userId);
+        StpUtil.kickout(userId, clientType);
+        log.info("踢出用户客户端会话: userId={}, client={}", userId, clientType);
+    }
+    
+    @Override
+    public Map<String, Long> getOnlineCountByClient() {
+        Map<String, Long> result = new HashMap<>();
+        
+        result.put("pc", (long) getOnlineUsersByClient("pc").size());
+        result.put("app", (long) getOnlineUsersByClient("app").size());
+        result.put("h5", (long) getOnlineUsersByClient("h5").size());
+        result.put("wechat", (long) getOnlineUsersByClient("wechat").size());
+        
+        return result;
+    }
+
+    private SysOnlineUser requireActiveSession(Long sessionId) {
+        if (sessionId == null) {
+            throw new BusinessException("在线会话不存在或无权操作");
+        }
+        SysOnlineUser onlineUser = sysOnlineUserMapper.selectById(sessionId);
+        if (onlineUser == null || !Integer.valueOf(1).equals(onlineUser.getStatus())) {
+            throw new BusinessException("在线会话不存在或无权操作");
+        }
+        return onlineUser;
+    }
+
+    private void requireTenantUser(Long userId) {
+        if (userId == null || sysUserMapper.selectById(userId) == null) {
+            throw new BusinessException("用户不存在或无权操作");
+        }
+    }
+
+    void persistOnlineUser(SysOnlineUser onlineUser) {
+        Long tenantId = onlineUser == null ? null : onlineUser.getTenantId();
+        if (tenantId == null) {
+            throw new IllegalStateException("在线用户记录缺少租户信息");
+        }
+        executeInTenant(tenantId, () -> sysOnlineUserMapper.insert(onlineUser));
+    }
+
+    private boolean executeWithTokenTenant(String tokenValue, Runnable action) {
+        if (StrUtil.isBlank(tokenValue)) {
+            log.warn("在线用户Token为空，跳过租户表操作");
+            return false;
+        }
+
+        LoginUser loginUser = resolveLoginUser(tokenValue);
+        Long tenantId = loginUser == null ? null : loginUser.getTenantId();
+        if (tenantId == null && TenantContextHolder.getTenantId() != null
+                && !TenantContextHolder.isIgnore()) {
+            tenantId = TenantContextHolder.getTenantId();
+        }
+        if (tenantId == null) {
+            SysOnlineUser onlineUser = TenantContextHolder.executeIgnore(
+                    () -> sysOnlineUserMapper.selectActiveByTokenValue(tokenValue));
+            tenantId = onlineUser == null ? null : onlineUser.getTenantId();
+        }
+        if (tenantId == null) {
+            log.warn("无法确定在线用户Token所属租户，跳过租户表操作");
+            return false;
+        }
+
+        executeInTenant(tenantId, action);
+        return true;
+    }
+
+    private void executeInTenant(Long tenantId, Runnable action) {
+        Boolean previousIgnore = TenantContextHolder.getIgnoreValue();
+        try {
+            TenantContextHolder.setIgnore(false);
+            TenantContextHolder.executeWithTenant(tenantId, action);
+        } finally {
+            if (previousIgnore == null) {
+                TenantContextHolder.clearIgnore();
+            } else {
+                TenantContextHolder.setIgnore(previousIgnore);
+            }
+        }
+    }
+
+    /**
+     * 获取客户端IP地址
+     * @return IP地址
+     */
+    private String getClientIp() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String ip = request.getHeader("X-Forwarded-For");
+                if (StrUtil.isBlank(ip) || "unknown".equalsIgnoreCase(ip)) {
+                    ip = request.getHeader("X-Real-IP");
+                }
+                if (StrUtil.isBlank(ip) || "unknown".equalsIgnoreCase(ip)) {
+                    ip = request.getRemoteAddr();
+                }
+                return ip;
+            }
+        } catch (Exception e) {
+            log.error("获取客户端IP失败", e);
+        }
+        return "unknown";
+    }
+
+    /**
+     * 获取User-Agent
+     */
+    private String getUserAgent() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                return request.getHeader("User-Agent");
+            }
+        } catch (Exception e) {
+            log.error("获取User-Agent失败", e);
+        }
+        return "unknown";
+    }
+
+    /**
+     * 根据IP获取登录地点(简单实现,可接入第三方IP库)
+     */
+    private String getLoginLocation(String ip) {
+        if ("127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip)) {
+            return "本地";
+        }
+        // TODO: 接入IP地址库获取真实地理位置
+        return "未知";
+    }
+}

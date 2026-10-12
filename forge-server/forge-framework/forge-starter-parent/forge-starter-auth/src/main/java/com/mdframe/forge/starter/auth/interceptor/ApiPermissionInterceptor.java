@@ -1,0 +1,142 @@
+package com.mdframe.forge.starter.auth.interceptor;
+
+import com.mdframe.forge.starter.core.i18n.UiMessages;
+
+import cn.dev33.satoken.annotation.SaIgnore;
+import cn.dev33.satoken.exception.NotPermissionException;
+import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.StrUtil;
+import com.mdframe.forge.starter.apiconfig.domain.dto.ApiConfigInfo;
+import com.mdframe.forge.starter.apiconfig.service.IApiConfigManager;
+import com.mdframe.forge.starter.core.context.AuthProperties;
+import com.mdframe.forge.starter.auth.service.IPermissionService;
+import com.mdframe.forge.starter.core.annotation.api.ApiPermissionIgnore;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+/**
+ * API接口权限拦截器
+ * 基于数据库资源表配置的接口权限控制，支持通配符匹配
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class ApiPermissionInterceptor implements HandlerInterceptor {
+
+    private static final java.util.Set<String> PASSWORD_CHANGE_ALLOW_PATHS = java.util.Set.of(
+            "/auth/userInfo",
+            "/auth/changePassword",
+            "/auth/logout",
+            "/crypto/config",
+            "/crypto/public-key",
+            "/crypto/exchange"
+    );
+
+    private final IPermissionService permissionService;
+    private final AuthProperties authProperties;
+    private final IApiConfigManager apiConfigManager;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // 1. 只拦截Controller方法
+        if (!(handler instanceof HandlerMethod)) {
+            return true;
+        }
+
+        HandlerMethod handlerMethod = (HandlerMethod) handler;
+
+        // 2. 先检查注解豁免（@SaIgnore / @ApiPermissionIgnore），豁免接口不受改密拦截
+        SaIgnore anonymous = handlerMethod.getMethodAnnotation(SaIgnore.class);
+        if (anonymous == null) {
+            anonymous = handlerMethod.getBeanType().getAnnotation(SaIgnore.class);
+        }
+        ApiPermissionIgnore apiPermissionIgnore = handlerMethod.getMethodAnnotation(ApiPermissionIgnore.class);
+        if (apiPermissionIgnore == null) {
+            apiPermissionIgnore = handlerMethod.getBeanType().getAnnotation(ApiPermissionIgnore.class);
+        }
+        boolean annotationExempt = anonymous != null || apiPermissionIgnore != null
+                || request.getRequestURI().startsWith("/ws");
+
+        // 3. 强制改密拦截（仅对非豁免接口生效）
+        if (!annotationExempt) {
+            enforcePasswordChange(request);
+        }
+
+        // 4. 检查是否启用API权限校验
+        if (authProperties.getEnableApiPermission() == null || !authProperties.getEnableApiPermission()) {
+            log.debug("API权限校验已禁用");
+            return true;
+        }
+
+        ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
+        if (apiConfig != null && !apiConfig.getNeedAuth()) {
+            log.debug("匿名访问接口: {}", request.getRequestURI());
+            return true;
+        }
+
+        // 注解豁免直接放行
+        if (annotationExempt) {
+            log.debug("注解豁免接口: {}", request.getRequestURI());
+            return true;
+        }
+
+        // 3. 获取请求的URI
+        String requestUri = request.getRequestURI();
+        
+        // 移除contextPath（如果存在）
+        String contextPath = request.getContextPath();
+        if (StrUtil.isNotBlank(contextPath)) {
+            requestUri = requestUri.substring(contextPath.length());
+        }
+
+        if (!permissionService.isApiPermissionConfigured(requestUri, request.getMethod())) {
+            log.debug("接口未配置API权限资源，跳过权限校验: uri={}, method={}", requestUri, request.getMethod());
+            return true;
+        }
+
+        // 4. 校验接口权限
+        boolean hasPermission = permissionService.hasApiPermission(requestUri, request.getMethod());
+        
+        if (!hasPermission) {
+            log.warn("接口权限校验失败: uri={}, method={}, handler={}",
+                    requestUri, request.getMethod(), handlerMethod.getMethod().getName());
+            throw new NotPermissionException(UiMessages.translate("无权限访问该接口: ") + requestUri);
+        }
+
+        log.debug("接口权限校验通过: uri={}", requestUri);
+        return true;
+    }
+
+    private void enforcePasswordChange(HttpServletRequest request) {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return;
+        }
+        if (!StpUtil.isLogin()) {
+            return;
+        }
+        LoginUser loginUser = SessionHelper.getLoginUser();
+        if (loginUser == null || !Boolean.TRUE.equals(loginUser.getForcePasswordChange())) {
+            return;
+        }
+
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (StrUtil.isNotBlank(contextPath)) {
+            requestUri = requestUri.substring(contextPath.length());
+        }
+
+        if (PASSWORD_CHANGE_ALLOW_PATHS.contains(requestUri)) {
+            return;
+        }
+
+        log.warn("强制改密用户访问被拦截: userId={}, uri={}", loginUser.getUserId(), requestUri);
+        throw new NotPermissionException("当前账号必须先修改初始密码");
+    }
+}

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.FormulaExecutionLogMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiFormulaExecutionLog">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="trace_id" property="traceId"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="record_id" property="recordId"/>
+        <result column="field_code" property="fieldCode"/>
+        <result column="formula_type" property="formulaType"/>
+        <result column="formula_mode" property="formulaMode"/>
+        <result column="expression" property="expression"/>
+        <result column="input_snapshot" property="inputSnapshot"/>
+        <result column="output_value" property="outputValue"/>
+        <result column="success" property="success"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="elapsed_ms" property="elapsedMs"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        trace_id,
+        object_code,
+        record_id,
+        field_code,
+        formula_type,
+        formula_mode,
+        expression,
+        input_snapshot,
+        output_value,
+        success,
+        error_message,
+        elapsed_ms,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <sql id="Formula_Log_Query_Where">
+        WHERE tenant_id = #{tenantId}
+        <if test="query.objectCode != null and query.objectCode != ''">
+          AND object_code = #{query.objectCode}
+        </if>
+        <if test="query.recordId != null and query.recordId != ''">
+          AND record_id = #{query.recordId}
+        </if>
+        <if test="query.fieldCode != null and query.fieldCode != ''">
+          AND field_code = #{query.fieldCode}
+        </if>
+        <if test="query.success != null">
+          AND success = #{query.success}
+        </if>
+        <if test="query.traceId != null and query.traceId != ''">
+          AND trace_id = #{query.traceId}
+        </if>
+        <if test="query.beginTime != null">
+          AND create_time &gt;= #{query.beginTime}
+        </if>
+        <if test="query.endTime != null">
+          AND create_time &lt;= #{query.endTime}
+        </if>
+    </sql>
+
+    <select id="selectFormulaExecutionLogPage" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_formula_execution_log
+        <include refid="Formula_Log_Query_Where"/>
+        ORDER BY create_time DESC, id DESC
+    </select>
+
+    <select id="selectFormulaExecutionLogById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_formula_execution_log
+        WHERE tenant_id = #{tenantId}
+          AND id = #{id}
+    </select>
+</mapper>

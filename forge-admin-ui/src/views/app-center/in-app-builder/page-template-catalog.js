@@ -1,0 +1,68 @@
+export const inAppPageTemplateCatalog = [
+  {
+    key: 'blank',
+    label: '空白页面',
+    description: '从一个组件开始搭建',
+    pageTypes: ['content', 'home', 'intro', 'entry'],
+    pageType: 'content',
+    blockTypes: [],
+  },
+  {
+    key: 'intro',
+    label: '介绍页',
+    description: '适合说明业务目标和入口',
+    pageTypes: ['intro', 'content', 'home'],
+    pageType: 'intro',
+    blockTypes: ['info-panel'],
+  },
+  {
+    key: 'overview',
+    label: '业务概览',
+    description: '标题、指标和提示信息',
+    pageTypes: ['home', 'content', 'intro'],
+    pageType: 'content',
+    blockTypes: ['stats-strip', 'info-panel'],
+  },
+  {
+    key: 'data',
+    label: '数据工作台',
+    description: '适合后续添加数据列表',
+    pageTypes: ['content'],
+    pageType: 'content',
+    blockTypes: ['AiCrudPage'],
+  },
+  {
+    key: 'crud',
+    label: '数据列表（CRUD）',
+    description: '创建后选择业务对象，在页面画布完成搭建',
+    pageTypes: ['object'],
+    pageType: 'object',
+    dataTemplate: true,
+    objectPageMode: 'crud',
+    blockTypes: ['AiCrudPage'],
+  },
+  {
+    key: 'tree-table',
+    label: '左树右表',
+    description: '创建后选择业务对象，在页面画布完成左树右表搭建',
+    pageTypes: ['object'],
+    pageType: 'object',
+    dataTemplate: true,
+    objectPageMode: 'tree-table',
+    blockTypes: ['tree-panel', 'AiCrudPage'],
+  },
+  {
+    key: 'master-detail',
+    label: '主子表',
+    description: '创建后选择业务对象，在页面画布完成主记录与明细搭建',
+    pageTypes: ['object'],
+    pageType: 'object',
+    dataTemplate: true,
+    objectPageMode: 'master-detail',
+    blockTypes: ['AiCrudPage', 'sub-table-tabs'],
+  },
+]
+
+export function resolveInAppPageTemplate(key) {
+  return inAppPageTemplateCatalog.find(item => item.key === key) || inAppPageTemplateCatalog[0]
+}

@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.generator.mapper.AiCrudConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="config_key" property="configKey"/>
+        <result column="table_name" property="tableName"/>
+        <result column="table_comment" property="tableComment"/>
+        <result column="app_name" property="appName"/>
+        <result column="search_schema" property="searchSchema"/>
+        <result column="columns_schema" property="columnsSchema"/>
+        <result column="edit_schema" property="editSchema"/>
+        <result column="api_config" property="apiConfig"/>
+        <result column="options" property="options"/>
+        <result column="mode" property="mode"/>
+        <result column="build_mode" property="buildMode"/>
+        <result column="status" property="status"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="menu_name" property="menuName"/>
+        <result column="menu_parent_id" property="menuParentId"/>
+        <result column="menu_sort" property="menuSort"/>
+        <result column="menu_resource_id" property="menuResourceId"/>
+        <result column="dict_config" property="dictConfig"/>
+        <result column="desensitize_config" property="desensitizeConfig"/>
+        <result column="encrypt_config" property="encryptConfig"/>
+        <result column="trans_config" property="transConfig"/>
+        <result column="layout_type" property="layoutType"/>
+        <result column="model_schema" property="modelSchema"/>
+        <result column="page_schema" property="pageSchema"/>
+        <result column="draft_version" property="draftVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="publish_by" property="publishBy"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
+        <result column="runtime_datasource_id" property="runtimeDatasourceId"/>
+        <result column="runtime_datasource_code" property="runtimeDatasourceCode"/>
+        <result column="runtime_datasource_snapshot" property="runtimeDatasourceSnapshot"/>
+        <result column="runtime_table_name" property="runtimeTableName"/>
+        <result column="primary_key_field" property="primaryKeyField"/>
+        <result column="primary_key_column" property="primaryKeyColumn"/>
+        <result column="primary_key_type" property="primaryKeyType"/>
+        <result column="tenant_strategy" property="tenantStrategy"/>
+        <result column="audit_strategy" property="auditStrategy"/>
+        <result column="logic_delete_strategy" property="logicDeleteStrategy"/>
+        <result column="del_flag" property="delFlag"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="LowcodeAppDetailResultMap" type="com.mdframe.forge.plugin.generator.vo.lowcode.LowcodeAppDetailVO">
+        <id column="id" property="id"/>
+        <result column="config_key" property="configKey"/>
+        <result column="table_name" property="tableName"/>
+        <result column="table_comment" property="tableComment"/>
+        <result column="app_name" property="appName"/>
+        <result column="domain_id" property="domainId"/>
+        <result column="domain_code" property="domainCode"/>
+        <result column="domain_name" property="domainName"/>
+        <result column="object_code" property="objectCode"/>
+        <result column="object_name" property="objectName"/>
+        <result column="mode" property="mode"/>
+        <result column="build_mode" property="buildMode"/>
+        <result column="status" property="status"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="menu_name" property="menuName"/>
+        <result column="menu_parent_id" property="menuParentId"/>
+        <result column="menu_sort" property="menuSort"/>
+        <result column="menu_resource_id" property="menuResourceId"/>
+        <result column="layout_type" property="layoutType"/>
+        <result column="draft_version" property="draftVersion"/>
+        <result column="published_version" property="publishedVersion"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="publish_by" property="publishBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Columns">
+        id,
+        tenant_id,
+        config_key,
+        table_name,
+        table_comment,
+        app_name,
+        search_schema,
+        columns_schema,
+        edit_schema,
+        api_config,
+        options,
+        mode,
+        build_mode,
+        status,
+        publish_status,
+        menu_name,
+        menu_parent_id,
+        menu_sort,
+        menu_resource_id,
+        dict_config,
+        desensitize_config,
+        encrypt_config,
+        trans_config,
+        layout_type,
+        model_schema,
+        page_schema,
+        draft_version,
+        published_version,
+        publish_time,
+        publish_by,
+        domain_id,
+        domain_code,
+        object_code,
+        object_name,
+        runtime_datasource_id,
+        runtime_datasource_code,
+        runtime_datasource_snapshot,
+        runtime_table_name,
+        primary_key_field,
+        primary_key_column,
+        primary_key_type,
+        tenant_strategy,
+        audit_strategy,
+        logic_delete_strategy,
+        del_flag,
+        create_by,
+        create_time,
+        create_dept,
+        update_by,
+        update_time
+    </sql>
+
+    <select id="selectByConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND config_key = #{configKey}
+          AND del_flag = '0'
+        LIMIT 1
+    </select>
+
+    <select id="selectPublishedByObjectCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND object_code = #{objectCode}
+          AND del_flag = '0'
+          AND mode = 'CONFIG'
+          AND build_mode = 'LOWCODE'
+          AND publish_status = 'PUBLISHED'
+        ORDER BY publish_time DESC, id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectPublishedByObjectCodeOrConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND (object_code = #{objectCodeOrConfigKey} OR config_key = #{objectCodeOrConfigKey})
+          AND del_flag = '0'
+          AND mode = 'CONFIG'
+          AND build_mode = 'LOWCODE'
+          AND publish_status = 'PUBLISHED'
+        ORDER BY CASE WHEN config_key = #{objectCodeOrConfigKey} THEN 0 ELSE 1 END,
+                 publish_time DESC,
+                 id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectRuntimeByObjectCodeOrConfigKey" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND (object_code = #{objectCodeOrConfigKey} OR config_key = #{objectCodeOrConfigKey})
+          AND del_flag = '0'
+          AND mode = 'CONFIG'
+          AND status = '0'
+        ORDER BY CASE WHEN publish_status = 'PUBLISHED' THEN 0 ELSE 1 END,
+                 CASE WHEN config_key = #{objectCodeOrConfigKey} THEN 0 ELSE 1 END,
+                 publish_time DESC,
+                 id DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectLowcodePage" resultMap="LowcodeAppDetailResultMap">
+        SELECT
+          c.id,
+          c.config_key,
+          c.table_name,
+          c.table_comment,
+          c.app_name,
+          c.domain_id,
+          c.domain_code,
+          COALESCE(d.domain_name, c.domain_code) AS domain_name,
+          c.object_code,
+          c.object_name,
+          c.mode,
+          c.build_mode,
+          c.status,
+          c.publish_status,
+          c.menu_name,
+          c.menu_parent_id,
+          c.menu_sort,
+          c.menu_resource_id,
+          c.layout_type,
+          c.draft_version,
+          c.published_version,
+          c.publish_time,
+          c.publish_by,
+          c.create_time,
+          c.update_time
+        FROM ai_crud_config c
+        LEFT JOIN ai_lowcode_domain d
+          ON d.tenant_id = c.tenant_id
+         AND d.id = c.domain_id
+         AND d.del_flag = '0'
+        WHERE c.tenant_id = #{tenantId}
+          AND c.del_flag = '0'
+          AND c.mode = 'CONFIG'
+          AND c.build_mode = 'LOWCODE'
+        <if test="keyword != null and keyword != ''">
+          AND (
+            c.config_key LIKE CONCAT('%', #{keyword}, '%')
+            OR c.app_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.table_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.table_comment LIKE CONCAT('%', #{keyword}, '%')
+            OR c.domain_code LIKE CONCAT('%', #{keyword}, '%')
+            OR d.domain_name LIKE CONCAT('%', #{keyword}, '%')
+            OR c.object_code LIKE CONCAT('%', #{keyword}, '%')
+            OR c.object_name LIKE CONCAT('%', #{keyword}, '%')
+          )
+        </if>
+        <if test="publishStatus != null and publishStatus != ''">
+          AND c.publish_status = #{publishStatus}
+        </if>
+        <if test="domainIds != null and domainIds.size > 0">
+          AND c.domain_id IN
+          <foreach collection="domainIds" item="domainId" open="(" separator="," close=")">
+            #{domainId}
+          </foreach>
+        </if>
+        <if test="domainCode != null and domainCode != ''">
+          AND c.domain_code = #{domainCode}
+        </if>
+        <if test="generalDomain != null and generalDomain">
+          AND c.domain_code = 'general'
+        </if>
+        ORDER BY c.update_time DESC, c.id DESC
+    </select>
+
+    <select id="selectPublishedLowcodeConfigs" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND mode = 'CONFIG'
+          AND build_mode = 'LOWCODE'
+          AND publish_status = 'PUBLISHED'
+        ORDER BY update_time DESC, id DESC
+    </select>
+
+    <select id="selectEncryptConfigCandidates" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Columns"/>
+        FROM ai_crud_config
+        WHERE tenant_id = #{tenantId}
+          AND del_flag = '0'
+          AND mode = 'CONFIG'
+          AND encrypt_config IS NOT NULL
+          AND encrypt_config != ''
+        <if test="configKeys != null and configKeys.size > 0">
+          AND config_key IN
+          <foreach collection="configKeys" item="configKey" open="(" separator="," close=")">
+            #{configKey}
+          </foreach>
+        </if>
+        ORDER BY config_key ASC, id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.ai.dashboard.mapper.AiDashboardComponentLineageMapper">
+
+    <resultMap id="BaseResultMap" type="com.mdframe.forge.plugin.ai.dashboard.domain.AiDashboardComponentLineage">
+        <id column="id" property="id"/>
+        <result column="tenant_id" property="tenantId"/>
+        <result column="record_id" property="recordId"/>
+        <result column="user_id" property="userId"/>
+        <result column="session_id" property="sessionId"/>
+        <result column="project_id" property="projectId"/>
+        <result column="project_name" property="projectName"/>
+        <result column="business_definition_id" property="businessDefinitionId"/>
+        <result column="business_name" property="businessName"/>
+        <result column="component_index" property="componentIndex"/>
+        <result column="component_key" property="componentKey"/>
+        <result column="component_title" property="componentTitle"/>
+        <result column="dataset_id" property="datasetId"/>
+        <result column="dataset_name" property="datasetName"/>
+        <result column="field_names" property="fieldNames"/>
+        <result column="binding_status" property="bindingStatus"/>
+        <result column="create_by" property="createBy"/>
+        <result column="create_time" property="createTime"/>
+        <result column="create_dept" property="createDept"/>
+        <result column="update_by" property="updateBy"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <resultMap id="DatasetImpactResultMap" type="com.mdframe.forge.plugin.ai.dashboard.vo.AiDashboardDatasetImpactVO">
+        <id column="lineage_id" property="lineageId"/>
+        <result column="record_id" property="recordId"/>
+        <result column="project_id" property="projectId"/>
+        <result column="project_name" property="projectName"/>
+        <result column="business_definition_id" property="businessDefinitionId"/>
+        <result column="business_name" property="businessName"/>
+        <result column="component_index" property="componentIndex"/>
+        <result column="component_key" property="componentKey"/>
+        <result column="component_title" property="componentTitle"/>
+        <result column="dataset_id" property="datasetId"/>
+        <result column="dataset_name" property="datasetName"/>
+        <result column="field_names" property="fieldNames"/>
+        <result column="binding_status" property="bindingStatus"/>
+        <result column="generated_title" property="generatedTitle"/>
+        <result column="record_status" property="recordStatus"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <delete id="deleteByRecordId">
+        DELETE FROM ai_dashboard_component_lineage
+        WHERE tenant_id = #{tenantId}
+          AND user_id = #{userId}
+          AND record_id = #{recordId}
+    </delete>
+
+    <select id="selectDatasetImpact" resultMap="DatasetImpactResultMap">
+        SELECT l.id AS lineage_id,
+               l.record_id,
+               l.project_id,
+               l.project_name,
+               l.business_definition_id,
+               l.business_name,
+               l.component_index,
+               l.component_key,
+               l.component_title,
+               l.dataset_id,
+               l.dataset_name,
+               l.field_names,
+               l.binding_status,
+               r.generated_title,
+               r.status AS record_status,
+               l.create_time
+        FROM ai_dashboard_component_lineage l
+        LEFT JOIN ai_dashboard_generate_record r
+            ON r.tenant_id = l.tenant_id
+            AND r.id = l.record_id
+        WHERE l.tenant_id = #{tenantId}
+          AND l.dataset_id = #{datasetId}
+        ORDER BY l.create_time DESC, l.id DESC
+        LIMIT #{limit}
+    </select>
+</mapper>

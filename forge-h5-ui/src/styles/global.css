@@ -1,0 +1,111 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+}
+
+page {
+  background-color: var(--page-bg, #f5f6f8);
+  color: var(--text-color, #1f2329);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 自定义 AiTabBar 接管底部导航，H5 刷新时先隐藏 uni 原生 tabBar，避免首屏闪现。 */
+/* #ifdef H5 */
+uni-tabbar,
+uni-tabbar .uni-tabbar,
+uni-tabbar .uni-tabbar__content,
+.uni-tabbar,
+.uni-tabbar__content {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+/* #endif */
+
+button,
+input {
+  touch-action: manipulation;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+  }
+}
+
+/* transition fade-slide */
+.fade-slide-leave-active,
+.fade-slide-enter-active {
+  transition: all 0.3s;
+}
+
+.fade-slide-enter-from {
+  opacity: 0;
+  transform: translateX(-2%);
+}
+
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateX(2%);
+}
+
+.v-loading-card {
+  display: flex;
+  min-width: 104px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 18px 22px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--primary-color);
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+
+.v-loading-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v-loading-dots span {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: vLoadingDot 0.8s ease-in-out infinite;
+}
+
+.v-loading-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.v-loading-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.v-loading-text {
+  color: var(--primary-color);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@keyframes vLoadingDot {
+  0%,
+  100% {
+    opacity: 0.42;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+}

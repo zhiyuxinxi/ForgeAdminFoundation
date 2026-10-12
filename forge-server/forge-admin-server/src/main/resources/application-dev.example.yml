@@ -1,0 +1,88 @@
+spring:
+  datasource:
+    type: com.zaxxer.hikari.HikariDataSource
+    dynamic:
+      # 设置默认的数据源或者数据源组,默认值即为 master
+      primary: master
+      # 严格模式 匹配不到数据源则报错
+      strict: true
+      datasource:
+        # 主库数据源
+        master:
+          type: ${spring.datasource.type}
+          driverClassName: com.mysql.cj.jdbc.Driver
+          # jdbc 所有参数配置参考 https://lionli.blog.csdn.net/article/details/122018562
+          # rewriteBatchedStatements=true 批处理优化 大幅提升批量插入更新删除性能(对数据库有性能损耗 使用批量操作应考虑性能问题)
+          url: jdbc:mysql://localhost:3306/forge_admin?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true
+          username: root
+          password: 'your_password'
+      hikari:
+        # 最大连接池数量
+        maxPoolSize: 20
+        # 最小空闲线程数量
+        minIdle: 10
+        # 配置获取连接等待超时的时间
+        connectionTimeout: 30000
+        # 校验超时时间
+        validationTimeout: 5000
+        # 空闲连接存活最大时间，默认10分钟
+        idleTimeout: 600000
+        # 此属性控制池中连接的最长生命周期，值0表示无限生命周期，默认30分钟
+        maxLifetime: 1800000
+        # 多久检查一次连接的活性
+        keepaliveTime: 30000
+
+spring.data:
+  redis:
+    # 地址
+    host: localhost
+    # 端口，默认为6379
+    port: 6379
+    # 数据库索引
+    database: 0
+    # redis 密码必须配置
+    password: 'your_redis_password'
+    # 连接超时时间
+    timeout: 10s
+    # 是否开启ssl
+    ssl.enabled: false
+    # Redisson配置
+    redisson:
+      config: |
+        singleServerConfig:
+          address: "redis://localhost:6379"
+          database: 0
+          password: forge123456
+          connectTimeout: 10000
+          timeout: 3000
+          retryAttempts: 3
+          retryInterval: 1500
+          connectionPoolSize: 64
+          connectionMinimumIdleSize: 10
+        threads: 16
+        nettyThreads: 32
+
+# MCP Server 默认关闭且只允许 Streamable HTTP。开启后长期 fcp_ 密钥只能换取短期 fdu_ Token。
+# 开发环境的三个 Pepper 会首次自动生成到 ~/.forge/secrets/crypto.properties 并在重启后复用。
+# 生产多实例应通过共享 Secret Manager 显式提供三个互不相同的 Pepper：
+# FORGE_CAPABILITY_CLIENT_PEPPER（至少16字符）、FORGE_CAPABILITY_TOKEN_PEPPER（至少32字符）、
+# FORGE_CAPABILITY_AUTH_CODE_PEPPER（至少32字符）；生产 issuer/resource 必须使用 HTTPS。
+# MCP 与 REST 使用不同 resource：FORGE_CAPABILITY_MCP_RESOURCE 对应 /mcp，
+# FORGE_CAPABILITY_OPENAPI_RESOURCE 对应统一 REST 开放网关，两个 Token 不可交叉使用。
+# 显式关闭 FORGE_CRYPTO_BOOTSTRAP_ENABLED 时必须手工提供，否则能力身份模块失败关闭。
+# 浏览器型 MCP 客户端还应通过 FORGE_CAPABILITY_MCP_ALLOWED_ORIGINS 配置精确 Origin 白名单。
+# 受控业务动作默认跟随 FORGE_MCP_ENABLED，可用 FORGE_CAPABILITY_SECURE_ACTIONS_ENABLED=false 单独关闭。
+# 外部用户委托无需在机器客户端上绑定 Forge 账号，但仍需配置受信 OIDC：
+# FORGE_CAPABILITY_OIDC_PROVIDER_ENABLED=true
+# FORGE_CAPABILITY_OIDC_ISSUER=https://idp.example.com
+# FORGE_CAPABILITY_OIDC_JWK_SET_URI=https://idp.example.com/.well-known/jwks.json
+# FORGE_CAPABILITY_OIDC_AUDIENCE=forge-capability
+# FORGE_CAPABILITY_OIDC_TENANT_ID=1
+# 首次登录按已验签 JWT 的 phone_number 唯一匹配现有 Forge 用户，后续固定使用 issuer + sub；
+# 不自动创建 Forge 用户，生产 issuer/JWK Set URI 必须使用 HTTPS。
+config:
+  datasource:
+    url: ${spring.datasource.dynamic.datasource.master.url}
+    username: ${spring.datasource.dynamic.datasource.master.username}
+    password: ${spring.datasource.dynamic.datasource.master.password}
+    driverClassName: ${spring.datasource.dynamic.datasource.master.driverClassName}

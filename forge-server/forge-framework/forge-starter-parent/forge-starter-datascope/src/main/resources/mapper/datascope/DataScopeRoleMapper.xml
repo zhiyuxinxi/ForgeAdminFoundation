@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.starter.datascope.mapper.DataScopeRoleMapper">
+
+    <select id="selectActiveRoleDataScopes" resultType="com.mdframe.forge.starter.datascope.model.DataScopeRoleInfo">
+        SELECT
+            id AS roleId,
+            data_scope AS dataScope
+        FROM sys_role
+        WHERE role_status = 1
+          AND del_flag = 0
+    </select>
+
+</mapper>
