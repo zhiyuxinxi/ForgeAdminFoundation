@@ -183,10 +183,10 @@ public class FlowActionExecutionAdapter implements GovernedOpenGatewayAdapter {
                 requireSubmissionPolicy(descriptor, source, input);
                 String recordId = attempt.resolveOrCreateRecord(() -> submissionService.create(
                         source.row(), identity, data(input)));
-                runtime = start(descriptor, parseRecordId(recordId));
+                runtime = start(descriptor, parseRecordId(recordId), attempt.startRequestId());
             }
             else if ("START".equals(descriptor.actionCode())) {
-                runtime = start(descriptor, requireRecordId(input));
+                runtime = start(descriptor, requireRecordId(input), attempt.startRequestId());
             }
             else {
                 runtime = complete(descriptor, identity, input, replayOrRecovery);
@@ -204,10 +204,11 @@ public class FlowActionExecutionAdapter implements GovernedOpenGatewayAdapter {
         });
     }
 
-    private BusinessFlowRuntimeVO start(SecureActionDescriptor descriptor, Long recordId) {
+    private BusinessFlowRuntimeVO start(SecureActionDescriptor descriptor, Long recordId, String startRequestId) {
         BusinessFlowStartDTO command = new BusinessFlowStartDTO();
         command.setObjectCode(descriptor.objectCode());
         command.setRecordId(recordId);
+        command.setStartRequestId(startRequestId);
         command.setVariables(new LinkedHashMap<>());
         return flowService.startDocumentFlowForCapability(command);
     }

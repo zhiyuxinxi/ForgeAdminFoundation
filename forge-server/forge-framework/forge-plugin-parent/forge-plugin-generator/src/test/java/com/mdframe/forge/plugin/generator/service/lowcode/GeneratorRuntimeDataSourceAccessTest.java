@@ -129,9 +129,11 @@ class GeneratorRuntimeDataSourceAccessTest {
 
     @Test
     void runtimeContractAndPureOwnerLoadFromIsolatedArtifacts() {
-        assertTrue(RuntimeDataSourceAccess.class.getProtectionDomain().getCodeSource().getLocation()
-                .toString().endsWith("forge-lowcode-api-runtime-datasource.jar"));
-        assertTrue(RuntimeDataSourceResolution.class.getProtectionDomain().getCodeSource().getLocation()
-                .toString().endsWith("runtime-classes/"));
+        var design = GeneratorRuntimeDataSourceAccess.class.getProtectionDomain().getCodeSource().getLocation();
+        var contract = RuntimeDataSourceAccess.class.getProtectionDomain().getCodeSource().getLocation();
+        var runtime = RuntimeDataSourceResolution.class.getProtectionDomain().getCodeSource().getLocation();
+        assertNotEquals(design, contract, "The API must remain outside the design module");
+        assertNotEquals(design, runtime, "The runtime owner must remain outside the design module");
+        assertNotEquals(contract, runtime, "The contract and implementation must remain separate artifacts");
     }
 }

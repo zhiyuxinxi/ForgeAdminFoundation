@@ -367,7 +367,7 @@ export function setupInterceptors(axiosInstance) {
       responseData: data,
     }, data ?? response)
     await nextTick()
-    const finalMessage = resolveResError(code, message, needTip, detail)
+    const finalMessage = resolveResError(code, message, needTip, detail, config?.method)
     if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
       return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
     }
@@ -398,7 +398,7 @@ export function setupInterceptors(axiosInstance) {
           rawMessage: error?.message,
           responseData: error?.error,
         }, error?.error)
-        const finalMessage = resolveResError(code, message, needTip, detail)
+        const finalMessage = resolveResError(code, message, needTip, detail, error?.config?.method)
         return Promise.reject({ code, message: finalMessage, error: error.error, detail })
       }
 
@@ -411,7 +411,7 @@ export function setupInterceptors(axiosInstance) {
         message,
         rawMessage: error?.message,
       }, error)
-      resolveResError(code, message, needTip, detail)
+      resolveResError(code, message, needTip, detail, error?.config?.method)
       return Promise.reject({ code, message, error, detail })
     }
 
@@ -428,7 +428,7 @@ export function setupInterceptors(axiosInstance) {
       status,
       responseData: data,
     }, error.response?.data || error.response)
-    const finalMessage = resolveResError(code, message, needTip, detail)
+    const finalMessage = resolveResError(code, message, needTip, detail, config?.method)
     if (isAuthErrorCode(code) && shouldSilenceAuthError()) {
       return Promise.resolve({ code, data: null, message: finalMessage, silentAuthError: true })
     }

@@ -224,7 +224,7 @@
                   <slot name="toolbar-start" />
                   <!-- 新增按钮 -->
                   <n-button
-                    v-if="!hideAdd && hasActionPermission('add')"
+                    v-if="showAddButton"
                     type="primary"
                     size="small"
                     @click="handleAdd()"
@@ -339,7 +339,7 @@
               animated
               class="ai-crud-detail-tabs"
             >
-              <n-tab-pane name="business" :tab="localizeLabel('业务数据')">
+              <n-tab-pane name="business" :tab="localizeLabel(props.detailBusinessTabLabel)">
                 <AiForm
                   v-if="showDefaultDetailContent"
                   ref="formRef"
@@ -386,7 +386,7 @@
                   :context="formContext"
                 />
               </n-tab-pane>
-              <n-tab-pane name="flow" :tab="localizeLabel('流程进度')" display-directive="show:lazy">
+              <n-tab-pane name="flow" :tab="localizeLabel(props.detailFlowTabLabel)" display-directive="show:lazy">
                 <AiCrudFlowDetail
                   :runtime="detailRuntime"
                   :loading="detailRuntimeLoading"
@@ -444,7 +444,7 @@
             </template>
           </div>
 
-          <footer v-if="!hideModalFooter && (!isDetailMode || visibleDetailActions.length || visibleFormActions.length)" class="inline-form-panel-footer">
+          <footer v-if="!hideModalFooter" class="inline-form-panel-footer">
             <template v-if="!isDetailMode">
               <n-button @click="handleInlineFormCancel">
                 {{ localizeLabel('取消') }}
@@ -454,7 +454,7 @@
                 :loading="confirmLoading"
                 @click="handleModalConfirm"
               >
-                {{ localizeLabel('确定') }}
+                {{ localizeLabel(formConfirmLabel) }}
               </n-button>
               <n-button
                 v-for="action in visibleFormActions"
@@ -468,6 +468,9 @@
               </n-button>
             </template>
             <template v-else>
+              <n-button @click="handleCloseActiveInlineFormTab">
+                {{ localizeLabel('关闭') }}
+              </n-button>
               <n-button
                 v-for="action in visibleDetailActions"
                 :key="action.key || action.label"
@@ -488,6 +491,7 @@
     <n-modal
       v-if="!formOnly && !usesInlineFormWorkspace && (resolvedFormOpenMode === 'modal' || isDetailMode)"
       v-model:show="modalVisible"
+      class="ai-crud-form-modal"
       :title="localizeLabel(modalTitle)"
       preset="card"
       :style="{ width: activeModalWidth }"
@@ -503,7 +507,7 @@
         animated
         class="ai-crud-detail-tabs"
       >
-        <n-tab-pane name="business" :tab="localizeLabel('业务数据')">
+        <n-tab-pane name="business" :tab="localizeLabel(props.detailBusinessTabLabel)">
           <AiForm
             v-if="showDefaultDetailContent"
             ref="formRef"
@@ -550,7 +554,7 @@
             :context="formContext"
           />
         </n-tab-pane>
-        <n-tab-pane name="flow" :tab="localizeLabel('流程进度')" display-directive="show:lazy">
+        <n-tab-pane name="flow" :tab="localizeLabel(props.detailFlowTabLabel)" display-directive="show:lazy">
           <AiCrudFlowDetail
             :runtime="detailRuntime"
             :loading="detailRuntimeLoading"
@@ -609,7 +613,7 @@
       </template>
 
       <!-- 弹窗底部按钮 -->
-      <template v-if="!hideModalFooter && (!isDetailMode || visibleDetailActions.length || visibleFormActions.length)" #footer>
+      <template v-if="!hideModalFooter" #footer>
         <n-space justify="end">
           <template v-if="!isDetailMode">
             <n-button @click="handleModalCancel">
@@ -620,7 +624,7 @@
               :loading="confirmLoading"
               @click="handleModalConfirm"
             >
-              {{ localizeLabel('确定') }}
+              {{ localizeLabel(formConfirmLabel) }}
             </n-button>
             <n-button
               v-for="action in visibleFormActions"
@@ -634,6 +638,9 @@
             </n-button>
           </template>
           <template v-else>
+            <n-button @click="handleModalCancel">
+              {{ localizeLabel('关闭') }}
+            </n-button>
             <n-button
               v-for="action in visibleDetailActions"
               :key="action.key || action.label"
@@ -708,7 +715,7 @@
               :loading="confirmLoading"
               @click="handleModalConfirm"
             >
-              {{ localizeLabel('确定') }}
+              {{ localizeLabel(formConfirmLabel) }}
             </n-button>
             <n-button
               v-for="action in visibleFormActions"
@@ -735,6 +742,7 @@
 
     <n-modal
       v-model:show="commandActionModalVisible"
+      class="ai-crud-form-modal"
       :title="commandActionTitle"
       preset="card"
       style="width: min(720px, calc(100vw - 32px))"
@@ -761,33 +769,32 @@
       </template>
     </n-modal>
 
-    <!-- 子表工具栏动作弹窗（登记提货/登记退货） -->
+    <!-- 子表工具栏动作弹窗 -->
     <n-modal
       v-model:show="childToolbarActionModalVisible"
+      class="ai-crud-form-modal"
       :title="childToolbarActionTitle"
       preset="card"
       style="width: min(520px, calc(100vw - 32px))"
       :mask-closable="false"
     >
       <n-form label-placement="left" :show-feedback="true">
-        <n-form-item :label="localizeLabel('商品')" required>
+        <n-form-item :label="childToolbarActionView.label" required>
           <n-select
             v-model:value="childToolbarItemSelected"
-            :options="childToolbarItemOptions"
-            :placeholder="localizeLabel('请选择商品')"
+            :options="childToolbarActionView.options"
+            :placeholder="childToolbarActionView.placeholder"
             clearable
             filterable
           />
         </n-form-item>
-        <n-form-item :label="childToolbarQuantityLabel" required>
-          <n-input-number
-            v-model:value="childToolbarQuantity"
-            :min="1"
-            :max="childToolbarQuantityMax"
-            style="width: 100%"
-          />
-        </n-form-item>
       </n-form>
+      <AiForm
+        ref="childToolbarActionFormRef"
+        v-model:value="childToolbarActionFormData"
+        :schema="childToolbarActionView.formSchema"
+        :show-actions="false"
+      />
       <template #footer>
         <n-space justify="end">
           <n-button :disabled="childToolbarActionSubmitting" @click="closeChildToolbarActionModal">
@@ -873,6 +880,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { crudConfigRender, customQueryExecute } from '@/api/ai'
 import { businessDocumentRuntimeBatch, executeBusinessAction } from '@/api/business-app'
 import { startBusinessProcess } from '@/api/business-process'
+import { openLinkedBusinessTask } from '@/api/business-task'
 import { previewFormula } from '@/api/formula'
 import AuthImage from '@/components/common/AuthImage.vue'
 import SystemTableCell from '@/components/common/SystemTableCell.vue'
@@ -901,10 +909,12 @@ import {
   isRuntimeActionForPosition,
   matchesRuntimeDisplayCondition,
   resolveBusinessActionAttempt,
+  resolveDetailFlowRuntime,
   shouldHideProcessStartAction,
   shouldShowDetailFlowHistory,
   unwrapBusinessActionResult,
 } from './business-action-runtime'
+import { resolveChildToolbarAction } from './child-toolbar-action-runtime'
 import { normalizeExpandConfig, shouldExpandRow } from './expand-utils'
 import { isNumberFieldType } from './field-type-utils'
 import { isImageFileName, resolveFileRenderItems } from './file-render-utils'
@@ -943,6 +953,29 @@ const userStore = useUserStore()
 const slots = useSlots()
 
 /**
+ * ==================== 内置动作能力与权限门控（KR-004 / KR-012） ====================
+ * KR-004：缺少对应 apiConfig 时隐藏内置动作（只读页不再出现无效编辑/删除/批量删除/导入/导出）。
+ * KR-012：内置动作支持可复用、向后兼容的权限门控（actionPermissions），未配置权限码不门控。
+ */
+const hasAddApi = computed(() => !!(props.apiConfig?.add || props.apiConfig?.create || props.api))
+const hasDetailApi = computed(() => !!(props.apiConfig?.detail || props.api))
+const hasUpdateApi = computed(() => !!(props.apiConfig?.update || props.apiConfig?.edit || props.api))
+const hasDeleteApi = computed(() => !!(props.apiConfig?.delete || props.api))
+const hasBatchDeleteApi = computed(() => !!(props.apiConfig?.batchDelete || props.apiConfig?.delete || props.api))
+const hasImportApi = computed(() => !!(props.apiConfig?.import || props.importApi))
+const hasExportApi = computed(() => !!(props.apiConfig?.export || props.exportApi))
+
+/** 内置动作权限判定：未配置权限码视为不门控（向后兼容），admin/tenantAdmin 始终放行。 */
+
+const showAddButton = computed(() => !props.hideAdd && hasAddApi.value && hasActionPermission('add'))
+const showBatchDeleteButton = computed(() => !props.hideBatchDelete && hasBatchDeleteApi.value && hasActionPermission('batchDelete'))
+const showImportButton = computed(() => !!props.showImport && hasImportApi.value && hasActionPermission('import'))
+const showExportButton = computed(() => !!props.showExport && hasExportApi.value && hasActionPermission('export'))
+const showDefaultDetailAction = computed(() => props.showDetailAction && hasDetailApi.value && hasActionPermission('detail'))
+const showDefaultEditAction = computed(() => hasUpdateApi.value && hasActionPermission('edit'))
+const showDefaultDeleteAction = computed(() => hasDeleteApi.value && hasActionPermission('delete'))
+
+/**
  * ==================== Refs ====================
  */
 const searchRef = ref(null)
@@ -955,7 +988,7 @@ const commandActionFormRef = ref(null)
  * ==================== 响应式数据 ====================
  */
 // 搜索参数
-const searchParams = ref({})
+const searchParams = ref({ ...(props.defaultSearchParams || {}) })
 
 // 表格数据
 const dataSource = ref([])
@@ -981,6 +1014,9 @@ const modalStatus = ref('') // 'add' | 'edit' | 'detail'
 const formData = ref({})
 const childFormData = ref({})
 const confirmLoading = ref(false)
+const formReady = ref(true)
+let formLoadSequence = 0
+let listLoadSequence = 0
 const currentRow = ref(null)
 const fieldEventLoadToken = ref(0)
 const inlineFormTabs = ref([])
@@ -1002,7 +1038,8 @@ const childToolbarActionModalVisible = ref(false)
 const childToolbarActionSubmitting = ref(false)
 const childToolbarActionContext = ref(null)
 const childToolbarItemSelected = ref(null)
-const childToolbarQuantity = ref(1)
+const childToolbarActionFormRef = ref(null)
+const childToolbarActionFormData = ref({})
 const offlineFormRuntime = ref(null)
 const offlineDraftId = ref('')
 const offlineBaseRecordVersion = ref('')
@@ -1027,29 +1064,11 @@ const childToolbarActionTitle = computed(() =>
   || childToolbarActionContext.value?.action?.actionName
   || localizeLabel('业务操作'),
 )
-const childToolbarQuantityLabel = computed(() => {
-  const actionCode = childToolbarActionContext.value?.action?.actionCode
-  return actionCode === 'record_return' ? localizeLabel('退货数量') : localizeLabel('提货数量')
-})
-const childToolbarItemOptions = computed(() => {
-  const items = childFormData.value?.presale_items || []
-  return items
-    .filter(item => item?.id)
-    .map(item => ({
-      label: t('customer.pickupSummary', { value0: item.productName || localizeLabel('商品'), value1: item.pendingQuantity ?? 0, value2: item.pickedQuantity ?? 0 }),
-      value: item.id,
-    }))
-})
-const childToolbarQuantityMax = computed(() => {
-  const items = childFormData.value?.presale_items || []
-  const selectedItem = items.find(item => item?.id === childToolbarItemSelected.value)
-  if (!selectedItem)
-    return 999999
-  const actionCode = childToolbarActionContext.value?.action?.actionCode
-  if (actionCode === 'record_return')
-    return selectedItem.pickedQuantity ?? 0
-  return selectedItem.pendingQuantity ?? 0
-})
+const childToolbarActionView = computed(() => resolveChildToolbarAction({
+  ...childToolbarActionContext.value,
+  childrenData: childFormData.value,
+  selectedKey: childToolbarItemSelected.value,
+}))
 const formulaRuntimeTimers = new Map()
 const formulaRuntimeSequences = new Map()
 let inlineFormTabSequence = 0
@@ -1298,12 +1317,16 @@ function normalizeRuntimeAction(action, row) {
   const key = action.key || action.actionType || action.label
   if (!key)
     return null
+  const publicTask = action.actionType === 'PUBLIC_TASK'
+  const linked = publicTask && row?.[action.taskIdField] != null
+  const objectCode = resolveRuntimeObjectCode(action, row)
   return {
     ...action,
     key,
-    label: action.label || key,
+    label: publicTask ? `${localizeLabel(linked ? '查看任务' : '派发任务', { 'en-US': linked ? 'View task' : 'Dispatch task' })}: ${action.label || key}` : action.label || key,
+    permissionCode: publicTask ? `ai:business:${objectCode}:${linked ? 'query' : 'edit'}` : action.permissionCode,
     actionType: action.actionType || key,
-    objectCode: resolveRuntimeObjectCode(action, row),
+    objectCode,
     recordId: action.recordId || resolveRowKeyValue(row),
   }
 }
@@ -1446,6 +1469,8 @@ function resolveConditionValue(row = {}, path = '') {
  */
 async function handleActionClick(actionOrKey, row) {
   const action = typeof actionOrKey === 'string' ? { key: actionOrKey, label: actionOrKey } : actionOrKey || {}
+  if (typeof action.onClick === 'function')
+    return handleCustomActionClick(action, row)
   if (!hasActionPermission(action.key, action.permissionCode))
     return false
   if (row?._dataScopeWritable === false && ['edit', 'delete', 'addChild'].includes(action.key)) {
@@ -1488,11 +1513,16 @@ async function handleConfiguredAction(action, row, options = {}) {
     await startProcessAction(action, row)
     return
   }
-  emit('custom-action', { action, row })
+  // 先确认再通知父级（否则父级处理器会在确认弹窗之前执行，confirmText 形同虚设）
   if (action.confirmText && !(await confirmConfiguredAction(resolveActionText(action.confirmText, row))))
     return
+  emit('custom-action', { action, row })
   if (normalizedActionType === 'COMMAND') {
     await handleCommandAction(action, row)
+    return
+  }
+  if (normalizedActionType === 'PUBLIC_TASK') {
+    await openPublicTaskAction(action, row)
     return
   }
   if (actionType === 'refresh') {
@@ -1518,6 +1548,25 @@ async function handleConfiguredAction(action, row, options = {}) {
   if (actionType === 'external' && action.routePath) {
     window.open(buildActionTarget(action, row), action.openTarget || '_blank')
     handleConfiguredActionSuccess(action)
+  }
+}
+
+async function openPublicTaskAction(action, row) {
+  const loadingKey = getActionLoadingKey(action, row)
+  if (actionLoadingKeys.value.has(loadingKey))
+    return
+  setActionLoading(loadingKey, true)
+  try {
+    const task = await openLinkedBusinessTask(action, row, props.rowKey)
+    if (!task?.id)
+      throw new Error(localizeLabel('任务返回缺少实例', { 'en-US': 'Task response has no instance' }))
+    await router.push({ path: '/workspace/todo', query: { tab: 'business', taskId: String(task.id) } })
+  }
+  catch (error) {
+    window.$message?.error(error?.message || localizeLabel('任务操作失败', { 'en-US': 'Task action failed' }))
+  }
+  finally {
+    setActionLoading(loadingKey, false)
   }
 }
 
@@ -1586,37 +1635,36 @@ async function handleChildRowAction({ action, row, executionContext } = {}) {
 }
 
 async function handleChildToolbarAction({ action, child } = {}) {
-  if (!action)
+  if (!action || !hasActionPermission(action.key, action.permissionCode))
     return
   const parentRecordId = formData.value?.id
   if (!parentRecordId) {
     window.$message?.warning(localizeLabel('请先保存主记录'))
     return
   }
-  const items = childFormData.value?.presale_items || []
-  const persistedItems = items.filter(item => item?.id)
-  if (!persistedItems.length) {
-    window.$message?.warning(localizeLabel('请先添加并保存商品明细'))
+  const view = resolveChildToolbarAction({ action, child, childrenData: childFormData.value })
+  if (!view.relationKey || !view.records.length) {
+    window.$message?.warning(view.emptyMessage)
     return
   }
-  childToolbarActionContext.value = { action, child }
+  childToolbarActionContext.value = { action, child, attempt: { idempotencyKey: createBusinessActionIdempotencyKey(), lastPayloadDigest: '' } }
   childToolbarItemSelected.value = null
-  childToolbarQuantity.value = 1
+  childToolbarActionFormData.value = view.initialData
   childToolbarActionModalVisible.value = true
 }
 
 async function submitChildToolbarAction() {
   const context = childToolbarActionContext.value
-  if (!context?.action)
+  if (!context?.action || childToolbarActionSubmitting.value || !hasActionPermission(context.action.key, context.action.permissionCode))
     return
-  const selectedItem = (childFormData.value?.presale_items || [])
-    .find(item => item?.id === childToolbarItemSelected.value)
+  const view = childToolbarActionView.value
+  const selectedItem = view.selectedRecord
   if (!selectedItem) {
-    window.$message?.warning(localizeLabel('请选择商品'))
+    window.$message?.warning(view.placeholder)
     return
   }
   const executionContext = buildChildRowActionContext({
-    child: { relationKey: context.action.relationKey || 'presale_items' },
+    child: { relationKey: view.relationKey },
     parentRecord: formData.value,
     childRecord: selectedItem,
   })
@@ -1624,15 +1672,23 @@ async function submitChildToolbarAction() {
     window.$message?.warning(localizeLabel('记录未保存，无法执行操作'))
     return
   }
-  childToolbarActionModalVisible.value = false
   childToolbarActionSubmitting.value = true
   try {
-    await executeCommandAction(
+    await childToolbarActionFormRef.value?.validate?.()
+    const data = childToolbarActionFormRef.value?.getFormData?.() || childToolbarActionFormData.value
+    context.attempt = resolveBusinessActionAttempt(context.attempt, { data, childRecordId: executionContext.childRecordId, relationKey: executionContext.relationKey })
+    const success = await executeCommandAction(
       { ...context.action, childActionContext: executionContext, recordId: executionContext.childRecordId },
       selectedItem,
-      { quantity: childToolbarQuantity.value },
-      { fromModal: true },
+      data,
+      { fromModal: true, idempotencyKey: context.attempt.idempotencyKey },
     )
+    if (success)
+      childToolbarActionModalVisible.value = false
+  }
+  catch (error) {
+    if (!Array.isArray(error))
+      window.$message?.error(error?.message || localizeLabel('动作执行失败'))
   }
   finally {
     childToolbarActionSubmitting.value = false
@@ -1645,7 +1701,7 @@ function closeChildToolbarActionModal() {
   childToolbarActionModalVisible.value = false
   childToolbarActionContext.value = null
   childToolbarItemSelected.value = null
-  childToolbarQuantity.value = 1
+  childToolbarActionFormData.value = {}
 }
 
 function handleConfiguredActionSuccess(action = {}) {
@@ -2373,7 +2429,7 @@ const showExportTaskEntry = computed(() => {
 
 const toolbarOverflowOptions = computed(() => {
   const options = []
-  if (!props.hideBatchDelete && hasActionPermission('batchDelete')) {
+  if (showBatchDeleteButton.value) {
     options.push({
       get label() {
         return localizeLabel('批量删除')
@@ -2385,7 +2441,7 @@ const toolbarOverflowOptions = computed(() => {
       iconComponent: TrashOutline,
     })
   }
-  if (props.showImport && hasActionPermission('import')) {
+  if (showImportButton.value) {
     options.push({
       get label() {
         return localizeLabel('批量导入')
@@ -2396,7 +2452,7 @@ const toolbarOverflowOptions = computed(() => {
       iconComponent: CloudUploadOutline,
     })
   }
-  if (props.showExport && hasActionPermission('export')) {
+  if (showExportButton.value) {
     options.push({
       label: localizeLabel(exportLoading.value ? '导出中...' : props.exportButtonText),
       key: 'export',
@@ -2646,14 +2702,15 @@ const tableColumns = computed(() => {
       width: 200,
       fixed: 'right',
       render: (row) => {
-        const actions = normalizeRowActions([
-          { get label() {
-            return localizeLabel('编辑')
-          }, key: 'edit', type: 'primary' },
-          { get label() {
-            return localizeLabel('删除')
-          }, key: 'delete', type: 'error' },
-        ])
+        // KR-004：只读页（缺 apiConfig.update/delete）不再渲染无效内置编辑/删除，仅保留运行时动作
+        const baseActions = []
+        if (showDefaultDetailAction.value)
+          baseActions.push({ label: localizeLabel('查看'), key: 'detail', type: 'info' })
+        if (showDefaultEditAction.value)
+          baseActions.push({ label: localizeLabel('编辑'), key: 'edit', type: 'primary' })
+        if (showDefaultDeleteAction.value)
+          baseActions.push({ label: localizeLabel('删除'), key: 'delete', type: 'error' })
+        const actions = normalizeRowActions(baseActions)
         return renderActionColumn(row, actions)
       },
     })
@@ -2722,7 +2779,7 @@ function resolveColumnRender(col) {
       values: splitTableCellValues(row[targetField] ?? row[key]),
     })
   }
-  else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+  else if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName' || renderType === 'postName') {
     const targetField = col.render.targetField || `${key}Name`
     nextCol.render = row => h(SystemTableCell, {
       values: splitTableCellValues(row[targetField] ?? row[key]),
@@ -2818,9 +2875,10 @@ const tableSlots = computed(() => {
  * 表单插槽名称
  */
 const formSlots = computed(() => {
-  return props.editSchema
+  return [...new Set(flattenRuntimeFormFields(props.editSchema)
     .filter(field => field.type === 'slot')
     .map(field => field.slotName || field.field)
+    .filter(Boolean))]
 })
 
 const isDetailMode = computed(() => modalStatus.value === 'detail')
@@ -3876,6 +3934,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  listLoadSequence += 1
+  formLoadSequence += 1
   if (heightMeasureRaf) {
     cancelAnimationFrame(heightMeasureRaf)
     heightMeasureRaf = null
@@ -4094,7 +4154,9 @@ function extractListTotal(payload, totalField, fallbackTotal = 0, depth = 0) {
  * 加载列表数据
  */
 async function loadList() {
+  const sequence = ++listLoadSequence
   if (!customQueryPayload.value && !props.api && !props.apiConfig.list) {
+    tableLoading.value = false
     console.warn('未配置 API 地址')
     return
   }
@@ -4126,6 +4188,8 @@ async function loadList() {
 
     // 调用 beforeLoadList 钩子
     params = await callHook('beforeLoadList', params, data => data)
+    if (sequence !== listLoadSequence)
+      return
 
     // 发送请求
     let response
@@ -4178,6 +4242,9 @@ async function loadList() {
       }
     }
 
+    if (sequence !== listLoadSequence)
+      return
+
     // 提取数据
     let list = []
     let total = 0
@@ -4188,10 +4255,14 @@ async function loadList() {
 
     // 调用 beforeRenderList 钩子
     list = await callHook('beforeRenderList', list, data => data)
+    if (sequence !== listLoadSequence)
+      return
 
     // 列表动作需要按记录读取流程运行态。否则“发起主流程”只会依赖静态
     // 配置，流程启动后仍会留在操作列里，也无法正确展示流程状态。
     list = await enrichDocumentRuntimeRows(list)
+    if (sequence !== listLoadSequence)
+      return
 
     // 更新数据
     dataSource.value = list
@@ -4200,12 +4271,15 @@ async function loadList() {
     emit('load-list-success', { list, total })
   }
   catch (error) {
+    if (sequence !== listLoadSequence)
+      return
     console.error('加载列表失败:', error)
     window.$message.error(localizeLabel('加载数据失败'))
     emit('load-list-error', error)
   }
   finally {
-    tableLoading.value = false
+    if (sequence === listLoadSequence)
+      tableLoading.value = false
   }
 }
 
@@ -4273,7 +4347,7 @@ async function handleSearch(params) {
  * 重置
  */
 function handleReset() {
-  searchParams.value = {}
+  searchParams.value = { ...(props.defaultSearchParams || {}) }
   pagination.value.page = 1
   loadList()
 }
@@ -4753,6 +4827,10 @@ function handleInlineFormSubmitSuccess(response, isEdit) {
 async function handleAdd(defaultValues = null, options = {}) {
   if (!hasActionPermission('add'))
     return false
+  const sequence = ++formLoadSequence
+  confirmLoading.value = false
+  formReady.value = false
+  detailRuntimeLoading.value = false
   flushOfflineDraftSave()
   persistActiveInlineFormTab()
   resetOfflineDraftSession()
@@ -4776,6 +4854,8 @@ async function handleAdd(defaultValues = null, options = {}) {
 
   // 调用 beforeRenderForm 钩子（新增时）
   const formDataFromHook = await callHook('beforeRenderForm', null, data => data)
+  if (sequence !== formLoadSequence)
+    return false
 
   // 合并默认值和钩子返回的数据
   if (formDataFromHook && typeof formDataFromHook === 'object') {
@@ -4795,7 +4875,10 @@ async function handleAdd(defaultValues = null, options = {}) {
 
   if (!presetValues)
     await restoreOfflineDraft('')
+  if (sequence !== formLoadSequence)
+    return false
 
+  formReady.value = true
   if (props.formOnly) {
     fieldEventLoadToken.value += 1
   }
@@ -4853,7 +4936,13 @@ function isPlainRecord(value) {
 async function handleEdit(row) {
   if (!hasActionPermission('edit'))
     return false
+  const sequence = ++formLoadSequence
+  confirmLoading.value = false
+  formReady.value = false
+  detailRuntimeLoading.value = false
+  detailRuntime.value = row?._documentRuntime || null
   if (activateReusableInlineFormTab('edit', row)) {
+    formReady.value = true
     emit('edit', row)
     emit('modal-open', { status: 'edit', row })
     return
@@ -4863,33 +4952,46 @@ async function handleEdit(row) {
   persistActiveInlineFormTab()
   resetOfflineDraftSession()
 
+  formData.value = {}
+  childFormData.value = {}
   modalTitle.value = row?.__modalTitle || localizeLabel('编辑')
   modalStatus.value = 'edit'
   currentRow.value = row
 
   // 调用 beforeRenderForm 钩子（编辑时）
   const processedRow = await callHook('beforeRenderForm', row, data => data)
+  if (sequence !== formLoadSequence)
+    return false
   const renderRow = mergeHookRowWithOriginal(row, processedRow)
 
   // 如果需要加载详情
   if (props.loadDetailOnEdit) {
     window.$loading.show(localizeLabel('加载中...'))
-    await loadDetail(renderRow)
+    const loaded = await loadDetail(renderRow, sequence)
     window.$loading.close()
+    if (!loaded)
+      return false
   }
   else {
     // 调用 beforeRenderDetail 钩子
     const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    if (sequence !== formLoadSequence)
+      return false
     applyDetailData(data)
   }
 
   // 编辑表单同样需要单据流程运行态，保证发起按钮在流程启动后立即隐藏，
   // 且表单页与列表页使用同一条流程状态判断链路。
-  await loadDetailRuntime(renderRow)
+  await loadDetailRuntime(renderRow, sequence)
+  if (sequence !== formLoadSequence)
+    return false
 
   offlineBaseRecordVersion.value = readOfflineRecordVersion(renderRow)
   await restoreOfflineDraft(resolveRowKeyValue(row))
+  if (sequence !== formLoadSequence)
+    return false
 
+  formReady.value = true
   if (!openFormContainer('edit', modalTitle.value, row))
     return
   // 清除上一次潜留的表单校验状态
@@ -4908,7 +5010,12 @@ async function handleEdit(row) {
 async function handleDetail(row) {
   if (!hasActionPermission('detail'))
     return false
+  const sequence = ++formLoadSequence
+  confirmLoading.value = false
+  formReady.value = false
+  detailRuntimeLoading.value = false
   if (activateReusableInlineFormTab('detail', row)) {
+    formReady.value = true
     emit('detail', row)
     emit('modal-open', { status: 'detail', row })
     return
@@ -4918,6 +5025,8 @@ async function handleDetail(row) {
   persistActiveInlineFormTab()
   resetOfflineDraftSession()
 
+  formData.value = {}
+  childFormData.value = {}
   modalTitle.value = row?.__modalTitle || localizeLabel('查看详情')
   modalStatus.value = 'detail'
   currentRow.value = row
@@ -4925,20 +5034,29 @@ async function handleDetail(row) {
   detailRuntime.value = row?._documentRuntime || null
 
   const processedRow = await callHook('beforeRenderForm', row, data => data)
+  if (sequence !== formLoadSequence)
+    return false
   const renderRow = mergeHookRowWithOriginal(row, processedRow)
 
   if (props.loadDetailOnEdit) {
     window.$loading.show(localizeLabel('加载中...'))
-    await loadDetail(renderRow)
+    const loaded = await loadDetail(renderRow, sequence)
     window.$loading.close()
+    if (!loaded)
+      return false
   }
   else {
     const data = await callHook('beforeRenderDetail', renderRow, data => data)
+    if (sequence !== formLoadSequence)
+      return false
     applyDetailData(data)
   }
 
-  await loadDetailRuntime(renderRow)
+  await loadDetailRuntime(renderRow, sequence)
+  if (sequence !== formLoadSequence)
+    return false
 
+  formReady.value = true
   if (!openFormContainer('detail', modalTitle.value, row))
     return
   await nextTick()
@@ -4949,31 +5067,37 @@ async function handleDetail(row) {
   emit('modal-open', { status: 'detail', row })
 }
 
-async function loadDetailRuntime(row) {
+async function loadDetailRuntime(row, sequence = formLoadSequence) {
   const objectCode = resolveRuntimeObjectCode({}, row)
   const recordId = resolveRowKeyValue(row)
+  const detailRecord = formData.value && typeof formData.value === 'object' ? formData.value : null
+  detailRuntime.value = resolveDetailFlowRuntime(detailRuntime.value, detailRecord, row)
   if (!objectCode || !recordId) {
     return
   }
   detailRuntimeLoading.value = true
   try {
     const res = await request.get(`/ai/business/document/${objectCode}/${recordId}/runtime`, { needTip: false })
-    detailRuntime.value = res?.data || null
+    if (sequence !== formLoadSequence)
+      return
+    detailRuntime.value = resolveDetailFlowRuntime(res?.data, detailRecord, row, detailRuntime.value)
   }
   catch (error) {
-    if (!detailRuntime.value)
-      detailRuntime.value = null
+    if (sequence !== formLoadSequence)
+      return
+    detailRuntime.value = resolveDetailFlowRuntime(detailRuntime.value, detailRecord, row)
     console.warn('[AiCrudPage] 加载单据流程运行态失败:', error?.message || error)
   }
   finally {
-    detailRuntimeLoading.value = false
+    if (sequence === formLoadSequence)
+      detailRuntimeLoading.value = false
   }
 }
 
 /**
  * 加载详情
  */
-async function loadDetail(row) {
+async function loadDetail(row, sequence = formLoadSequence) {
   confirmLoading.value = true
 
   try {
@@ -4981,8 +5105,7 @@ async function loadDetail(row) {
     if (!isUsableKeyValue(idValue)) {
       console.warn('[AiCrudPage] loadDetail id缺失', { rowKey: props.rowKey, rowKeys: Object.keys(row || {}).slice(0, 20), row })
       window.$message.warning(t('customer.missingDetailKey', { value0: props.rowKey }))
-      confirmLoading.value = false
-      return
+      return false
     }
     const { method, url } = parseApiConfig(
       'detail',
@@ -5026,16 +5149,27 @@ async function loadDetail(row) {
       response = await request(requestConfig)
     }
 
+    if (response?.silentAuthError || isAuthErrorCode(response?.code))
+      throw response
+
     // 调用 beforeRenderDetail 钩子
     const data = await callHook('beforeRenderDetail', response.data, data => data)
+    if (sequence !== formLoadSequence)
+      return false
     applyDetailData(data)
+    return true
   }
   catch (error) {
+    if (sequence !== formLoadSequence)
+      return false
     console.error('加载详情失败:', error)
-    window.$message.error(localizeLabel('加载详情失败'))
+    if (!error?.silentAuthError)
+      window.$message.error(localizeLabel('加载详情失败'))
+    return false
   }
   finally {
-    confirmLoading.value = false
+    if (sequence === formLoadSequence)
+      confirmLoading.value = false
   }
 }
 
@@ -5187,7 +5321,7 @@ async function performDelete(rows, keys, actionKey) {
         console.error('删除失败:', error)
         if (isBatchDelete) {
           const message = error?.message || error?.error?.message || localizeLabel('删除失败')
-          resolveResError(error?.code, succeeded.size ? `${localizeLabel('删除成功')}：${succeeded.size}；${message}` : message, true, error?.detail)
+          resolveResError(error?.code, succeeded.size ? `${localizeLabel('删除成功')}：${succeeded.size}；${message}` : message, true, error?.detail, 'delete')
         }
         else {
           window.$message.error(localizeLabel('删除失败'))
@@ -5201,6 +5335,9 @@ async function performDelete(rows, keys, actionKey) {
  * 提交表单
  */
 async function handleModalConfirm() {
+  if (confirmLoading.value || !formReady.value)
+    return false
+
   if (isDetailMode.value) {
     if (usesInlineFormWorkspace.value)
       handleCloseActiveInlineFormTab()
@@ -5212,6 +5349,7 @@ async function handleModalConfirm() {
   if (!hasActionPermission(modalStatus.value === 'edit' ? 'edit' : 'add'))
     return false
 
+  confirmLoading.value = true
   try {
     await nextTick()
     await formRef.value?.validate()
@@ -5230,24 +5368,7 @@ async function handleModalConfirm() {
     if (data === false) {
       return
     }
-    // 统一处理时间戳，转换为标准日期格式
-    data = JSON.parse(JSON.stringify(data), (key, value) => {
-      // 判断是否是时间戳（数字且长度在10位（秒）到13位（毫秒）之间）
-      if (typeof value === 'number' && (value.toString().length === 10 || value.toString().length === 13)) {
-        const date = new Date(value.toString().length === 10 ? value * 1000 : value)
-        // 格式化为 yyyy-MM-dd HH:mm:ss
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        const hours = String(date.getHours()).padStart(2, '0')
-        const minutes = String(date.getMinutes()).padStart(2, '0')
-        const seconds = String(date.getSeconds()).padStart(2, '0')
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-      }
-      return value
-    })
-
-    confirmLoading.value = true
+    // 日期格式由字段协议决定；业务数值和已格式化日期保持原值。
 
     const isEdit = modalStatus.value === 'edit'
     if (!hasActionPermission(isEdit ? 'edit' : 'add'))
@@ -5312,6 +5433,10 @@ async function handleModalConfirm() {
       response = await request({ method: requestMethod, url, data })
     }
 
+    // 静默鉴权失败不能视为保存成功，也不能清理未保存的草稿。
+    if (response?.silentAuthError || isAuthErrorCode(response?.code))
+      throw response
+
     clearOfflineDraftAfterSubmit()
     window.$message.success(t('customer.saveSuccess', { value0: isEdit ? localizeLabel('编辑') : localizeLabel('新增') }))
     if (props.formOnly) {
@@ -5333,14 +5458,11 @@ async function handleModalConfirm() {
       loadList()
   }
   catch (error) {
-    console.error('提交失败:', error)
-
-    // 前端表单校验失败时 AiForm 已完成滚动和高亮定位，这里不再弹出重复提示
-    if (Array.isArray(error) && error.length > 0) {
-      console.error('验证错误详情:', error)
-    }
-    else {
-      window.$message.error(error?.message || localizeLabel('提交失败'))
+    // 前端表单校验失败时 AiForm 已完成滚动和高亮定位，不重复 Toast，也不输出 error 级日志。
+    if (!Array.isArray(error)) {
+      console.error('提交失败:', error)
+      if (!error?.silentAuthError)
+        window.$message.error(error?.message || localizeLabel('提交失败'))
     }
 
     // 触发提交失败事件
@@ -5355,6 +5477,8 @@ async function handleModalConfirm() {
  * 弹窗取消
  */
 function handleModalCancel() {
+  formLoadSequence += 1
+  confirmLoading.value = false
   modalVisible.value = false
 }
 
@@ -5917,6 +6041,24 @@ watch(() => stableSerialize(props.publicQuery || {}), () => {
 </script>
 
 <style scoped>
+:global(.ai-crud-form-modal) {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+}
+
+:global(.ai-crud-form-modal > .n-card-header),
+:global(.ai-crud-form-modal > .n-card__footer) {
+  flex: 0 0 auto;
+}
+
+:global(.ai-crud-form-modal > .n-card-content) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .ai-crud-page {
   position: relative;
   width: 100%;

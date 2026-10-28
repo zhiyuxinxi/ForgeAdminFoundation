@@ -878,3 +878,21 @@ body .n-popover:has(.forge-side-menu-flyout) {
 .n-data-table-tr:nth-child(20) {
   animation-delay: 0.26s;
 }
+
+
+/* ============================================
+ * 弹窗内容边界（UI 规范 §5.2）
+ * Naive UI card/dialog preset：n-modal 元素即 n-card/n-dialog 本身（BEM 类名 n-card-content/n-dialog__content）。
+ * 内容不超出视口，过长时内容区内部滚动；header/footer 固定。
+ * ============================================ */
+.n-modal {
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.n-modal .n-card-content,
+.n-modal .n-dialog__content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

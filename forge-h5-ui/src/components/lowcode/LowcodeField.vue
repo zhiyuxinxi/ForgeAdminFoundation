@@ -154,7 +154,8 @@ const field = computed(() => {
   const source = props.field
   const settings = { ...(source.props || {}) }
   for (const key of ['placeholder', 'startPlaceholder', 'endPlaceholder', 'buttonText']) {
-    if (settings[key]) settings[key] = localizeLabel(settings[key], source[`${key}I18n`] || settings[`${key}I18n`])
+    const translations = source[`${key}I18n`] || settings[`${key}I18n`]
+    if (settings[key] || translations) settings[key] = localizeLabel(settings[key] || '', translations)
   }
   return { ...source, label: localizeLabel(source.label, source.labelI18n), props: settings }
 })

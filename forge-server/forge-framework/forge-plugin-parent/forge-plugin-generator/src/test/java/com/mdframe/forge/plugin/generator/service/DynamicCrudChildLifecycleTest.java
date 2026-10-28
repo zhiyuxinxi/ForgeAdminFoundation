@@ -139,8 +139,60 @@ class DynamicCrudChildLifecycleTest {
         configureSaveMode("replace");
         service.updateById("orders", new LinkedHashMap<>(Map.of("id", 10L, "title", "edited")));
         verify(repository, never()).deleteByColumn(anyString(), anyString(), any(), anyBoolean());
-        assertThrows(BusinessException.class, () -> service.updateById("orders", new LinkedHashMap<>(Map.of("id", 10L, "children", Map.of("lines", List.of())))));
+        assertDoesNotThrow(() -> service.updateById("orders", new LinkedHashMap<>(Map.of("id", 10L, "children", Map.of("lines", List.of())))));
         verify(repository).deleteByColumn("lines", "orders_id", 10L, false);
+    }
+
+    @Test
+    void unknownChildNameRejectsInsertAndUpdateBeforeAnyWrites() {
+        Map<String, Object> children = new LinkedHashMap<>();
+        children.put("lines", List.of(Map.of("name", "valid")));
+        children.put("misspelled_lines", List.of(Map.of("name", "lost before this fix")));
+        assertRejectedBeforeWrites(children);
+    }
+
+    @Test
+    void malformedChildEnvelopeOrRowsCannotSilentlyClearExistingDetails() {
+        configureSaveMode("replace");
+        for (Object children : List.of("invalid", List.of(), Map.of("lines", "invalid"),
+                Map.of("lines", List.of(Map.of("name", "valid"), "invalid")))) {
+            assertRejectedBeforeWrites(children);
+        }
+        Map<String, Object> nullRows = new LinkedHashMap<>();
+        nullRows.put("lines", null);
+        assertRejectedBeforeWrites(nullRows);
+        assertRejectedBeforeWrites(null);
+    }
+
+    @Test
+    void legacySingleChildObjectStillWritesNormally() {
+        service.insert("orders", new LinkedHashMap<>(Map.of("title", "new", "children",
+                Map.of("lines", Map.of("name", "one row")))));
+        verify(repository).insert("lines", Map.of("name", "one row", "orders_id", 10L));
+    }
+
+    @Test
+    void unknownChildMessageUsesRequestLocaleWithoutChangingModelName() {
+        org.springframework.context.i18n.LocaleContextHolder.setLocale(java.util.Locale.US);
+        try {
+            BusinessException failure = assertThrows(BusinessException.class, () -> service.insert("orders",
+                    new LinkedHashMap<>(Map.of("title", "new", "children", Map.of("missing_lines", List.of())))));
+            assertEquals("Unknown child model name: missing_lines", failure.getMessage());
+        } finally {
+            org.springframework.context.i18n.LocaleContextHolder.resetLocaleContext();
+        }
+    }
+
+    private void assertRejectedBeforeWrites(Object children) {
+        Map<String, Object> payload = new LinkedHashMap<>(Map.of("title", "changed"));
+        payload.put("children", children);
+        assertThrows(BusinessException.class, () -> service.insert("orders", new LinkedHashMap<>(payload)));
+        payload.put("id", 10L);
+        assertThrows(BusinessException.class, () -> service.updateById("orders", payload));
+        verify(repository, never()).insertReturningKey(anyString(), anyMap(), anyString(), anyBoolean());
+        verify(repository, never()).updateById(eq("orders"), any(), anyMap(), any());
+        verify(repository, never()).insert(anyString(), anyMap());
+        verify(repository, never()).deleteByColumn(anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test

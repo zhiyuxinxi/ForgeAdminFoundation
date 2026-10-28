@@ -105,6 +105,50 @@ class SystemTenantMemberDirectoryTest {
         }
     }
 
+    @Test
+    void postLookupRequiresAuthenticatedTenantAndBoundedStableIds() {
+        try (MockedStatic<SessionHelper> session = mockStatic(SessionHelper.class)) {
+            assertCode(401, () -> directory.findActiveMembersByPost(30L, null, 20));
+            LoginUser caller = new LoginUser();
+            caller.setUserId(9L);
+            caller.setTenantId(2L);
+            session.when(SessionHelper::getLoginUser).thenReturn(caller);
+            TenantContextHolder.setTenantId(3L);
+            assertCode(403, () -> directory.findActiveMembersByPost(30L, null, 20));
+            TenantContextHolder.clear();
+            assertCode(400, () -> directory.findActiveMembersByPost(null, null, 20));
+            assertCode(400, () -> directory.findActiveMembersByPost(0L, null, 20));
+            assertCode(400, () -> directory.findActiveMembersByPost(30L, -1L, 20));
+            assertCode(400, () -> directory.findActiveMembersByPost(30L, null, 0));
+            assertCode(400, () -> directory.findActiveMembersByPost(30L, null, 201));
+            verifyNoInteractions(mapper);
+        }
+    }
+
+    @Test
+    void postLookupUsesCurrentTenantMasterAndRestoresContextOnSuccessAndFailure() {
+        TenantMember member = new TenantMember(101L, "alice", "Alice");
+        when(mapper.selectActiveMembersByPost(2L, 30L, 100L, 20)).thenAnswer(call -> {
+            assertThat(DynamicDataSourceContextHolder.peek()).isEqualTo("master");
+            assertThat(DataScopeContextHolder.isSkip()).isTrue();
+            return List.of(member);
+        });
+        when(mapper.selectActiveMembersByPost(2L, 31L, null, 20))
+                .thenThrow(new IllegalStateException("database unavailable"));
+        DynamicDataSourceContextHolder.push("business-db");
+        try (MockedStatic<SessionHelper> ignored = login()) {
+            List<TenantMember> result = directory.findActiveMembersByPost(30L, 100L, 20);
+            assertThat(result).containsExactly(member);
+            assertThatThrownBy(() -> result.add(member)).isInstanceOf(UnsupportedOperationException.class);
+            assertThat(DynamicDataSourceContextHolder.peek()).isEqualTo("business-db");
+            assertThat(DataScopeContextHolder.isSkip()).isFalse();
+            assertThatThrownBy(() -> directory.findActiveMembersByPost(31L, null, 20))
+                    .isInstanceOf(IllegalStateException.class);
+            assertThat(DynamicDataSourceContextHolder.peek()).isEqualTo("business-db");
+            assertThat(DataScopeContextHolder.isSkip()).isFalse();
+        }
+    }
+
     static MockedStatic<SessionHelper> login() {
         LoginUser caller = new LoginUser();
         caller.setUserId(9L);

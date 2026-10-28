@@ -22,6 +22,7 @@ final class RuntimeFieldComponents {
         return switch (StringUtils.defaultString(componentType)) {
             case "orgTreeSelect" -> "orgName";
             case "userSelect" -> "userName";
+            case "postSelect" -> "postName";
             case "regionTreeSelect" -> "regionName";
             case "fileUpload", "imageUpload" -> componentType;
             default -> "";
@@ -210,7 +211,7 @@ final class RuntimeFieldComponents {
 
     static void applySelectionLabelProps(Map<String, Object> props, String fieldName, String componentType) {
         if (StringUtils.isBlank(fieldName)
-                || (!"orgTreeSelect".equals(componentType) && !"userSelect".equals(componentType))) {
+                || (!"orgTreeSelect".equals(componentType) && !"userSelect".equals(componentType) && !"postSelect".equals(componentType))) {
             return;
         }
         String labelField = fieldName + "Name";
@@ -228,7 +229,7 @@ final class RuntimeFieldComponents {
         return "dictSelect".equals(componentType)
                 || "treeSelect".equals(componentType)
                 || "orgTreeSelect".equals(componentType)
-                || "userSelect".equals(componentType)
+                || "userSelect".equals(componentType) || "postSelect".equals(componentType)
                 || "regionTreeSelect".equals(componentType)
                 || "cascader".equals(componentType)
                 || "objectReference".equals(componentType)
@@ -241,7 +242,7 @@ final class RuntimeFieldComponents {
                 || "date".equals(componentType) || "datetime".equals(componentType) || "time".equals(componentType)
                 || "daterange".equals(componentType) || "datetimerange".equals(componentType) || "timerange".equals(componentType)
                 || "dictSelect".equals(componentType) || "treeSelect".equals(componentType) || "orgTreeSelect".equals(componentType)
-                || "userSelect".equals(componentType) || "regionTreeSelect".equals(componentType) || "cascader".equals(componentType)
+                || "userSelect".equals(componentType) || "postSelect".equals(componentType) || "regionTreeSelect".equals(componentType) || "cascader".equals(componentType)
                 || "objectReference".equals(componentType) || "recordSelector".equals(componentType) || "fileUpload".equals(componentType)
                 || "imageUpload".equals(componentType) || "upload".equals(componentType)) {
             return "请选择" + label;

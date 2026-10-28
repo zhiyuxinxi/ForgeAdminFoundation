@@ -54,4 +54,24 @@
         ORDER BY u.id
         LIMIT #{limit}
     </select>
+    <select id="selectActiveMembersByPost" resultMap="memberMap" useCache="false" flushCache="true">
+        SELECT DISTINCT u.id user_id, u.username, COALESCE(NULLIF(TRIM(u.real_name), ''), u.username) display_name
+        <include refid="activeMembers"/>
+        AND EXISTS (
+            SELECT 1 FROM sys_user_post binding
+            INNER JOIN sys_post post
+                ON post.id = binding.post_id AND post.tenant_id = binding.tenant_id
+                AND post.post_status = 1 AND post.del_flag = 0
+            WHERE binding.tenant_id = #{tenantId} AND binding.user_id = u.id
+                AND binding.post_id = #{postId}
+                AND (post.org_id IS NULL OR EXISTS (
+                    SELECT 1 FROM sys_org org
+                    WHERE org.id = post.org_id AND org.tenant_id = #{tenantId}
+                        AND org.org_status = 1 AND org.del_flag = 0
+                ))
+        )
+        <if test="afterUserId != null">AND u.id &gt; #{afterUserId}</if>
+        ORDER BY u.id
+        LIMIT #{limit}
+    </select>
 </mapper>

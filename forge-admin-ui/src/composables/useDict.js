@@ -14,7 +14,7 @@
 
 import { onMounted, ref } from 'vue'
 import { localizeLabel } from '@/locales'
-import { request } from '@/utils'
+import { request } from '@/utils/http'
 
 // 全局字典缓存
 const dictCache = new Map()

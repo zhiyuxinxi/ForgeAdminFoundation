@@ -1,5 +1,6 @@
 // Public application-center display text only. Never apply to record values or identifiers.
 export default {
+  "选择记录": "Select record",
   "该入口未配置打开地址": "No URL is configured for this entry",
   "返回应用工作台": "Back to application workspace",
   "直接读取对象设计草稿，不依赖菜单或页面入口。": "Preview the object design draft directly, without a menu or page entry.",

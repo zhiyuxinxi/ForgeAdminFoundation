@@ -49,8 +49,8 @@ public class PageQuery implements Serializable {
         }
         return pageSize;
     }
-    
+
     public <T> Page<T> toPage() {
-        return new Page<T>(pageNum, pageSize);
+        return new Page<T>(getPageNum(), getPageSize());
     }
 }

@@ -316,9 +316,14 @@ public class BusinessFieldDesignService {
 
     private void syncZoneRef(LowcodePageSchema pageSchema, String zoneKey, String fieldCode, boolean present) {
         LowcodePageZone zone = ensureZone(pageSchema, zoneKey);
-        List<String> refs = withoutFieldRef(zone.getFieldRefs(), fieldCode);
+        List<String> refs = zone.getFieldRefs() == null
+                ? new ArrayList<>() : new ArrayList<>(zone.getFieldRefs());
         if (present) {
-            refs.add(fieldCode);
+            if (!refs.contains(fieldCode)) {
+                refs.add(fieldCode);
+            }
+        } else {
+            refs.removeIf(ref -> StringUtils.equals(ref, fieldCode));
         }
         zone.setFieldRefs(refs);
     }

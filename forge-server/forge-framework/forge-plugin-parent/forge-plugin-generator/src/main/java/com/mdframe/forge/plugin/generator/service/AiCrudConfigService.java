@@ -407,7 +407,30 @@ public class AiCrudConfigService extends ServiceImpl<AiCrudConfigMapper, AiCrudC
             throw new BusinessException("配置JSON格式错误");
         }
         applyDocumentRuntimeHints(config, vo);
+        alignRuntimeOptionCompatibilityFields(vo);
         return vo;
+    }
+
+    static void alignRuntimeOptionCompatibilityFields(AiCrudConfigRenderVO vo) {
+        if (vo == null || !(vo.getOptions() instanceof Map<?, ?> options)) {
+            return;
+        }
+        Object width = options.get("modalWidth");
+        String normalizedWidth = width == null ? null : StringUtils.trimToNull(String.valueOf(width));
+        if (normalizedWidth != null) {
+            vo.setModalWidth(normalizedWidth);
+        }
+        Object columns = options.get("editGridCols");
+        if (columns != null) {
+            try {
+                int value = Integer.parseInt(columns.toString());
+                if (value > 0) {
+                    vo.setEditGridCols(value);
+                }
+            } catch (NumberFormatException ignored) {
+                // Keep the existing default for malformed legacy options.
+            }
+        }
     }
 
     private boolean hasStoredRuntimeConfig(AiCrudConfig config) {

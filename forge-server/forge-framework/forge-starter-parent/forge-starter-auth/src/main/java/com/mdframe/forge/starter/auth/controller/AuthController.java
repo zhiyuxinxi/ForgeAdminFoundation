@@ -9,6 +9,7 @@ import com.mdframe.forge.starter.core.annotation.crypto.ApiDecrypt;
 import com.mdframe.forge.starter.core.domain.RespInfo;
 import com.mdframe.forge.starter.core.session.LoginUser;
 import com.mdframe.forge.starter.core.annotation.tenant.IgnoreTenant;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -112,9 +113,8 @@ public class AuthController {
      * 修改密码
      */
     @PostMapping("/changePassword")
-    public RespInfo<Void> changePassword(@RequestParam String oldPassword,
-                                          @RequestParam String newPassword) {
-        boolean success = authService.changePassword(oldPassword, newPassword);
+    public RespInfo<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        boolean success = authService.changePassword(request.getOldPassword(), request.getNewPassword());
         return success ? RespInfo.success() : RespInfo.error("修改密码失败");
     }
 

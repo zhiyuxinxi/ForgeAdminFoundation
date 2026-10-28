@@ -39,6 +39,11 @@ public class RespInfo<T> implements Serializable {
      */
     private Long timestamp;
 
+    /**
+     * 请求链路标识（失败排障时按需返回）。
+     */
+    private String traceId;
+
     public RespInfo(Integer code, String message, T data) {
         this.code = code;
         this.message = UiMessages.translate(message);

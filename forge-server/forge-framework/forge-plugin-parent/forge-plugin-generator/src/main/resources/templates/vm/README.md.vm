@@ -11,6 +11,12 @@
 
 将 `${backendBasePath}` 下的 Java 文件和 `${mapperXmlBasePath}` 下的 Mapper XML 合并到后端工程对应模块中。
 
+#if(${hasIdentityReferences})
+本包的组织、人员、岗位引用复用公共 `com.mdframe.forge:forge-lowcode-runtime`，接收源码的模块 POM 必须依赖与底座同版本的该模块，并提供 system 的目录实现；Foundation 的 generator 模块已包含这一依赖。候选与保存使用生成权限 `${moduleName}:${businessName}`，不接受请求传入权限模块、租户或字段 schema。生成 Service 的旧值读取复用公共 DynamicCrudRepository 与 RuntimeDataScopeService，和当前生成 Mapper 一样使用默认数据源；若二次开发改变数据源，必须一起对齐两者后再运行。
+
+生成的候选入口位于 `${apiBase}/references/{field}/organizations|members|posts|post-scope`。运行配置显式携带该 API 基址，不能将本包配置键转发到动态 CRUD 目录接口。停用历史值原样保留，新选／更换值必须有效且在当前业务范围内。DTO 的 null 字段沿既有 MyBatis 更新语义不写入，部分更新不会据此清空引用。
+#end
+
 核心文件：
 
 - `entity/${className}.java`

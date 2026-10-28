@@ -63,6 +63,8 @@ class DynamicCrudRecordQueriesTest {
         ObjectMapper mapper = new ObjectMapper();
         service = new DynamicCrudService(repository, configs, mapper, null, null, null,
                 new LowcodeEncryptConfigParser(mapper), permissions, null, null, null, null, formulas, sources);
+        verify(sources).getResolution();
+        clearInvocations(sources);
     }
 
     @Test
@@ -108,12 +110,14 @@ class DynamicCrudRecordQueriesTest {
         when(repository.selectById("runtime_records", "id", 1L, scope)).thenReturn(Map.of("id", 1L, "display_name", "draft"));
         assertEquals("draft", service.selectByIdAllowDraft("records", 1L).get("displayName"));
         verify(configs, never()).resolvePublishedRuntimeConfig(any());
+        var draftRuntime = RuntimeCrudConfigAdapter.fromDesign(config);
+        draftRuntime.setTableName("runtime_records");
         config.setStatus("1");
         assertThrows(BusinessException.class, () -> service.selectByIdAllowDraft("records", 1L));
         config.setStatus("0");
         config.setMode("CODE");
         assertThrows(BusinessException.class, () -> service.selectByIdAllowDraft("records", 1L));
-        verify(runtimeSources, times(1)).resolveRuntime(argThat(actual -> RuntimeCrudConfigAdapter.fromDesign(config).equals(actual)));
+        verify(runtimeSources, times(1)).resolveRuntime(argThat(draftRuntime::equals));
         assertNull(LowcodeRuntimeDataSourceContextHolder.get());
     }
 

@@ -32,13 +32,16 @@ public class BusinessBindingService extends ServiceImpl<BusinessBindingMapper, A
     private static final Set<String> TARGET_TYPES = Set.of("SUITE", "OBJECT", "APPLICATION", "APP");
     private static final Set<String> BINDING_TYPES = Set.of(
             "FLOW", "APPROVAL", "REPORT", "PERMISSION", "MESSAGE",
-            "TRIGGER", "IMPORT", "EXPORT", "MOBILE", "INTEGRATION"
+            "TRIGGER", "IMPORT", "EXPORT", "MOBILE", "INTEGRATION", "TASK"
     );
 
     private final BusinessSuiteService suiteService;
     private final BusinessObjectService objectService;
     private final BusinessApplicationService applicationService;
     private final BusinessAppService appService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.mdframe.forge.plugin.generator.service.task.TaskBindingAuthoring taskBindings;
 
     public List<BusinessBindingVO> list(BusinessBindingQueryDTO query) {
         List<BusinessBindingVO> bindings = baseMapper.selectBindingList(resolveTenantId(), normalizeQuery(query));
@@ -164,6 +167,9 @@ public class BusinessBindingService extends ServiceImpl<BusinessBindingMapper, A
         binding.setDescription(StringUtils.trimToNull(dto.getDescription()));
         binding.setStatus(normalizeStatus(dto.getStatus()));
         binding.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());
+        if ("TASK".equals(bindingType)) {
+            taskBindings.validate(binding);
+        }
     }
 
     private void decorateBindingOpenInfo(BusinessBindingVO binding) {

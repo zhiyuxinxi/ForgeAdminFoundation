@@ -599,7 +599,7 @@ const tableColumns = computed(() => {
     // 格式化函数
     else if (col.formatter) {
       column.render = (row, index) => {
-        return wrapTableCellContent(col.formatter(row, col, row[col.prop], index), columnAlign)
+        return wrapTableCellContent(col.formatter(row, col, getColumnValue(row, columnKey), index), columnAlign)
       }
     }
     // 插槽
@@ -630,7 +630,8 @@ const tableColumns = computed(() => {
     // 默认显示
     else {
       column.render = (row) => {
-        return wrapTableCellContent(getColumnValue(row, columnKey) ?? '-', columnAlign)
+        const value = getColumnValue(row, columnKey)
+        return wrapTableCellContent(value === null || value === undefined || value === '' ? '—' : value, columnAlign)
       }
     }
 

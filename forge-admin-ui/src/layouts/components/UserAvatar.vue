@@ -8,14 +8,12 @@
         :src="avatarSrc"
         @error="handleAvatarError"
       />
-      <n-avatar
+      <span
         v-else
-        round
-        :size="28"
-        :style="{ backgroundColor: 'var(--primary-500)', fontSize: '12px' }"
-      >
-        {{ avatarText }}
-      </n-avatar>
+        class="avatar-fallback"
+        role="img"
+        :aria-label="avatarText || localizeLabel('用户头像')"
+      >{{ avatarText }}</span>
       <div v-if="userStore.userInfo || userStore.staffInfo" class="ml-8 flex-col flex-shrink-0 items-center">
         <span class="text-14">{{ userStore.realName || userStore.staffInfo?.staffName }}</span>
       </div>
@@ -130,3 +128,25 @@ watch(() => userStore.avatar, () => {
   loadAvatar()
 }, { immediate: true })
 </script>
+
+<style scoped>
+/* 无头像时的首字母圆形：颜色跟随所在头部/布局当前文字颜色
+   （彩色/深色头部 → 浅色半透明圆底 + 浅色字；浅色头部 → 深色字），
+   不再固定使用主题主色，避免与布局头部颜色冲突。 */
+.avatar-fallback {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: currentColor;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 34%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+</style>

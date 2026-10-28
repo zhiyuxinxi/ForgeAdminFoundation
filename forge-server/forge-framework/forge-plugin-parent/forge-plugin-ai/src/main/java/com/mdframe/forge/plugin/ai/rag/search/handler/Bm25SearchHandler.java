@@ -4,6 +4,7 @@ import com.mdframe.forge.plugin.ai.knowledge.domain.AiKnowledge;
 import com.mdframe.forge.plugin.ai.knowledge.domain.AiStoreInstance;
 import com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeMapper;
 import com.mdframe.forge.plugin.ai.knowledge.service.AiStoreInstanceService;
+import com.mdframe.forge.plugin.ai.knowledge.service.KnowledgeSearchService;
 import com.mdframe.forge.plugin.ai.knowledge.service.dto.KnowledgeSearchRequest;
 import com.mdframe.forge.plugin.ai.knowledge.service.dto.KnowledgeSearchResult;
 import com.mdframe.forge.plugin.ai.knowledge.vectorstore.VectorStoreFactory;
@@ -30,6 +31,7 @@ public class Bm25SearchHandler implements RagSearchHandler {
     private final AiKnowledgeMapper knowledgeMapper;
     private final AiStoreInstanceService storeInstanceService;
     private final VectorStoreFactory vectorStoreFactory;
+    private final KnowledgeSearchService knowledgeSearchService;
 
     @Override
     public String getName() {
@@ -71,20 +73,8 @@ public class Bm25SearchHandler implements RagSearchHandler {
         try {
             List<VectorStoreService.SearchResult> vectorResults =
                     vectorStoreFactory.getService(storeInstance).bm25Search(searchReq);
-            List<KnowledgeSearchResult> results = vectorResults.stream()
-                    .map(sr -> {
-                        KnowledgeSearchResult r = new KnowledgeSearchResult();
-                        r.setChunkId(sr.getId());
-                        r.setDocumentId(sr.getDocumentId());
-                        r.setChunkIndex(sr.getChunkIndex());
-                        r.setContent(sr.getContent());
-                        r.setTitle(sr.getTitle());
-                        r.setHideContent(sr.getHideContent());
-                        r.setSourceId(sr.getSourceId());
-                        r.setScore(sr.getScore());
-                        return r;
-                    })
-                    .toList();
+            List<KnowledgeSearchResult> results =
+                    knowledgeSearchService.resolveSearchResults(knowledge.getId(), vectorResults);
             log.debug("[Bm25SearchHandler] BM25检索完成, query={}, results={}", request.getQuery(), results.size());
             context.setBm25Results(results);
         } catch (Exception e) {

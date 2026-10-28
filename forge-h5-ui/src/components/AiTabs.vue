@@ -2,13 +2,13 @@
   <view class="ai-tabs">
     <view class="ai-tabs-header">
       <view
-        v-for="(tab, index) in tabs" 
+        v-for="(tab, index) in tabs"
         :key="index"
         class="ai-tabs-tab"
         :class="{ 'ai-tabs-tab--active': activeIndex === index }"
         @click="handleTabClick(index)"
       >
-        <text class="ai-tabs-tab-text">{{tab.label || tab}}</text>
+        <text class="ai-tabs-tab-text">{{ L(tab.label || tab) }}</text>
       </view>
     </view>
     <view class="ai-tabs-content">
@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+import { L } from '@/locales'
 import { computed, provide } from 'vue'
 
 const props = defineProps({
@@ -53,7 +54,7 @@ provide('activeIndex', activeIndex)
     border-radius: 16rpx;
     background: #f5f7fa;
   }
-  
+
   &-tab {
     flex: 1;
     display: flex;
@@ -61,18 +62,18 @@ provide('activeIndex', activeIndex)
     align-items: center;
     justify-content: center;
     border-radius: 11rpx;
-    
+
     &--active {
       color: var(--primary-color, #2563eb);
       background: #fff;
       box-shadow: 0 1rpx 4rpx rgb(15 23 42 / 8%);
     }
   }
-  
+
   &-tab-text {
     color: #64748b;
     font-size: 25rpx;
-    
+
     .ai-tabs-tab--active & {
       color: var(--primary-color, #2563eb);
       font-weight: 650;

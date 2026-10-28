@@ -273,11 +273,8 @@
 </template>
 
 <script setup lang="ts">
-import { formatUiText } from '@/locales'
-
-import { localizeLabel as translateUiText } from '@/locales'
-
-import { NButton, NSpace, NTag, NTooltip } from 'naive-ui'
+import { localizeExternalFields as translateUiMetadata, L as translateUiText } from './external-i18n'
+import { NButton, NSpace, NTag, NTooltip, useDialog, useMessage } from 'naive-ui'
 import { computed, h, nextTick, onMounted, ref } from 'vue'
 import { clearExternalApiLogs, debugExternalApi, getExternalApiById, getExternalApiLogSummary, updateExternalApiDocument } from '@/api/external/api'
 import { getExternalSystemList } from '@/api/external/system'
@@ -299,7 +296,29 @@ const props = defineProps({
   },
 })
 
-const message = window.$message
+/** 外部接口调用日志汇总（字段对齐后端 ExternalApiLogSummary） */
+interface ExternalApiLogSummary {
+  totalCount?: number
+  successCount?: number
+  failureCount?: number
+  debugCount?: number
+  successRate?: number
+  avgDurationMs?: number
+  maxDurationMs?: number
+}
+
+/** 外部接口调用日志查询条件（字段对齐 /external/api/log/summary 与日志列表分页参数） */
+interface ExternalApiLogQuery {
+  systemId?: number
+  apiId?: number
+  callStatus?: number
+  debugFlag?: boolean
+  pageNum?: number
+  pageSize?: number
+}
+
+const message = useMessage()
+const dialog = useDialog()
 const authStore = useAuthStore()
 const systemCrudRef = ref()
 const apiCrudRef = ref()
@@ -311,7 +330,7 @@ const systemCount = ref(0)
 const apiDrawerVisible = ref(false)
 const logDrawerVisible = ref(false)
 const logApi = ref(null)
-const logSummary = ref({})
+const logSummary = ref<ExternalApiLogSummary>({})
 const debugModalVisible = ref(false)
 const debugApi = ref(null)
 const debugParamsText = ref('{}')
@@ -341,9 +360,9 @@ const apiDrawerTitle = computed(() => {
   if (!selectedSystem.value) {
     return translateUiText("全部外部接口")
   }
-  return formatUiText("外部接口 - {0}", [selectedSystem.value.systemName || selectedSystem.value.systemCode || ''])
+  return translateUiText('外部接口 - {0}', [selectedSystem.value.systemName || selectedSystem.value.systemCode || ''])
 })
-const logDrawerTitle = computed(() => logApi.value ? formatUiText("调用日志 - {0}", [logApi.value.apiName || logApi.value.apiCode]) : translateUiText("外部接口调用日志"))
+const logDrawerTitle = computed(() => logApi.value ? translateUiText('调用日志 - {0}', [logApi.value.apiName || logApi.value.apiCode]) : translateUiText("外部接口调用日志"))
 
 const systemApiConfig = {
   list: 'get@/external/system/page',
@@ -377,7 +396,7 @@ const booleanOptions = computed(() => toBooleanDictOptions(dict.value.sys_yes_no
 const callStatusOptions = computed(() => toNumberDictOptions(dict.value.external_call_status))
 const callTypeOptions = computed(() => toBooleanDictOptions(dict.value.external_call_type))
 
-const systemCountText = computed(() => systemCount.value ? formatUiText("{0} 个系统", [systemCount.value]) : translateUiText("暂无系统"))
+const systemCountText = computed(() => systemCount.value ? translateUiText('{0} 个系统', [systemCount.value]) : translateUiText("暂无系统"))
 const systemStats = computed(() => {
   const rows = systemRows.value || []
   return {
@@ -388,20 +407,20 @@ const systemStats = computed(() => {
   }
 })
 
-const systemSearchSchema = computed(() => [
+const systemSearchSchema = computed(() => translateUiMetadata([
   { field: 'systemName', label: '系统名称', type: 'input', props: { placeholder: '搜索系统名称' } },
   { field: 'systemCode', label: '系统编码', type: 'input', props: { placeholder: '搜索系统编码' } },
   { field: 'systemStatus', label: '状态', type: 'select', props: { placeholder: '全部状态', options: statusOptions.value } },
-])
+]))
 
-const apiSearchSchema = computed(() => [
+const apiSearchSchema = computed(() => translateUiMetadata([
   { field: 'apiName', label: '接口名称', type: 'input', props: { placeholder: '搜索接口名称' } },
   { field: 'apiCode', label: '接口编码', type: 'input', props: { placeholder: '搜索接口编码' } },
   { field: 'apiMethod', label: '请求方法', type: 'select', props: { placeholder: '全部方法', options: methodOptions.value } },
   { field: 'apiStatus', label: '状态', type: 'select', props: { placeholder: '全部状态', options: statusOptions.value } },
-])
+]))
 
-const systemTableColumns = computed(() => [
+const systemTableColumns = computed(() => translateUiMetadata([
   {
     prop: 'systemName',
     label: '系统名称',
@@ -467,9 +486,9 @@ const systemTableColumns = computed(() => [
       { label: '删除', key: 'delete', type: 'error', onClick: row => systemCrudRef.value?.handleDelete(row) },
     ],
   },
-])
+]))
 
-const apiTableColumns = computed(() => [
+const apiTableColumns = computed(() => translateUiMetadata([
   {
     prop: 'apiName',
     label: '接口名称',
@@ -521,14 +540,14 @@ const apiTableColumns = computed(() => [
       { label: '删除', key: 'delete', type: 'error', onClick: row => apiCrudRef.value?.handleDelete(row) },
     ],
   },
-])
+]))
 
-const logSearchSchema = computed(() => [
+const logSearchSchema = computed(() => translateUiMetadata([
   { field: 'callStatus', label: '调用状态', type: 'select', props: { placeholder: '全部状态', options: callStatusOptions.value } },
   { field: 'debugFlag', label: '调用类型', type: 'select', props: { placeholder: '全部类型', options: callTypeOptions.value } },
-])
+]))
 
-const logTableColumns = computed(() => [
+const logTableColumns = computed(() => translateUiMetadata([
   { prop: 'apiName', label: '接口名称', width: 180 },
   { prop: 'requestMethod', label: '方法', width: 80, render: row => renderMethodTag(row.requestMethod) },
   { prop: 'requestUrl', label: '请求地址', width: 340, render: row => renderTextWithTooltip(row.requestUrl, 'url-cell') },
@@ -559,18 +578,18 @@ const logTableColumns = computed(() => [
       { label: '删除', key: 'delete', type: 'error', onClick: row => logCrudRef.value?.handleDelete(row) },
     ],
   },
-])
+]))
 
-const logDetailSchema = computed(() => [
+const logDetailSchema = computed(() => translateUiMetadata([
   { field: 'apiName', label: '接口名称', type: 'text' },
   { field: 'callStatus', label: '调用状态', type: 'text', formatter: value => getLabel('external_call_status', value) },
   { field: 'requestUrl', label: '请求地址', type: 'text', span: 2 },
   { field: 'requestBody', label: '请求参数', type: 'textarea', span: 2, props: { rows: 5, readonly: true } },
   { field: 'responseBody', label: '响应内容', type: 'textarea', span: 2, props: { rows: 8, readonly: true } },
   { field: 'errorMessage', label: '错误信息', type: 'textarea', span: 2, props: { rows: 3, readonly: true } },
-])
+]))
 
-const systemEditSchema = computed(() => [
+const systemEditSchema = computed(() => translateUiMetadata([
   { field: '__system_base', type: 'divider', label: '基础信息', span: 2, props: { titlePlacement: 'left' } },
   { field: 'systemName', label: '系统名称', type: 'input', required: true, props: { placeholder: '如：统一用户中心' } },
   { field: 'systemCode', label: '系统编码', type: 'input', required: true, props: { placeholder: '如：user_center' } },
@@ -632,9 +651,9 @@ const systemEditSchema = computed(() => [
   { field: 'proxyUsername', label: '代理用户名', type: 'input', vIf: form => form.proxyEnabled === true },
   { field: 'proxyPassword', label: '代理密码', type: 'input', vIf: form => form.proxyEnabled === true, props: { type: 'password', showPasswordOn: 'click' } },
   { field: 'remark', label: '备注', type: 'textarea', span: 2, props: { rows: 2, placeholder: '补充说明' } },
-])
+]))
 
-const apiEditSchema = computed(() => [
+const apiEditSchema = computed(() => translateUiMetadata([
   { field: '__api_base', type: 'divider', label: '基础信息', span: 2, props: { titlePlacement: 'left' } },
   {
     field: 'systemNameDisplay',
@@ -729,7 +748,7 @@ const apiEditSchema = computed(() => [
     },
   },
   { field: 'remark', label: '备注', type: 'textarea', span: 2, props: { rows: 2, placeholder: '补充说明' } },
-])
+]))
 
 function renderStatusTag(status) {
   return h(DictTag, { options: statusOptions.value, value: status, size: 'small' })
@@ -845,7 +864,7 @@ function beforeLoadLogList(params) {
   return nextParams
 }
 
-function buildLogParams(params = {}) {
+function buildLogParams(params: ExternalApiLogQuery = {}) {
   const nextParams = { ...params }
   if (logApi.value?.scopeType === 'system') {
     nextParams.systemId = logApi.value.systemId
@@ -1038,8 +1057,8 @@ async function loadLogSummary(params = {}) {
 function handleClearLogs() {
   const targetName = logApi.value?.apiName || logApi.value?.apiCode
   const targetLabel = logApi.value?.scopeType === 'system' ? '系统' : '接口'
-  window.$dialog.warning({
-    title: translateUiText("确认清空"),
+  dialog.warning({
+    title: translateUiText('确认清空'),
     content: logApi.value ? `确定清空${targetLabel}「${targetName}」的调用日志吗？` : '确定清空调用日志吗？',
     positiveText: translateUiText("清空"),
     negativeText: translateUiText("取消"),
@@ -1143,7 +1162,7 @@ async function downloadDoc() {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 100)
   }
   catch (error) {
-    message.error(formatUiText("下载失败：{0}", [error.message || translateUiText("未知错误")]))
+    message.error(translateUiText('下载失败：{0}', [error.message || translateUiText('未知错误')]))
   }
 }
 
@@ -1258,7 +1277,7 @@ function validateJson(value, label) {
     return true
   }
   catch {
-    message.error(formatUiText("{0} 必须是合法 JSON", [label]))
+    message.error(translateUiText('{0} 必须是合法 JSON', [translateUiText(label)]))
     return false
   }
 }
@@ -1280,7 +1299,7 @@ function configRowsToJson(value, label) {
   for (const row of filledRows) {
     const key = row.key?.trim()
     if (!key) {
-      message.error(formatUiText("{0} 存在未填写 KEY 的配置项", [label]))
+      message.error(translateUiText('{0} 存在未填写 KEY 的配置项', [translateUiText(label)]))
       return false
     }
     result[key] = row.value ?? ''

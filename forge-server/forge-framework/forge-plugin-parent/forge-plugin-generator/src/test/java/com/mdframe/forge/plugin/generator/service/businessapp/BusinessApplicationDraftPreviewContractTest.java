@@ -83,8 +83,11 @@ class BusinessApplicationDraftPreviewContractTest {
         assertTrue(objectPublishSource.contains("return rollbackInternal(objectId, versionId, false);"));
         assertTrue(objectPublishSource.contains(
                 "lowcodePublishService.rollback(version.getConfigId(), version.getCrudConfigVersionId(), syncMenu)"));
-        assertTrue(lowcodePublishSource.contains("if (shouldSyncMenu(dto))"));
-        assertTrue(lowcodePublishSource.contains("disablePublishedMenu(config);"));
+        assertTrue(lowcodePublishSource.contains("boolean syncMenu = shouldSyncMenu(dto);"));
+        assertTrue(lowcodePublishSource.contains("new LowcodePublishPostEvent(config, dto, domainContext, syncMenu, menuParentId)"));
+        assertTrue(lowcodePublishSource.contains("if (!syncMenu)"));
+        assertTrue(lowcodePublishSource.contains("menuRegisterAdapter.disableMenu(config.getMenuResourceId());"));
+        assertTrue(lowcodePublishSource.contains("menuRegisterAdapter.disableMenu(mobileResourceId);"));
     }
 
     private String readSource(String relativePath) throws Exception {

@@ -132,6 +132,7 @@ class CapabilityGrantServiceTest {
         capability.setBehavior("ACTION");
         capability.setRiskLevel(riskLevel);
         AiCapabilityVersion version = new AiCapabilityVersion();
+        version.setStatus("PUBLISHED");
         version.setPolicySnapshot("{\"allowedFields\":[\"status\",\"remark\"],"
                 + "\"confirmationMode\":\"MCP_ELICITATION\"}");
         when(clientService.requireClient(1L, 10L)).thenReturn(client);
@@ -163,6 +164,7 @@ class CapabilityGrantServiceTest {
         capability.setBehavior("FLOW");
         capability.setRiskLevel("MEDIUM");
         AiCapabilityVersion version = new AiCapabilityVersion();
+        version.setStatus("PUBLISHED");
         version.setPolicySnapshot("{\"allowedOperations\":[\"APPROVE\"],"
                 + "\"confirmationMode\":\"MCP_ELICITATION\"}");
         when(clientService.requireClient(1L, 10L)).thenReturn(client);

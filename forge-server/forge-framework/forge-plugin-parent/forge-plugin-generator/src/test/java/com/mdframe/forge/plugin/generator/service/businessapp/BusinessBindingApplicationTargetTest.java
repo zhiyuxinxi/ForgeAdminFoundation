@@ -136,6 +136,11 @@ class BusinessBindingApplicationTargetTest {
         }
 
         @Override
+        public void markCompositionChanged(Long applicationId) {
+            assertEquals(10L, applicationId);
+        }
+
+        @Override
         public AiBusinessApplication requireEntity(Long id) {
             AiBusinessApplication application = new AiBusinessApplication();
             application.setId(10L);

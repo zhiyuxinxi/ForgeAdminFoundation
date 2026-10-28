@@ -1,6 +1,9 @@
 package com.mdframe.forge.starter.flow.service.support;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
+import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
 import com.mdframe.forge.starter.flow.dto.FlowStartRoundRequest;
 import com.mdframe.forge.starter.flow.entity.FlowTask;
@@ -10,12 +13,14 @@ import com.mdframe.forge.starter.flow.mapper.FlowTaskMapper;
 import com.mdframe.forge.starter.flow.service.FlowErrorLogService;
 import com.mdframe.forge.starter.flow.service.impl.FlowInstanceServiceImpl;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.LongValue;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEventType;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -24,6 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -40,7 +46,7 @@ final class FlowStartRoundDatabaseFixture implements AutoCloseable {
 
     FlowStartRoundDatabaseFixture() throws Exception {
         var dataSource = new DriverManagerDataSource(
-                "jdbc:h2:mem:b07_rounds;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000", "sa", "");
+                "jdbc:h2:mem:b07_rounds_" + UUID.randomUUID() + ";DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000", "sa", "");
         var manager = new DataSourceTransactionManager(dataSource);
         transactions = new TransactionTemplate(manager);
         jdbc = new JdbcTemplate(dataSource);
@@ -61,8 +67,15 @@ final class FlowStartRoundDatabaseFixture implements AutoCloseable {
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(dataSource);
         factory.setConfiguration(configuration);
-        factory.setMapperLocations(new FileSystemResource("forge-server/forge-framework/forge-plugin-parent/"
-                + "forge-plugin-flow/src/main/resources/mapper/FlowBusinessMapper.xml"));
+        var interceptor = new MybatisPlusInterceptor();
+        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new TenantLineHandler() {
+            @Override
+            public Expression getTenantId() {
+                return new LongValue(TenantContextHolder.getTenantId());
+            }
+        }));
+        factory.setPlugins(interceptor);
+        factory.setMapperLocations(new ClassPathResource("mapper/FlowBusinessMapper.xml"));
         mapper = new SqlSessionTemplate(factory.getObject()).getMapper(FlowBusinessMapper.class);
         var flow = new SpringProcessEngineConfiguration();
         flow.setDataSource(dataSource);
@@ -91,14 +104,10 @@ final class FlowStartRoundDatabaseFixture implements AutoCloseable {
 
     String start(FlowInstanceServiceImpl service, long tenant, String key, String request, String previous,
                  String actor, Map<String, Object> variables) {
-        TenantContextHolder.setTenantId(tenant);
-        try {
-            return transactions.execute(status -> service.startProcess("approval", key, "test", key, variables,
+        return TenantContextHolder.executeWithTenant(tenant,
+                () -> transactions.execute(status -> service.startProcess("approval", key, "test", key, variables,
                     actor, "Applicant", "dept", "Department",
-                    request == null ? null : new FlowStartRoundRequest(request, previous)));
-        } finally {
-            TenantContextHolder.clear();
-        }
+                    request == null ? null : new FlowStartRoundRequest(request, previous))));
     }
 
     void finish(String instance, String status) {
@@ -148,6 +157,10 @@ final class FlowStartRoundDatabaseFixture implements AutoCloseable {
 
     @Override
     public void close() {
-        engine.close();
+        try {
+            engine.close();
+        } finally {
+            jdbc.execute("SHUTDOWN");
+        }
     }
 }

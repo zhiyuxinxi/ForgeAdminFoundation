@@ -33,4 +33,14 @@ public interface TenantMemberDirectory {
      */
     List<TenantMember> findActiveMembersByOrg(Long directOrgId, String keyword,
                                             Long afterUserId, int limit);
+
+    /**
+     * Bounded members explicitly assigned to one active post in the current tenant.
+     * A departmental post requires its organization to remain active; a tenant-wide
+     * post has no organization filter. Post assignment is independent of user-org binding.
+     * Null afterUserId starts the first page; continue with the last returned userId.
+     * Limit must be 1..MAX_PAGE_SIZE. The caller must authorize its business operation
+     * and requested post; this internal identity lookup is not a user-enumeration API.
+     */
+    List<TenantMember> findActiveMembersByPost(Long postId, Long afterUserId, int limit);
 }

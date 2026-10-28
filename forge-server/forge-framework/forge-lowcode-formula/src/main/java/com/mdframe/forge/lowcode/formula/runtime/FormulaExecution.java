@@ -191,6 +191,7 @@ public final class FormulaExecution {
             context.put(fieldName, hr.fallbackValue);
             resultBuilder.putError(fieldName, hr.errorMessage);
             Map<String, Object> metadata = new LinkedHashMap<>(lookupResult.getMetadata());
+            resultBuilder.putResult(fieldName, hr.fallbackValue);
             metadata.put("lookupMatched", false);
             return StepOutcome.failure(hr.fallbackValue, hr.errorMessage, metadata);
         } catch (Exception e) {
@@ -200,6 +201,7 @@ public final class FormulaExecution {
             handleResults.add(hr);
             context.put(fieldName, hr.fallbackValue);
             resultBuilder.putError(fieldName, hr.errorMessage);
+            resultBuilder.putResult(fieldName, hr.fallbackValue);
             return StepOutcome.failure(hr.fallbackValue, hr.errorMessage);
         }
     }

@@ -42,13 +42,13 @@ describe('aiTable default cell renderer', () => {
   })
 
   it.each([
-    ['missing', {}, '-'],
-    ['null', { value: null }, '-'],
-    ['empty string', { value: '' }, ''],
+    ['missing', {}, '—'],
+    ['null', { value: null }, '—'],
+    ['empty string', { value: '' }, '—'],
     ['zero', { value: 0 }, '0'],
     ['false', { value: false }, 'false'],
-    ['missing nested value', { owner: null }, '-'],
-  ])('preserves the existing %s fallback semantics', (label, row, expected) => {
+    ['missing nested value', { owner: null }, '—'],
+  ])('renders missing values consistently while preserving %s', (label, row, expected) => {
     const wrapper = renderCell({ key: label === 'missing nested value' ? 'owner.name' : 'value' }, row)
     expect(wrapper.find('.ai-table-cell-content').text()).toBe(expected)
     wrapper.unmount()

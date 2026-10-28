@@ -641,7 +641,7 @@ function transformColumns(columns, transConfig) {
         })
         return nextCol
       }
-      if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName') {
+      if (renderType === 'orgName' || renderType === 'userName' || renderType === 'regionName' || renderType === 'postName') {
         const targetField = col.render.targetField || `${key}Name`
         nextCol.render = row => row[targetField] ?? row[key] ?? '-'
         return nextCol

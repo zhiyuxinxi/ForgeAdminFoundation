@@ -24,13 +24,14 @@ import org.junit.jupiter.api.Test;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.context.support.GenericApplicationContext;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -109,14 +110,25 @@ class FlowDeliveryRoundTripTest {
     }
 
     static FlowEventOutboxMapper prepareOutbox(DataSource source) throws Exception {
-        String sql = Files.readString(Path.of("forge-server/db/migration/V1.0.2026100909__flow_terminal_event_outbox.sql"));
+        String sql = readMigration("V1.0.2026100909__flow_terminal_event_outbox.sql");
         new JdbcTemplate(source).execute(sql.replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", ""));
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         factory.setConfiguration(new MybatisConfiguration());
-        factory.setMapperLocations(new FileSystemResource("forge-server/forge-framework/forge-plugin-parent/"
-                + "forge-plugin-flow/src/main/resources/mapper/FlowEventOutboxMapper.xml"));
+        factory.setMapperLocations(new ClassPathResource("mapper/FlowEventOutboxMapper.xml"));
         return new SqlSessionTemplate(factory.getObject()).getMapper(FlowEventOutboxMapper.class);
+    }
+
+    private static String readMigration(String name) throws Exception {
+        Path classes = Path.of(FlowDeliveryRoundTripTest.class.getProtectionDomain()
+                .getCodeSource().getLocation().toURI()).toAbsolutePath();
+        for (Path root = classes; root != null; root = root.getParent()) {
+            Path migration = root.resolve("forge-server/db/migration").resolve(name);
+            if (Files.isRegularFile(migration)) {
+                return Files.readString(migration, StandardCharsets.UTF_8);
+            }
+        }
+        throw new IOException("Flow round-trip migration not found: " + name);
     }
 
     static final class ConsumerFixture implements AutoCloseable {
@@ -128,14 +140,13 @@ class FlowDeliveryRoundTripTest {
         final FlowEventSubscriber subscriber;
 
         ConsumerFixture() throws Exception {
-            String sql = Files.readString(Path.of("forge-server/db/migration/V1.0.2026100910__flow_event_consumer_inbox.sql"));
+            String sql = readMigration("V1.0.2026100910__flow_event_consumer_inbox.sql");
             jdbc.execute(sql.replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", ""));
             jdbc.execute("CREATE TABLE callback_effect (event_id VARCHAR(64) PRIMARY KEY)");
             var factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(source);
             factory.setConfiguration(new MybatisConfiguration());
-            factory.setMapperLocations(new FileSystemResource("forge-server/forge-flow/forge-flow-client/"
-                    + "src/main/resources/mapper/FlowEventInboxMapper.xml"));
+            factory.setMapperLocations(new ClassPathResource("mapper/FlowEventInboxMapper.xml"));
             var inbox = new SqlSessionTemplate(factory.getObject()).getMapper(FlowEventInboxMapper.class);
             context.registerBean("business", BusinessCallback.class, () -> callback);
             context.refresh();

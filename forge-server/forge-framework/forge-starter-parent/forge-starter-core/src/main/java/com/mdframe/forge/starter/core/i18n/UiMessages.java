@@ -40,6 +40,9 @@ public final class UiMessages {
     /** Compatibility for existing constant messages. Unknown text is returned verbatim. */
     public static String translate(String source) {
         String key = LEGACY_KEYS.get(source);
+        if (key == null) {
+            key = BUSINESS_DISPLAY_KEYS.get(source);
+        }
         return key == null ? source : message(key);
     }
 

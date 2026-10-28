@@ -12,6 +12,23 @@ const INPUT_TYPE_MAP = Object.freeze({
 const SAFE_INPUT_NAME = /^[a-z]\w{0,63}$/i
 const SAFE_IDEMPOTENCY_KEY = /^[\w.:-]{8,128}$/
 
+export function resolveDetailFlowRuntime(runtime, ...records) {
+  const source = runtime && typeof runtime === 'object' ? runtime : {}
+  const candidates = [source, ...records.filter(record => record && typeof record === 'object')]
+  const processRecord = candidates.find(record => String(record.processInstanceId || '').trim())
+  const processInstanceId = String(processRecord?.processInstanceId || '').trim()
+  if (!processInstanceId)
+    return runtime || null
+  const flowStatus = String(processRecord.flowStatus || processRecord.processStatus || processRecord.status || '').trim()
+    || candidates.map(record => String(record.flowStatus || record.processStatus || record.status || '').trim()).find(Boolean)
+  const normalizedFlowStatus = flowStatus === 'IN_PROCESS' ? 'RUNNING' : flowStatus
+  return {
+    ...source,
+    processInstanceId,
+    ...(normalizedFlowStatus ? { flowStatus: normalizedFlowStatus } : {}),
+  }
+}
+
 export function shouldShowDetailFlowHistory({
   isDetailMode = false,
   runtime = null,

@@ -31,14 +31,14 @@ public class VelocityUtils {
      */
     public static VelocityContext prepareContext(GenTable genTable) {
         VelocityContext context = new VelocityContext();
-        
+
         String moduleName = genTable.getModuleName();
         String businessName = genTable.getBusinessName();
         String packageName = genTable.getPackageName();
         String className = genTable.getClassName();
         String functionName = genTable.getFunctionName();
         String author = genTable.getAuthor();
-        
+
         // 基础信息
         context.put("tableName", genTable.getTableName());
         context.put("tableComment", genTable.getTableComment());
@@ -55,10 +55,11 @@ public class VelocityUtils {
         context.put("date", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")));
         context.put("datetime", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         context.put("menuParentId", resolveMenuParentId(genTable.getOptions()));
-        
+
         // 列信息
         List<GenTableColumn> columns = genTable.getColumns();
         context.put("allColumns", columns);
+        context.put("fieldContract", new CodegenFieldContract());
         context.put("columns", getFilteredColumns(columns)); // 过滤掉基类字段
         context.put("pkColumn", GenUtils.getPkColumn(columns));
 
@@ -71,7 +72,7 @@ public class VelocityUtils {
         context.put("searchSchema", buildSearchSchema(columns));
         context.put("columnsSchema", buildColumnsSchema(columns));
         context.put("editSchema", buildEditSchema(columns));
-        
+
         // 导入判断
         context.put("hasBigDecimal", GenUtils.hasBigDecimal(columns));
         context.put("hasDate", GenUtils.hasDate(columns));
@@ -82,10 +83,10 @@ public class VelocityUtils {
         context.put("hasEncrypt", false);
         context.put("enableDecrypt", false);
         context.put("enableEncrypt", false);
-        
+
         // 模块路径
         context.put("modulePath", GenUtils.getModulePath(packageName, moduleName));
-        
+
         return context;
     }
 
@@ -115,7 +116,7 @@ public class VelocityUtils {
         if (!hasBaseEntity) {
             return columns;
         }
-        
+
         // 过滤掉BaseEntity中的字段
         List<String> baseFields = new ArrayList<>(Arrays.asList(
             "createTime", "createBy", "createDept", "updateTime", "updateBy"
@@ -123,7 +124,7 @@ public class VelocityUtils {
         if (hasTenantEntity(columns)) {
             baseFields.add("tenantId");
         }
-        
+
         return columns.stream()
             .filter(c -> !baseFields.contains(c.getJavaField()))
             .collect(java.util.stream.Collectors.toList());
@@ -165,7 +166,7 @@ public class VelocityUtils {
         String businessName = genTable.getBusinessName();
         String javaPath = "main/java/" + packageName.replace(".", "/") + "/" + moduleName + "/";
         String resourcesPath = "main/resources/";
-        
+
         if (template.contains("entity.java.vm")) {
             return javaPath + "entity/" + className + ".java";
         } else if (template.contains("mapper.java.vm")) {
@@ -193,7 +194,7 @@ public class VelocityUtils {
         } else if (template.contains("sql/excel.sql.vm")) {
             return "sql/" + genTable.getTableName() + "_excel.sql";
         }
-        
+
         return null;
     }
 

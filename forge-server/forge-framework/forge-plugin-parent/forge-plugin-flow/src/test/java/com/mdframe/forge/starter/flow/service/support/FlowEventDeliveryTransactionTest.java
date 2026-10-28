@@ -7,12 +7,10 @@ import com.mdframe.forge.starter.flow.event.FlowEventDeliveryRecorder;
 import com.mdframe.forge.starter.flow.mapper.FlowEventDeliveryMapper;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.SqlSessionTemplate;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,16 +39,15 @@ class FlowEventDeliveryTransactionTest {
 
     private FlowEventDeliveryRecorder recorder(DataSource source) {
         try {
-            String migration = Files.readString(Path.of("forge-server/db/migration/"
-                    + "V1.0.2026100911__flow_event_delivery_confirmation.sql"));
+            String migration = FlowTerminalOutboxFixture.readMigration(
+                    "V1.0.2026100911__flow_event_delivery_confirmation.sql");
             new JdbcTemplate(source).execute(migration.substring(0, migration.indexOf(';'))
                     .replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "")
                     .replace(",\n    KEY idx_flow_delivery_due (status, next_attempt_at, claimed_until)", ""));
             var factory = new MybatisSqlSessionFactoryBean();
             factory.setDataSource(source);
             factory.setConfiguration(new MybatisConfiguration());
-            factory.setMapperLocations(new FileSystemResource("forge-server/forge-framework/forge-plugin-parent/"
-                    + "forge-plugin-flow/src/main/resources/mapper/FlowEventDeliveryMapper.xml"));
+            factory.setMapperLocations(new ClassPathResource("mapper/FlowEventDeliveryMapper.xml"));
             var properties = new FlowEventDeliveryProperties();
             properties.setEnabled(true);
             var consumer = new FlowEventDeliveryProperties.Consumer();

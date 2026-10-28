@@ -169,6 +169,7 @@
             type="password"
             show-password-on="click"
             :placeholder="localizeLabel('请输入新密码')"
+            :maxlength="64"
           />
         </n-form-item>
       </n-form>
@@ -670,6 +671,7 @@
 import { NTag, NTooltip } from 'naive-ui'
 
 import { computed, h, onMounted, ref, watch } from 'vue'
+import { resetUserPassword } from '@/api/system/password'
 import { AiCrudPage } from '@/components/ai-form'
 import MasterDetailWorkspace from '@/components/common/MasterDetailWorkspace.vue'
 import PremiumTree from '@/components/common/PremiumTree.vue'
@@ -1039,6 +1041,7 @@ const searchSchema = computed(() => [
     type: 'input',
     props: {
       get placeholder() { return localizeLabel('请输入用户名') },
+      maxlength: 50,
     },
   },
   {
@@ -1178,6 +1181,7 @@ const editSchema = computed(() => [
     rules: [{ required: true, get message() { return localizeLabel('请输入用户名') }, trigger: 'blur' }],
     props: {
       get placeholder() { return localizeLabel('请输入用户名') },
+      maxlength: 50,
     },
   },
   {
@@ -1197,6 +1201,7 @@ const editSchema = computed(() => [
     props: {
       type: 'password',
       get placeholder() { return localizeLabel('请输入密码') },
+      maxlength: 64,
     },
     vIf: formData => !formData.id,
   },
@@ -1915,12 +1920,7 @@ async function handleConfirmResetPwd() {
     if (!errors) {
       try {
         resetPwdLoading.value = true
-        const res = await request.post('/system/user/resetPwd', null, {
-          params: {
-            id: resetPwdForm.value.id,
-            password: resetPwdForm.value.password,
-          },
-        })
+        const res = await resetUserPassword(resetPwdForm.value.id, resetPwdForm.value.password)
         if (res.code === 200) {
           window.$message.success(localizeLabel('重置成功'))
           resetPwdModalVisible.value = false

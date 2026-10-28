@@ -1,7 +1,10 @@
 package com.mdframe.forge.starter.flow.service.support;
 
+import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -16,6 +19,16 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FlowStartRoundIntegrationTest {
     private static final Map<String, Object> VARIABLES = Map.of("reviewer", "reviewer");
     private static FlowStartRoundDatabaseFixture db;
+
+    @BeforeEach
+    void tenantContext() {
+        TenantContextHolder.setTenantId(1L);
+    }
+
+    @AfterEach
+    void clearTenantContext() {
+        TenantContextHolder.clear();
+    }
 
     @BeforeAll
     static void createDatabase() throws Exception {

@@ -1,5 +1,6 @@
 package com.mdframe.forge.lowcode.api.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 /** Per-request low-code execution values. JSON remains opaque until its existing consumer parses it. */
@@ -15,6 +16,9 @@ public final class LowcodeRuntimeConfig {
     private String layoutType;
     private String domainCode;
     private String objectCode;
+    /** Server-generated module binding only; request JSON cannot override authorization. */
+    @JsonIgnore
+    private String referencePermissionModule;
     private String searchSchema;
     private String columnsSchema;
     private String editSchema;

@@ -38,6 +38,7 @@ export const FIELD_COMPONENT_PALETTE_GROUPS = [
     title: '业务',
     items: [
       { componentKey: 'userSelect', label: '人员选择' },
+      { componentKey: 'postSelect', label: '岗位选择' },
       { componentKey: 'orgTreeSelect', label: '部门选择' },
       { componentKey: 'regionTreeSelect', label: '行政区划' },
       { componentKey: 'objectReference', label: '对象引用' },
@@ -97,6 +98,7 @@ export const FIELD_COMPONENT_DEFAULTS = Object.freeze({
   'orgName': orgDefaults,
   'deptName': orgDefaults,
   'userSelect': userDefaults,
+  'postSelect': { fieldType: 'POST', businessFieldType: 'POST', dataType: 'bigint', componentType: 'postSelect', length: null, precision: null, queryType: 'eq' },
   'userPicker': userDefaults,
   'userName': userDefaults,
   'fileUpload': fileDefaults,

@@ -1,5 +1,9 @@
 package com.mdframe.forge.plugin.system.security;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.mdframe.forge.plugin.system.controller.SysUserController;
+import com.mdframe.forge.plugin.system.dto.ResetUserPasswordDTO;
+import com.mdframe.forge.starter.core.annotation.log.OperationLog;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -31,11 +35,25 @@ class ClientCredentialSurfaceContractTest {
                 "requestUrl.replaceAll(\";[^/]*\", \"\").replaceAll(\"/+$\", \"\")");
         assertThat(hardExclusion).isGreaterThanOrEqualTo(0).isLessThan(configurableExclusion);
 
-        for (Path initSql : List.of(
-                Path.of("../../../db/全量初始化SQL.sql"),
-                Path.of("../../../forge-admin-server/sql/初始化脚本.sql"))) {
-            assertThat(Files.readString(initSql)).as(initSql.toString()).contains("\"/auth/login\"");
-        }
+        // 当前 canonical 全量初始化 SQL 权威（旧 forge-admin-server/sql/初始化脚本.sql
+        // 已并入 forge-server/db/ 目录，仓库中不存在该旧路径文件）
+        Path initSql = Path.of("../../../db/全量初始化SQL.sql");
+        assertThat(Files.readString(initSql)).as(initSql.toString()).contains("\"/auth/login\"");
+    }
+
+    @Test
+    void administratorPasswordResetDisablesRequestAuditAndKeepsPasswordWriteOnly() throws Exception {
+        OperationLog operationLog = SysUserController.class
+                .getMethod("resetPwd", ResetUserPasswordDTO.class)
+                .getAnnotation(OperationLog.class);
+        JsonProperty passwordProperty = ResetUserPasswordDTO.class
+                .getDeclaredField("password")
+                .getAnnotation(JsonProperty.class);
+
+        assertThat(operationLog).isNotNull();
+        assertThat(operationLog.saveRequestParams()).isFalse();
+        assertThat(passwordProperty).isNotNull();
+        assertThat(passwordProperty.access()).isEqualTo(JsonProperty.Access.WRITE_ONLY);
     }
 
     @Test

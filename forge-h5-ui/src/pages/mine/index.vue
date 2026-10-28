@@ -276,6 +276,7 @@ import { resetKeyExchange } from '@/utils/crypto/key-exchange'
 import { showConfirmDialog } from '@/utils/dialog'
 import { DEFAULT_AVATAR_URL } from '@/utils/file'
 import { toast } from '@/utils/notify'
+import { isValidOptionalPhone, PHONE_ERROR_MESSAGE } from '@/utils/validation'
 
 const authStore = useAuthStore()
 const userInfo = computed(() => authStore.userInfo || {})
@@ -517,6 +518,11 @@ function syncProfileForm() {
 async function submitProfile() {
   if (!profileForm.username.trim()) {
     toast(L("请输入账号"), { type: 'warning' })
+    return
+  }
+  // 手机号与 PC 共享规则（^1[3-9]\d{9}$）：空值允许，非空必须合法，非法值前端先行拦截
+  if (!isValidOptionalPhone(profileForm.phone)) {
+    toast(L(PHONE_ERROR_MESSAGE), { type: 'warning' })
     return
   }
   profileSaving.value = true

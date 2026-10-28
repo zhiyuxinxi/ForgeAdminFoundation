@@ -430,6 +430,7 @@ import { withLocaleHeaders } from '@/locales'
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { changePassword } from '@/api/system/password'
 import AuthImage from '@/components/common/AuthImage.vue'
 import { localizeLabel, t } from '@/locales'
 import { useAuthStore, useUserStore } from '@/store'
@@ -781,12 +782,7 @@ async function handleUpdatePwd() {
       return
     try {
       pwdLoading.value = true
-      const res = await request.post('/auth/changePassword', null, {
-        params: {
-          oldPassword: pwdForm.value.oldPassword,
-          newPassword: pwdForm.value.password,
-        },
-      })
+      const res = await changePassword(pwdForm.value.oldPassword, pwdForm.value.password)
       if (res.code === 200) {
         window.$message.success(localizeLabel('密码修改成功，请重新登录'))
         showPwdModal.value = false

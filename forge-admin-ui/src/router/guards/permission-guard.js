@@ -13,6 +13,8 @@ const AUTH_ROUTE_ALLOWLIST = new Set([
   '/profile',
   '/mcp-authorize',
   '/403',
+  // 个人消息收件箱：仅读自己的消息/标记已读，无管理操作，登录即可访问
+  '/message/message-list',
 ])
 
 const AUTH_ROUTE_PREFIX_ALLOWLIST = [

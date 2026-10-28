@@ -14,6 +14,10 @@
     <dependencies>
         <dependency>
             <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-task-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-lowcode-runtime</artifactId>
         </dependency>
         <dependency>
@@ -29,19 +33,19 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-core</artifactId>
         </dependency>
-        
+
         <!-- Starter Web -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-web</artifactId>
         </dependency>
-        
+
         <!-- Starter ORM -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-orm</artifactId>
         </dependency>
-        
+
         <!-- Starter Log -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -137,7 +141,7 @@
             <groupId>com.googlecode.aviator</groupId>
             <artifactId>aviator</artifactId>
         </dependency>
-        
+
         <!-- MySQL驱动（用于解析数据库表结构） -->
         <dependency>
             <groupId>com.mysql</groupId>
@@ -149,13 +153,13 @@
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc8</artifactId>
         </dependency>
-        
+
         <!-- HikariCP连接池 -->
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
         </dependency>
-        
+
         <!-- Hutool工具类 -->
         <dependency>
             <groupId>cn.hutool</groupId>

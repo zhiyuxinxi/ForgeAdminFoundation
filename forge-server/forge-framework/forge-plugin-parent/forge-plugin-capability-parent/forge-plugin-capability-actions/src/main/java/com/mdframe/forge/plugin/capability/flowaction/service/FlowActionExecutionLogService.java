@@ -2,12 +2,14 @@ package com.mdframe.forge.plugin.capability.flowaction.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.flow.client.FlowStartOutcomeUnknownException;
 import com.mdframe.forge.plugin.capability.flowaction.domain.AiCapabilityFlowActionLog;
 import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionExecutionLogMapper;
 import com.mdframe.forge.plugin.capability.execution.SecureActionDescriptor;
 import com.mdframe.forge.plugin.capability.execution.SecureActionUnavailableException;
 import com.mdframe.forge.starter.core.context.ExecutionIdentity;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.i18n.UiMessages;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DuplicateKeyException;
@@ -22,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -119,6 +122,10 @@ public class FlowActionExecutionLogService {
         catch (SecureActionUnavailableException | BusinessException exception) {
             markFailed(activeReservation, stableErrorCode(exception), startedAt);
             throw exception;
+        }
+        catch (FlowStartOutcomeUnknownException exception) {
+            markFailed(activeReservation, "FLOW_START_OUTCOME_UNKNOWN", startedAt);
+            throw new BusinessException(503, UiMessages.message("flow.start.outcome.unknown"), exception);
         }
         catch (RuntimeException exception) {
             markFailed(activeReservation, "FLOW_EXECUTION_FAILED", startedAt);
@@ -227,6 +234,9 @@ public class FlowActionExecutionLogService {
         AiCapabilityFlowActionLog log = new AiCapabilityFlowActionLog();
         log.setTenantId(identity.loginUser().getTenantId());
         log.setRequestId(requestId);
+        if ("START".equals(operation) || "SUBMIT".equals(operation)) {
+            log.setFlowStartRequestId(UUID.randomUUID().toString());
+        }
         log.setClientId(identity.clientId());
         log.setCapabilityId(descriptor.capabilityId());
         log.setCapabilityCode(descriptor.capabilityCode());
@@ -368,6 +378,11 @@ public class FlowActionExecutionLogService {
 
         private ExecutionAttempt(AiCapabilityFlowActionLog reservation) {
             this.reservation = reservation;
+        }
+
+        /** Bind retries to the committed reservation, never to a new transport correlation ID. */
+        public String startRequestId() {
+            return reservation.getFlowStartRequestId();
         }
 
         /**

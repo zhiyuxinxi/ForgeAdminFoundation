@@ -90,12 +90,13 @@ if ! command -v mysql >/dev/null 2>&1; then
   exit 1
 fi
 
-MYSQL=(mysql --host="$HOST" --port="$PORT" --user="$USER")
+# UTF-8 SQL files require a matching connection charset, not only a UTF-8 database.
+MYSQL=(mysql --default-character-set=utf8mb4 --host="$HOST" --port="$PORT" --user="$USER")
 if [[ -n "$PASSWORD" ]]; then
   MYSQL+=(--password="$PASSWORD")
 fi
 
-"${MYSQL[@]}" --execute="CREATE DATABASE IF NOT EXISTS \`$DATABASE\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+"${MYSQL[@]}" --execute="CREATE DATABASE IF NOT EXISTS \`$DATABASE\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
 MYSQL_DB=("${MYSQL[@]}" "$DATABASE")
 
 run_sql_file() {
@@ -116,6 +117,11 @@ run_sql_dir() {
 }
 
 if [[ "$SKIP_ADMIN_INIT" != "true" ]]; then
+  # MySQL's Docker entrypoint may already have created the empty database.
+  # Match the MySQL 8 foundation schema so migration temporary tables inherit
+  # the same collation as the permanent columns they compare against.
+  # Upgrade mode deliberately preserves the existing database defaults.
+  "${MYSQL[@]}" --execute="ALTER DATABASE \`$DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
   # The historical dump selects proj_db; keep the caller's explicit target database.
   # Do not rewrite the historical SQL or redirect initialization into another database.
   sed '/^[[:space:]]*USE proj_db;[[:space:]]*$/d' "$FORGE_DIR/db/全量初始化SQL.sql" | "${MYSQL_DB[@]}"

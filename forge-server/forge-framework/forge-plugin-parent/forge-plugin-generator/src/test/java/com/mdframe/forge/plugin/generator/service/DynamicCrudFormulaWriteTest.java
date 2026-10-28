@@ -9,11 +9,13 @@ import com.mdframe.forge.plugin.generator.service.businessapp.BusinessDocumentCo
 import com.mdframe.forge.plugin.generator.service.crypto.LowcodeEncryptConfigParser;
 import com.mdframe.forge.plugin.generator.service.formula.StoredAggregateRefreshService;
 import com.mdframe.forge.plugin.generator.service.formula.StoredFormulaRuntime;
+import com.mdframe.forge.plugin.generator.service.formula.VirtualFormulaRuntime;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContextHolder;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDataSourceResolution;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -91,7 +93,39 @@ class DynamicCrudFormulaWriteTest {
         ObjectMapper mapper = new ObjectMapper();
         service = new DynamicCrudService(repository, configs, mapper, null, null, null,
                 new LowcodeEncryptConfigParser(mapper), scopes, mock(BusinessDocumentConfigService.class), null,
-                aggregates, formulas, null, sources);
+                aggregates, formulas, mock(VirtualFormulaRuntime.class), sources);
+    }
+
+    @Test
+    void publicUpdateChecksReferencesAgainstTheScopedExistingRecordBeforeWriting() {
+        config.setModelSchema("""
+                {"fields":[{"field":"orgId","columnName":"org_id","dataType":"bigint","componentType":"orgTreeSelect"}]}
+                """);
+        existing.put("org_id", 10L);
+        RuntimeIdentityReferenceService references = mock(RuntimeIdentityReferenceService.class);
+        service.setIdentityReferences(references);
+        Map<String, Object> patch = new LinkedHashMap<>(Map.of("recordKey", 4L, "orgId", 20L));
+        doThrow(new BusinessException(400, "Invalid identity reference"))
+                .when(references).validateWrite(any(), same(patch), anyMap(), eq("edit"));
+        assertThrows(BusinessException.class, () -> service.updateById("suite_records", patch));
+        verify(references).validateWrite(argThat(actual -> "suite_records".equals(actual.getConfigKey())),
+                same(patch), argThat(before -> Long.valueOf(10L).equals(before.get("orgId"))), eq("edit"));
+        verify(repository).selectById("records", "record_pk", 4L, scope);
+        verify(repository, never()).updateById(anyString(), anyString(), any(), anyMap(), any());
+        verifyNoInteractions(formulas);
+    }
+
+    @Test
+    void publicUpdateRejectsForgedTaskLinksWithoutAnIdentityField() {
+        config.setOptions("""
+                {"publicTaskBindings":[{"spec":{"taskIdField":"taskId"}}]}
+                """);
+        existing.put("task_id", 100L);
+        Map<String, Object> patch = new LinkedHashMap<>(Map.of("recordKey", 4L, "taskId", 200L));
+        assertThrows(BusinessException.class, () -> service.updateById("suite_records", patch));
+        verify(repository).selectById("records", "record_pk", 4L, scope);
+        verify(repository, never()).updateById(anyString(), anyString(), any(), anyMap(), any());
+        verifyNoInteractions(formulas);
     }
 
     @Test

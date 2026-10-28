@@ -64,6 +64,7 @@ final class VelocityCodegenArtifacts {
         String extensionSamplePath = null;
         if (includeBackend) {
             renderTo(files, "templates/vm/entity.java.vm",      ctx, javaRoot + "entity/" + className + ".java");
+            renderTo(files, "templates/vm/vo.java.vm",          ctx, javaRoot + "vo/" + className + "VO.java");
             renderTo(files, "templates/vm/mapper.java.vm",      ctx, javaRoot + "mapper/" + className + "Mapper.java");
             renderTo(files, "templates/vm/mapper.xml.vm",       ctx, mapperXmlRoot + className + "Mapper.xml");
             renderTo(files, "templates/vm/service.java.vm",     ctx, javaRoot + "service/I" + className + "Service.java");
@@ -163,11 +164,18 @@ final class VelocityCodegenArtifacts {
         boolean includeBackend = paths.includeBackend();
         boolean includeFrontend = paths.includeFrontend();
         LowcodeProtocolSnapshotBuilder.ProtocolArtifacts artifacts = protocolSnapshotBuilder.build(codegenConfig);
+        String frontendRuntime = artifacts.frontendRuntimeConfig();
+        if (Boolean.TRUE.equals(ctx.get("hasIdentityReferences"))) {
+            var runtime = objectMapper.readTree(frontendRuntime);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) runtime)
+                    .put("identityReferenceApiBase", model.apiBase() + "/references");
+            frontendRuntime = objectMapper.writeValueAsString(runtime);
+        }
         if (includeFrontend) {
             files.put(frontendBasePath + "/" + viewPath + "/runtime-config.json",
-                    artifacts.frontendRuntimeConfig());
+                    frontendRuntime);
         }
-        files.put("config/" + runtimeConfigKey + "-config.json", artifacts.frontendRuntimeConfig());
+        files.put("config/" + runtimeConfigKey + "-config.json", frontendRuntime);
         files.put("config/" + runtimeConfigKey + "-protocol.json", artifacts.protocolSnapshot());
         files.put("config/" + runtimeConfigKey + "-coverage.json", artifacts.coverageReport());
         renderTo(files, "templates/vm/README.md.vm", ctx, "README.md");
@@ -218,6 +226,7 @@ final class VelocityCodegenArtifacts {
         for (RelatedTableMeta meta : relatedTables) {
             VelocityContext childCtx = prepareRelatedTableContext(meta, treeMeta);
             renderTo(files, "templates/vm/entity.java.vm", childCtx, javaRoot + "entity/" + meta.getClassName() + ".java");
+            renderTo(files, "templates/vm/vo.java.vm", childCtx, javaRoot + "vo/" + meta.getClassName() + "VO.java");
             renderTo(files, "templates/vm/mapper.java.vm", childCtx, javaRoot + "mapper/" + meta.getClassName() + "Mapper.java");
             renderTo(files, "templates/vm/mapper.xml.vm", childCtx,
                     mapperXmlRoot + meta.getClassName() + "Mapper.xml");

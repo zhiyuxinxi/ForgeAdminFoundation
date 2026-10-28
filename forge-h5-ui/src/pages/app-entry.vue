@@ -18,21 +18,27 @@ import { onLoad } from '@dcloudio/uni-app'
 import AiButton from '@/components/AiButton.vue'
 import AiIcon from '@/components/AiIcon.vue'
 import AiLayoutPage from '@/components/AiLayoutPage.vue'
+import { buildRoutePayload, unpackRoutePayload } from '@/utils/route-payload'
 
 const title = ref('应用功能')
 
 onLoad((query = {}) => {
-  title.value = String(query.title || L("应用功能"))
-  const configKey = String(query.configKey || '').trim()
-  const path = String(query.path || '').trim()
+  // 单次传输协议：解包 versioned base64url payload（只解包一次，不做递归 URL decode）；
+  // 缺失/非法时安全降级为默认值；无 q 的既有深链走 legacy 只读严格校验。
+  const params = unpackRoutePayload(query || {})
+  title.value = params.title || '应用功能'
+  const { configKey, path, mode, recordId } = params
+  // 安全边界：path 仅用于解析本地低代码 configKey，绝不按 path 跳转或重定向到任意外部地址
   if (configKey || /(?:crud-page|crud)\//.test(path)) {
-    const params = Object.entries({
+    const payload = buildRoutePayload({
       configKey: configKey || resolveConfigKey(path),
       title: title.value,
-      ...(query.mode ? { mode: query.mode } : {}),
-      ...(query.recordId ? { recordId: query.recordId } : {}),
-    }).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&')
-    uni.redirectTo({ url: `/pages/lowcode-runtime?${params}` })
+      ...(mode ? { mode } : {}),
+      ...(recordId ? { recordId } : {}),
+    })
+    if (payload) {
+      uni.redirectTo({ url: `/pages/lowcode-runtime?q=${payload}` })
+    }
   }
 })
 

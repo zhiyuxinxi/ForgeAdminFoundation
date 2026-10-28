@@ -8,6 +8,9 @@ import com.mdframe.forge.lowcode.api.code.BusinessCodeGenerator;
 import com.mdframe.forge.lowcode.api.code.RuntimeDocumentNumbers;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudRepository;
 import com.mdframe.forge.plugin.generator.service.SelectionIdentifierValidator;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityFields;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
+import com.mdframe.forge.lowcode.runtime.service.task.RuntimeTaskLinkFields;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeDataSourceResolution;
 
 import com.mdframe.forge.plugin.generator.service.runtime.write.RuntimeFormWriteFields;
@@ -53,7 +56,7 @@ import com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowWriter;
 import com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowOwnership;
 import com.mdframe.forge.plugin.generator.service.runtime.child.ChildRelationResolver;
 import com.mdframe.forge.plugin.generator.service.runtime.child.ChildDetailRelationResolver;
-import static com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowPolicy.extractChildrenPayload;
+import static com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowPolicy.validatedChildrenPayload;
 import static com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowPolicy.hasWritableChildData;
 import static com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowPolicy.isImmutableWriteField;
 import static com.mdframe.forge.plugin.generator.service.runtime.child.ChildRowPolicy.IMMUTABLE_WRITE_FIELDS;
@@ -93,7 +96,7 @@ import java.util.stream.Collectors;
 /**
  * 动态CRUD服务
  * 基于DynamicCrudRepository实现，支持配置驱动的通用CRUD操作
- * 
+ *
  * @author forge
  */
 @Slf4j(topic = "com.mdframe.forge.plugin.generator.service.DynamicCrudService")
@@ -127,6 +130,12 @@ public class RuntimeCrudService {
     private final RuntimeDataSourceResolution runtimeDataSourceResolver;
 
     private RuntimeWriteTransactions runtimeWriteTransactions;
+    private RuntimeIdentityReferenceService identityReferences;
+
+    @Autowired
+    public void setIdentityReferences(RuntimeIdentityReferenceService identityReferences) {
+        this.identityReferences = identityReferences;
+    }
 
     @Autowired
     public void setRuntimeWriteTransactions(RuntimeWriteTransactions runtimeWriteTransactions) {
@@ -362,6 +371,7 @@ public class RuntimeCrudService {
                 autoGeneration.apply(config, data == null ? null : extractMainPayload(data), allowedFields);
                 autoGeneration.applyDocumentNumber(config, data == null ? null : extractMainPayload(data), allowedFields);
                 SelectionIdentifierValidator.validateRuntime(config, data, objectMapper);
+                validatePublicReferences(config, data, null);
 
                 RuntimeJoinContext joinContext = joinPlanner.plan(config);
                 if (isMasterDetailRuntime(config) && joinContext != null) {
@@ -526,6 +536,7 @@ public class RuntimeCrudService {
                 // 获取允许写入的字段。editSchema 是运行态表单白名单，modelSchema 兜底承接保存设计器后新增但尚未重建 editSchema 的字段。
                 Set<String> allowedFields = buildAllowedWriteFields(config, tableName);
                 SelectionIdentifierValidator.validateRuntime(config, data, objectMapper);
+                validatePublicReferences(config, data, id);
 
                 RuntimeJoinContext joinContext = joinPlanner.plan(config);
                 if (isMasterDetailRuntime(config) && joinContext != null) {
@@ -802,6 +813,7 @@ public class RuntimeCrudService {
                                         Map<String, Object> data,
                                         Set<String> allowedFields,
                                         RuntimeJoinContext joinContext) {
+        Map<String, Object> childrenPayload = validatedChildrenPayload(data, joinContext.childRelations());
         Map<String, Object> mainPayload = extractMainPayload(data);
         storedFormulaValues.apply(config, mainPayload);
         validateUniqueConstraints(config, config.getTableName(), mainPayload, null, null);
@@ -823,7 +835,7 @@ public class RuntimeCrudService {
         putPrimaryKeyAlias(mainPayload, primaryKey, mainId);
         boolean childrenChanged = childRowWriter.insertMasterDetails(
                 new ChildRowWriter.ParentRecord(config.getTableName(), mainId, primaryData, null),
-                joinContext.childRelations(), extractChildrenPayload(data));
+                joinContext.childRelations(), childrenPayload);
         if (childrenChanged) {
             refreshRecordById(config, mainId);
         }
@@ -834,6 +846,7 @@ public class RuntimeCrudService {
                                         Map<String, Object> data,
                                         Set<String> allowedFields,
                                         RuntimeJoinContext joinContext) {
+        Map<String, Object> childrenPayload = validatedChildrenPayload(data, joinContext.childRelations());
         DynamicCrudRepository.SqlCondition dataScopeCondition = buildDataScopeCondition(config, config.getTableName(), null);
         Map<String, Object> authorizedMainRecord = repository.selectById(config.getTableName(), id, dataScopeCondition);
         if (authorizedMainRecord == null) {
@@ -857,7 +870,7 @@ public class RuntimeCrudService {
 
         boolean childrenChanged = childRowWriter.updateMasterDetails(
                 new ChildRowWriter.ParentRecord(config.getTableName(), id, primaryData, authorizedMainRecord),
-                joinContext.childRelations(), extractChildrenPayload(data));
+                joinContext.childRelations(), childrenPayload);
         if (primaryData.isEmpty() && !childrenChanged) {
             throw new BusinessException("没有可更新的字段");
         }
@@ -1167,6 +1180,27 @@ public class RuntimeCrudService {
      */
     private LowcodeRuntimeConfig getConfig(String configKey) {
         return runtimeConfigs.load(configKey);
+    }
+
+    private void validatePublicReferences(LowcodeRuntimeConfig config, Map<String, Object> data, Object id) {
+        boolean hasIdentity = new RuntimeIdentityFields(objectMapper).hasPayload(config, data);
+        boolean hasTask = RuntimeTaskLinkFields.hasBindings(config, objectMapper);
+        if (!hasIdentity && !hasTask) {
+            return;
+        }
+        Map<String, Object> previous = id == null ? null : readRecordByConfig(config, id);
+        if (id != null && (previous == null || previous.isEmpty())) {
+            throw new BusinessException("无权限更新该数据或数据不存在");
+        }
+        if (hasIdentity) {
+            if (identityReferences == null) {
+                throw new BusinessException(UiMessages.label("组织人员引用校验尚未装配", "Identity reference validation is not configured"));
+            }
+            identityReferences.validateWrite(config, data, previous, id == null ? "add" : "edit");
+        }
+        if (hasTask) {
+            RuntimeTaskLinkFields.validate(config, data, previous, objectMapper);
+        }
     }
 
 

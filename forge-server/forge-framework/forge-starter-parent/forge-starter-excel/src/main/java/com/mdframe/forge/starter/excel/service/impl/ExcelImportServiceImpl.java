@@ -53,12 +53,12 @@ public class ExcelImportServiceImpl implements ExcelImportService {
 
     @Autowired(required = false)
     private DictValueProvider dictValueProvider;
-    
+
     /**
      * 临时文件目录
      */
     private static final String TEMP_DIR = System.getProperty("java.io.tmpdir") + "/forge-excel-import/";
-    
+
     static {
         try {
             Files.createDirectories(Paths.get(TEMP_DIR));
@@ -86,7 +86,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
 
             log.info("生成导入模板：configKey={}", configKey);
             return workbook;
-            
+
         } catch (Exception e) {
             log.error("生成导入模板失败：{}", configKey, e);
             throw new RuntimeException(UiMessages.translate("生成模板失败：") + e.getMessage(), e);
@@ -105,7 +105,7 @@ public class ExcelImportServiceImpl implements ExcelImportService {
     @Override
     public <T> ImportResult<T> importData(InputStream inputStream, String configKey, Class<T> clazz) {
         ImportResult<T> result = new ImportResult<>();
-        
+
         try {
             ExcelExportMetadata metadata = loadMetadata(configKey);
             if (!isImportAllowed(metadata)) {
@@ -136,21 +136,21 @@ public class ExcelImportServiceImpl implements ExcelImportService {
             mergeErrors(result, genericResult.getErrors());
             Map<String, ExcelColumnConfig> fieldConfigMap = buildFieldConfigMap(columnConfigs);
             mapGenericRowsToPojo(clazz, genericResult.getSuccessData(), fieldConfigMap, result);
-            
+
             // 设置汇总信息
             result.setSuccessRows(result.getSuccessData().size());
             result.setFailedRows(result.getErrors().size());
             result.buildSummary();
             result.setSuccess(result.getErrors().isEmpty());
-            
+
             log.info("导入完成：{}", result.getSummary());
-            
+
         } catch (Exception e) {
             log.error("导入失败", e);
             result.setSuccess(false);
             result.setSummary(ImportResult.PUBLIC_FAILURE_MESSAGE);
         }
-        
+
         return result;
     }
 
@@ -180,10 +180,10 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         if (Integer.valueOf(0).equals(metadata.getStatus())) {
             return false;
         }
-        if ("EXPORT".equalsIgnoreCase(metadata.getConfigType())) {
-            return false;
+        if (metadata.getAllowImport() != null) {
+            return Boolean.TRUE.equals(metadata.getAllowImport());
         }
-        return metadata.getAllowImport() == null || Boolean.TRUE.equals(metadata.getAllowImport());
+        return !"EXPORT".equalsIgnoreCase(metadata.getConfigType());
     }
 
     private ImportTemplateColumn toImportTemplateColumn(ExcelColumnConfig config) {
@@ -464,31 +464,31 @@ public class ExcelImportServiceImpl implements ExcelImportService {
         try {
             Path path = Paths.get(TEMP_DIR + taskId + "_error.xlsx");
             if (!Files.exists(path)) {
-                throw new RuntimeException("错误报告不存在");
+                throw new RuntimeException(UiMessages.message("excel.errorReport.notFound"));
             }
             return Files.readAllBytes(path);
         } catch (IOException e) {
-            throw new RuntimeException("读取错误报告失败", e);
+            throw new RuntimeException(UiMessages.message("excel.errorReport.readFailed"), e);
         }
     }
-    
+
     /**
      * 生成错误报告 Excel
      */
     public String generateErrorReport(String taskId, List<ImportErrorRecord> errors) {
         try {
             String filePath = TEMP_DIR + taskId + "_error.xlsx";
-            
-            // 构建表头
+
+            // 构建表头；只本地化固定展示，行号和业务原值保持不变。
             List<List<String>> headers = Arrays.asList(
-                    Arrays.asList("行号"),
-                    Arrays.asList("列名"),
-                    Arrays.asList("原始值"),
-                    Arrays.asList("错误类型"),
-                    Arrays.asList("错误信息"),
-                    Arrays.asList("建议修正")
+                    Arrays.asList(UiMessages.message("excel.errorReport.rowNumber")),
+                    Arrays.asList(UiMessages.message("excel.errorReport.columnName")),
+                    Arrays.asList(UiMessages.message("excel.errorReport.rawValue")),
+                    Arrays.asList(UiMessages.message("excel.errorReport.errorType")),
+                    Arrays.asList(UiMessages.message("excel.errorReport.errorMessage")),
+                    Arrays.asList(UiMessages.message("excel.errorReport.suggestion"))
             );
-            
+
             // 构建数据
             List<List<String>> data = new ArrayList<>();
             for (ImportErrorRecord error : errors) {
@@ -501,22 +501,22 @@ public class ExcelImportServiceImpl implements ExcelImportService {
                         error.getSuggestion() != null ? error.getSuggestion() : ""
                 ));
             }
-            
+
             // 写入文件
             EasyExcel.write(filePath)
                     .head(headers)
-                    .sheet("导入错误报告")
+                    .sheet(UiMessages.message("excel.errorReport.sheetName"))
                     .doWrite(data);
-            
+
             log.info("生成错误报告：taskId={}, errorCount={}", taskId, errors.size());
             return filePath;
-            
+
         } catch (Exception e) {
             log.error("生成错误报告失败", e);
             return null;
         }
     }
-    
+
     /**
      * 导入错误数据类
      */

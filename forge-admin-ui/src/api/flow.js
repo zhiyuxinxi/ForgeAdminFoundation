@@ -349,8 +349,8 @@ export default {
   /**
    * 获取未读抄送数量
    */
-  getUnreadCcCount: userId =>
-    request.get('/api/flow/cc/unread/count', { params: { userId } }),
+  getUnreadCcCount: () =>
+    request.get('/api/flow/cc/unread/count'),
 
   // ========== 审批意见 ==========
 

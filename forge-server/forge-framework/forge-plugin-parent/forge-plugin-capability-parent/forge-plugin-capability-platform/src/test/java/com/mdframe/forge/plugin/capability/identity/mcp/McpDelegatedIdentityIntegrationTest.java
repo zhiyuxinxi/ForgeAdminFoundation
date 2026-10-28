@@ -101,16 +101,19 @@ class McpDelegatedIdentityIntegrationTest {
     private static final String SESSION_HEADER = "Mcp-Session-Id";
     private static final String RAW_TOKEN = "fdu_" + "a".repeat(22) + "_" + "b".repeat(43);
     private static SaTokenContext previousSaTokenContext;
+    private static cn.dev33.satoken.config.SaTokenConfig previousSaTokenConfig;
 
     @BeforeAll
     static void installSaTokenServletContext() {
         previousSaTokenContext = SaManager.getSaTokenContext();
+        previousSaTokenConfig = SaManager.getConfig();
         SaManager.setSaTokenContext(new SaTokenContextForSpringInJakartaServlet());
     }
 
     @AfterAll
     static void restoreSaTokenContext() {
         SaManager.setSaTokenContext(previousSaTokenContext);
+        SaManager.setConfig(previousSaTokenConfig);
     }
 
     @Autowired
@@ -288,6 +291,11 @@ class McpDelegatedIdentityIntegrationTest {
             SaTokenContextRegister.class
     })
     static class TestApplication {
+
+        @Bean
+        cn.dev33.satoken.config.SaTokenConfig saTokenConfiguration() {
+            return new cn.dev33.satoken.config.SaTokenConfig();
+        }
 
         @Bean
         CapabilityAccessTokenService capabilityAccessTokenService() {

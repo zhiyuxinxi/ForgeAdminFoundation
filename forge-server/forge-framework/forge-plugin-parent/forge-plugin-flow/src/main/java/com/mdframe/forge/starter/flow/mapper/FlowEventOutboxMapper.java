@@ -9,4 +9,8 @@ public interface FlowEventOutboxMapper {
     int insert(FlowEventOutboxEntry entry);
 
     FlowEventOutboxEntry selectRecorded(@Param("tenantId") Long tenantId, @Param("eventId") String eventId);
+
+    FlowEventOutboxEntry selectTerminal(@Param("tenantId") Long tenantId,
+                                      @Param("processInstanceId") String processInstanceId,
+                                      @Param("eventType") String eventType);
 }

@@ -19,5 +19,11 @@ public class BusinessFlowStartDTO {
 
     private String title;
 
+    /** Stable identity for one explicit start round; retries must preserve this value. */
+    private String startRequestId;
+
+    /** Required by the flow owner when intentionally starting after an ended round. */
+    private String previousProcessInstanceId;
+
     private Map<String, Object> variables = new LinkedHashMap<>();
 }

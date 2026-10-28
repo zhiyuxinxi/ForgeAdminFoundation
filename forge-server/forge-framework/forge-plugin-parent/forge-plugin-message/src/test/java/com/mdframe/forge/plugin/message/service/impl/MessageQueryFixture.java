@@ -71,15 +71,17 @@ final class MessageQueryFixture implements AutoCloseable {
             config.setEnabled(0);
             return config;
         });
+        String resourceDirectory = System.getProperty("message.query.resources");
         for (Class<?> mapper : new Class<?>[] {
                 SysMessageMapper.class, SysMessageTemplateMapper.class, SysMessageSendRecordMapper.class}) {
-            Path xml = Path.of(System.getProperty("message.query.resources"), mapper.getSimpleName() + ".xml");
-            if (Files.exists(xml)) {
-                try (var input = Files.newInputStream(xml)) {
-                    new XMLMapperBuilder(input, configuration, xml.toString(), configuration.getSqlFragments()).parse();
+            String resource = "mapper/" + mapper.getSimpleName() + ".xml";
+            try (var input = resourceDirectory == null || resourceDirectory.isBlank()
+                    ? mapper.getResourceAsStream("/" + resource)
+                    : Files.newInputStream(Path.of(resourceDirectory, mapper.getSimpleName() + ".xml"))) {
+                if (input == null) {
+                    throw new IOException("Missing message mapper resource: " + resource);
                 }
-            } else {
-                configuration.addMapper(mapper);
+                new XMLMapperBuilder(input, configuration, resource, configuration.getSqlFragments()).parse();
             }
         }
         session = new MybatisSqlSessionFactoryBuilder().build(configuration).openSession(true);

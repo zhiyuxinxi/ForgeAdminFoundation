@@ -3,7 +3,7 @@
 <mapper namespace="com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionExecutionLogMapper">
 
     <sql id="BaseColumns">
-        id, tenant_id, request_id, client_id, capability_id, capability_code, capability_version,
+        id, tenant_id, request_id, flow_start_request_id, client_id, capability_id, capability_code, capability_version,
         operation, object_code, record_id, task_ref, idempotency_key, request_digest,
         actor_type, actor_user_id, service_user_id, active_org_id, execute_status, result_code,
         result_snapshot, error_code, duration_ms, del_flag,

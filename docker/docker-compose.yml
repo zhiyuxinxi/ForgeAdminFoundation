@@ -25,10 +25,12 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ../forge/forge-admin/sql:/初始化脚本.sql
+      - ../forge-server/scripts/db/docker-init.sh:/docker-entrypoint-initdb.d/01-forge-init.sh:ro
+      - ../forge-server/scripts/db:/opt/forge/forge-server/scripts/db:ro
+      - ../forge-server/db:/opt/forge/forge-server/db:ro
     command: >
       --character-set-server=utf8mb4
-      --collation-server=utf8mb4_unicode_ci
+      --collation-server=utf8mb4_0900_ai_ci
       --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-forge123456}"]
@@ -64,9 +66,12 @@ services:
   forge-flow:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.flow
+      dockerfile: docker-forge-admin/Dockerfile.flow
+      args:
+        BUILDKIT_CACHE_MOUNT_NS: ${COMPOSE_PROJECT_NAME:-forge-admin}
     container_name: forge-flow
     restart: unless-stopped
+    stop_grace_period: 60s
     depends_on:
       mysql:
         condition: service_healthy
@@ -82,6 +87,9 @@ services:
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-forge123456}
       JAVA_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - ../docker-forge-admin/application-datasource.yml:/app/application-prod.yml:ro
+      - ../forge-server/db/migration:/app/db/migration:ro
     ports:
       - "${FLOW_PORT:-8081}:8081"
     networks:
@@ -93,9 +101,12 @@ services:
   forge-admin:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.admin
+      dockerfile: docker-forge-admin/Dockerfile.admin
+      args:
+        BUILDKIT_CACHE_MOUNT_NS: ${COMPOSE_PROJECT_NAME:-forge-admin}
     container_name: forge-admin
     restart: unless-stopped
+    stop_grace_period: 60s
     depends_on:
       mysql:
         condition: service_healthy
@@ -126,6 +137,8 @@ services:
       JAVA_OPTS: -Xms256m -Xmx512m
     volumes:
       - crypto_secrets:/var/lib/forge/secrets
+      - ../docker-forge-admin/application-datasource.yml:/app/application-prod.yml:ro
+      - ../forge-server/db/migration:/app/db/migration:ro
     ports:
       - "${ADMIN_PORT:-8580}:8580"
     networks:
@@ -137,7 +150,7 @@ services:
   forge-ui:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.ui
+      dockerfile: docker-forge-admin/Dockerfile.ui
     container_name: forge-ui
     restart: unless-stopped
     depends_on:

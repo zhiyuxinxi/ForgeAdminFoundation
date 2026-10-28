@@ -11,6 +11,7 @@ import ${packageName}.${moduleName}.dto.${className}Query;
 import ${packageName}.${moduleName}.entity.${className};
 #foreach($table in $injectedRelatedTables)
 import ${packageName}.${moduleName}.entity.${table.className};
+import ${packageName}.${moduleName}.dto.${table.className}DTO;
 #end
 import ${packageName}.${moduleName}.mapper.${className}Mapper;
 #foreach($table in $injectedRelatedTables)
@@ -21,10 +22,26 @@ import ${packageName}.${moduleName}.service.I${className}Service;
 import ${packageName}.${moduleName}.service.extension.${className}ServiceExtension;
 #end
 import com.mdframe.forge.starter.core.domain.PageQuery;
+#if(${hasIdentityReferences})
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.lowcode.api.config.LowcodeRuntimeConfig;
+import com.mdframe.forge.lowcode.runtime.service.RuntimeDataScopeService;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityFields;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityScope;
+import com.mdframe.forge.plugin.generator.service.DynamicCrudRepository;
+import com.mdframe.forge.starter.core.identity.TenantOrganization;
+import com.mdframe.forge.starter.core.identity.TenantMember;
+import com.mdframe.forge.starter.core.identity.TenantPost;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import com.mdframe.forge.starter.datascope.service.IDataScopeService;
+#end
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.i18n.UiMessages;
 import com.mdframe.forge.starter.trans.annotation.DictTranslate;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Validator;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 #if(${enableServiceExtensions})
@@ -44,7 +61,7 @@ import java.util.function.Function;
 
 /**
  * ${functionName}Service实现类
- * 
+ *
  * @author ${author}
  * @date ${datetime}
  */
@@ -54,6 +71,14 @@ import java.util.function.Function;
 public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${className}> implements I${className}Service {
 
     private final ${className}Mapper ${classname}Mapper;
+    private final Validator validator;
+#if(${hasIdentityReferences})
+    private final ObjectMapper identityJson;
+    private final RuntimeIdentityReferenceService identityReferences;
+    private final DynamicCrudRepository identityRecords;
+    private final RuntimeDataScopeService identityRowScopes;
+    private final IDataScopeService identityDataScopes;
+#end
 #foreach($table in $injectedRelatedTables)
     private final ${table.className}Mapper ${table.mapperVarName};
 #end
@@ -69,7 +94,6 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
                 extension -> next -> () -> extension.aroundPage(pageQuery, query, next),
                 () -> {
 #end
-        log.info("分页查询参数:{}, 查询条件:{}", pageQuery, query);
         return ${classname}Mapper.selectGeneratedPage(pageQuery.toPage(), query);
 #if(${enableServiceExtensions})
                 });
@@ -84,7 +108,6 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
                 extension -> next -> () -> extension.aroundList(query, next),
                 () -> {
 #end
-        log.info("查询参数:{}", query);
         return ${classname}Mapper.selectGeneratedList(query);
 #if(${enableServiceExtensions})
                 });
@@ -160,6 +183,9 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
                 () -> {
 #end
         ${className}DTO mainDto = dto == null || dto.getMain() == null ? new ${className}DTO() : dto.getMain();
+#if(${hasIdentityReferences})
+        validateReferences(mainDto, null, "add");
+#end
         ${className} ${classname} = new ${className}();
         BeanUtil.copyProperties(mainDto, ${classname});
         boolean saved = ${classname}Mapper.insert(${classname}) > 0;
@@ -180,6 +206,9 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
         return invokeExtensions(
                 extension -> next -> () -> extension.aroundInsert(dto, next),
                 () -> {
+#end
+#if(${hasIdentityReferences})
+        validateReferences(dto, null, "add");
 #end
         ${className} ${classname} = new ${className}();
         BeanUtil.copyProperties(dto, ${classname});
@@ -202,23 +231,27 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
         if (dto == null || dto.getMain() == null) {
             return false;
         }
+#if(${hasIdentityReferences})
+        validateReferences(dto.getMain(), dto.getMain().get${pkColumn.javaField.substring(0,1).toUpperCase()}${pkColumn.javaField.substring(1)}(), "edit");
+#end
         ${className} ${classname} = new ${className}();
         BeanUtil.copyProperties(dto.getMain(), ${classname});
         boolean updated = ${classname}Mapper.updateById(${classname}) > 0;
+        if (!updated) {
+            return false;
+        }
         Object ${classname}Id = ${classname}.get${pkColumn.javaField.substring(0,1).toUpperCase()}${pkColumn.javaField.substring(1)}();
         if (${classname}Id == null) {
             return updated;
         }
-        boolean childrenChanged = false;
 #foreach($child in $masterDetailChildren)
         if (dto.getChildren() != null && dto.getChildren().containsKey("${child.childKey}")) {
             Object ${child.variableName}RelationValue = resolve${child.className}RelationValue(${classname}, ${classname}Id);
             clear${child.className}Rows(${child.variableName}RelationValue);
             save${child.className}Rows(resolveChildRows(dto, "${child.childKey}"), ${child.variableName}RelationValue);
-            childrenChanged = true;
         }
 #end
-        return updated || childrenChanged;
+        return true;
 #if(${enableServiceExtensions})
                 });
 #end
@@ -229,6 +262,9 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
         return invokeExtensions(
                 extension -> next -> () -> extension.aroundUpdate(dto, next),
                 () -> {
+#end
+#if(${hasIdentityReferences})
+        validateReferences(dto, dto.get${pkColumn.javaField.substring(0,1).toUpperCase()}${pkColumn.javaField.substring(1)}(), "edit");
 #end
         ${className} ${classname} = new ${className}();
         BeanUtil.copyProperties(dto, ${classname});
@@ -249,13 +285,16 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
 #end
 #if(${isMasterDetailLayout})
         ${className} ${classname} = ${classname}Mapper.selectById(${pkColumn.javaField});
-        if (${classname} != null) {
-#foreach($child in $masterDetailChildren)
-            clear${child.className}Rows(resolve${child.className}RelationValue(${classname}, ${pkColumn.javaField}));
-#end
+        if (${classname} == null || ${classname}Mapper.deleteById(${pkColumn.javaField}) != 1) {
+            return false;
         }
+#foreach($child in $masterDetailChildren)
+        clear${child.className}Rows(resolve${child.className}RelationValue(${classname}, ${pkColumn.javaField}));
 #end
+        return true;
+#else
         return ${classname}Mapper.deleteById(${pkColumn.javaField}) > 0;
+#end
 #if(${enableServiceExtensions})
                 });
 #end
@@ -269,18 +308,16 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
                 extension -> next -> () -> extension.aroundBatchDelete(${pkColumn.javaField}s, next),
                 () -> {
 #end
-#if(${isMasterDetailLayout})
-        if (${pkColumn.javaField}s == null || ${pkColumn.javaField}s.length == 0) {
-            return false;
+        if (${pkColumn.javaField}s == null || ${pkColumn.javaField}s.length == 0
+                || ${pkColumn.javaField}s.length > 500 || Arrays.stream(${pkColumn.javaField}s).anyMatch(java.util.Objects::isNull)) {
+            throw new BusinessException(UiMessages.message("operation.failed"));
         }
-        boolean result = true;
-        for (${pkColumn.javaType} ${pkColumn.javaField} : ${pkColumn.javaField}s) {
-            result = delete${className}ById(${pkColumn.javaField}) && result;
+        for (${pkColumn.javaType} id : new java.util.LinkedHashSet<>(Arrays.asList(${pkColumn.javaField}s))) {
+            if (!delete${className}ById(id)) {
+                throw new BusinessException(UiMessages.message("operation.failed"));
+            }
         }
-        return result;
-#else
-        return ${classname}Mapper.deleteBatchIds(Arrays.asList(${pkColumn.javaField}s)) > 0;
-#end
+        return true;
 #if(${enableServiceExtensions})
                 });
 #end
@@ -298,6 +335,10 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
             return true;
         }
         for (${className}DTO row : rows) {
+            var violations = validator.validate(row, ${className}DTO.Create.class);
+            if (!violations.isEmpty()) {
+                throw new ConstraintViolationException(violations);
+            }
 #if(${isMasterDetailLayout})
             ${className}MasterDetailDTO aggregate = new ${className}MasterDetailDTO();
             aggregate.setMain(row);
@@ -314,6 +355,64 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
                 });
 #end
     }
+
+#if(${hasIdentityReferences})
+    private LowcodeRuntimeConfig referenceConfig() {
+        LowcodeRuntimeConfig config = new LowcodeRuntimeConfig();
+        var caller = SessionHelper.getLoginUser();
+        config.setTenantId(caller == null ? null : caller.getTenantId());
+        config.setConfigKey("${runtimeConfigKey}");
+        config.setTableName("${tableName}");
+        config.setBuildMode("LOWCODE");
+        config.setObjectCode(${identityObjectLiteral});
+        config.setModelSchema(${identityModelLiteral});
+        config.setEditSchema(${identityEditLiteral});
+        config.setReferencePermissionModule("${moduleName}:${businessName}");
+        return config;
+    }
+
+    @Override
+    public List<TenantOrganization> referenceOrganizations(String field, String operation, Long parentId, Long afterOrgId, int limit) {
+        return identityReferences.organizations(referenceConfig(), field, operation, parentId, afterOrgId, limit);
+    }
+
+    @Override
+    public List<TenantMember> referenceMembers(String field, String operation, Long directOrgId, String keyword, Long afterUserId, int limit) {
+        return identityReferences.members(referenceConfig(), field, operation, directOrgId, keyword, afterUserId, limit);
+    }
+
+    @Override
+    public List<TenantPost> referencePosts(String field, String operation, Long directOrgId, boolean tenantWide, String keyword, Long afterPostId, int limit) {
+        return identityReferences.posts(referenceConfig(), field, operation, directOrgId, tenantWide, keyword, afterPostId, limit);
+    }
+
+    @Override
+    public RuntimeIdentityReferenceService.PostScope referencePostScope(String field, String operation) {
+        return identityReferences.postScope(referenceConfig(), field, operation);
+    }
+
+    private void validateReferences(Object dto, Object id, String operation) {
+        LowcodeRuntimeConfig config = referenceConfig();
+        Map<String, Object> values = identityJson.convertValue(dto,
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
+        // Generated MyBatis DTO updates ignore null properties; omitted fields retain the stored value.
+        values.values().removeIf(java.util.Objects::isNull);
+        if (!new RuntimeIdentityFields(identityJson).hasPayload(config, values)) {
+            return;
+        }
+        new RuntimeIdentityScope(identityDataScopes).authorize(config, operation);
+        Map<String, Object> previous = null;
+        if ("edit".equals(operation)) {
+            var scope = identityDataScopes.getCurrentUserDataScope(config.getReferencePermissionModule());
+            var condition = identityRowScopes.buildRuntimeCondition(config, "${tableName}", null, scope);
+            previous = identityRecords.selectById("${tableName}", "${pkColumn.columnName}", id, condition);
+            if (previous == null || previous.isEmpty()) {
+                throw new BusinessException(403, UiMessages.label("无权限更新该数据或数据不存在", "The record is missing or outside the business scope"));
+            }
+        }
+        identityReferences.validateWrite(config, values, previous, operation);
+    }
+#end
 
 #if(${enableServiceExtensions})
     private <T> T invokeExtensions(
@@ -410,12 +509,23 @@ public class ${className}ServiceImpl extends ServiceImpl<${className}Mapper, ${c
             return;
         }
         for (Map<String, Object> row : rows) {
-            ${child.className} entity = BeanUtil.toBean(row, ${child.className}.class);
+            ${child.className}DTO childDto = BeanUtil.toBean(row, ${child.className}DTO.class);
+#if($child.pkColumn)
+            BeanUtil.setProperty(childDto, "${child.pkColumn.javaField}", null);
+#end
+            BeanUtil.setProperty(childDto, "${child.childFkField}", relationValue);
+            var violations = validator.validate(childDto, ${child.className}DTO.Create.class);
+            if (!violations.isEmpty()) {
+                throw new ConstraintViolationException(violations);
+            }
+            ${child.className} entity = BeanUtil.toBean(childDto, ${child.className}.class);
 #if($child.pkColumn)
             BeanUtil.setProperty(entity, "${child.pkColumn.javaField}", null);
 #end
             BeanUtil.setProperty(entity, "${child.childFkField}", relationValue);
-            ${child.mapperVarName}.insert(entity);
+            if (${child.mapperVarName}.insert(entity) != 1) {
+                throw new BusinessException(UiMessages.message("operation.failed"));
+            }
         }
     }
 

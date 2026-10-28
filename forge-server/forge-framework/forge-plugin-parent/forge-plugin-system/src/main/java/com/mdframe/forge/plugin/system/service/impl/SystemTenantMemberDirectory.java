@@ -58,6 +58,17 @@ public class SystemTenantMemberDirectory implements TenantMemberDirectory {
                 tenantId, directOrgId, normalizedKeyword, afterUserId, limit));
     }
 
+    @Override
+    public List<TenantMember> findActiveMembersByPost(Long postId, Long afterUserId, int limit) {
+        Long tenantId = requireCurrentTenant();
+        checkOptionalId(postId);
+        checkOptionalId(afterUserId);
+        if (postId == null || limit < 1 || limit > MAX_PAGE_SIZE) {
+            throw invalidInput();
+        }
+        return onMaster(() -> mapper.selectActiveMembersByPost(tenantId, postId, afterUserId, limit));
+    }
+
     private Long requireCurrentTenant() {
         LoginUser caller = SessionHelper.getLoginUser();
         if (caller == null || caller.getUserId() == null || caller.getUserId() <= 0

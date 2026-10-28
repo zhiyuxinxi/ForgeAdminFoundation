@@ -11,6 +11,10 @@ import java.util.List;
 @Mapper
 public interface BusinessFlowInstanceLinkMapper extends BaseMapper<AiBusinessFlowInstanceLink> {
 
+    AiBusinessFlowInstanceLink selectByStartRequestForUpdate(@Param("tenantId") Long tenantId,
+                                                            @Param("businessKey") String businessKey,
+                                                            @Param("startRequestId") String startRequestId);
+
     AiBusinessFlowInstanceLink selectLatestByBusinessKey(@Param("tenantId") Long tenantId,
                                                          @Param("businessKey") String businessKey);
 
@@ -22,4 +26,12 @@ public interface BusinessFlowInstanceLinkMapper extends BaseMapper<AiBusinessFlo
 
     AiBusinessFlowInstanceLink selectByProcessInstanceId(@Param("tenantId") Long tenantId,
                                                          @Param("processInstanceId") String processInstanceId);
+
+    AiBusinessFlowInstanceLink selectByProcessInstanceIdForUpdate(@Param("tenantId") Long tenantId,
+                                                                  @Param("processInstanceId") String processInstanceId);
+
+    AiBusinessFlowInstanceLink selectLatestByBusinessKeyForUpdate(@Param("tenantId") Long tenantId,
+                                                                  @Param("businessKey") String businessKey);
+
+    long countByBusinessKey(@Param("tenantId") Long tenantId, @Param("businessKey") String businessKey);
 }

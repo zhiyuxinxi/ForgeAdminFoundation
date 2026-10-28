@@ -23,22 +23,22 @@ import java.lang.reflect.Method;
  */
 @Slf4j
 public class TenantInterceptor implements HandlerInterceptor {
-    
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         // 检查是否标记了 @IgnoreTenant 注解
         if (handler instanceof HandlerMethod) {
             HandlerMethod handlerMethod = (HandlerMethod) handler;
             Method method = handlerMethod.getMethod();
-            
+
             IApiConfigManager apiConfigManager = SpringUtil.getBean(IApiConfigManager.class);
-            
+
             ApiConfigInfo apiConfig = apiConfigManager.getApiConfig(request.getRequestURI(), request.getMethod());
             if (apiConfig != null && !apiConfig.getNeedTenant()) {
                 TenantContextHolder.setIgnore(true);
                 return true;
             }
-            
+
             // 检查方法上的注解
             IgnoreTenant methodAnnotation = AnnotationUtils.findAnnotation(method, IgnoreTenant.class);
             if (methodAnnotation != null && methodAnnotation.value()) {
@@ -48,7 +48,7 @@ public class TenantInterceptor implements HandlerInterceptor {
                 TenantContextHolder.setIgnore(true);
                 return true;
             }
-            
+
             // 检查类上的注解
             Class<?> beanType = handlerMethod.getBeanType();
             IgnoreTenant classAnnotation = AnnotationUtils.findAnnotation(beanType, IgnoreTenant.class);
@@ -64,7 +64,7 @@ public class TenantInterceptor implements HandlerInterceptor {
         if (isCapabilityProtocolEndpoint(request.getRequestURI())) {
             return true;
         }
-        
+
         try {
             // 先安全读取登录态，公开接口或未登录请求不应在这里打 ERROR。
             Class<?> sessionHelperClass = Class.forName("com.mdframe.forge.starter.core.session.SessionHelper");
@@ -88,6 +88,8 @@ public class TenantInterceptor implements HandlerInterceptor {
                 Method isAdminMethod = loginUser.getClass().getMethod("isAdmin");
                 Boolean admin = (Boolean) isAdminMethod.invoke(loginUser);
                 if (Boolean.TRUE.equals(admin)) {
+                    // SQL isolation bypass does not remove the trusted current tenant identity.
+                    TenantContextHolder.setTenantId(tenantId);
                     TenantContextHolder.setIgnore(true);
                     log.debug("超级管理员跳过租户SQL隔离，当前租户ID: {}", tenantId);
                     return true;
@@ -112,7 +114,7 @@ public class TenantInterceptor implements HandlerInterceptor {
         } catch (Exception e) {
             log.error("设置租户上下文失败", e);
         }
-        
+
         return true;
     }
 

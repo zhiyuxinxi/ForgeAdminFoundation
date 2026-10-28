@@ -2,8 +2,9 @@
 
 ## Flyway File Rules
 
-- Place SQL in `forge/db/migration/V<next>__<lower_snake_case_description>.sql`.
-- Inspect existing `forge/db/migration/V*__*.sql` files and choose the next unused version.
+- Keep SQL files in UTF-8. MySQL CLI imports and multilingual seed reads must explicitly use `--default-character-set=utf8mb4`; database/table `DEFAULT CHARSET` does not configure the client connection. Reuse `forge-server/scripts/db/init-db.sh` for foundation initialization. Verify decoded text on a disposable database when available; a successful exit or table count alone does not prove correct encoding. Do not reimport an existing database just to repair this client option.
+- Place SQL in `forge-server/db/migration/V<next>__<lower_snake_case_description>.sql`.
+- Inspect existing `forge-server/db/migration/V*__*.sql` files and choose the next unused version.
 - Use `CREATE TABLE IF NOT EXISTS`.
 - Use `INSERT ... SELECT ... WHERE NOT EXISTS` for dictionaries, Excel configs, resources, and built-in data.
 - Include explicit column lists in every `INSERT`.
@@ -54,7 +55,7 @@ UNIQUE KEY `uk_biz_example_code_active` (`tenant_id`, `example_code`, `del_flag`
 First search existing migrations for reusable dictionaries:
 
 ```bash
-rg -n "dict_type|sys_enable_disable|<candidate_dict_type>" forge/db/migration forge/forge-admin-server/src/main/resources/sql
+rg -n "dict_type|sys_enable_disable|<candidate_dict_type>" forge-server/db/migration forge/forge-admin-server/src/main/resources/sql
 ```
 
 If no existing dictionary fits, add `sys_dict_type` and `sys_dict_data` inserts with `tenant_id = 1`.

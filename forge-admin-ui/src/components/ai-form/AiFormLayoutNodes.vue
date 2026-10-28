@@ -81,10 +81,12 @@
 
       <n-tabs
         v-else-if="isTabsNode(node)"
+        :value="node.props?.value"
         :type="resolveTabsType(node.props?.type)"
         :placement="resolveTabsPlacement(node.props?.placement || node.props?.tabPosition)"
         :style="resolveLayoutStyle(node)"
         :class="resolveLayoutClass(node, 'af-layout-tabs')"
+        @update:value="value => handleTabsUpdate(node, value)"
       >
         <n-tab-pane
           v-for="pane in resolvePaneChildren(node, 'tabPane')"
@@ -370,6 +372,13 @@ function resolveTabsType(value) {
 
 function resolveTabsPlacement(value) {
   return ['left', 'right', 'top', 'bottom'].includes(value) ? value : 'top'
+}
+
+function handleTabsUpdate(node, value) {
+  const handler = node?.props?.onUpdateValue || node?.props?.['onUpdate:value'] || node?.onChange
+  if (typeof handler === 'function')
+    handler(value, props.formValue)
+  emit('nodeAction', { type: 'tabs-change', node, value, formData: props.formValue })
 }
 
 function resolvePaneChildren(node = {}, paneType) {

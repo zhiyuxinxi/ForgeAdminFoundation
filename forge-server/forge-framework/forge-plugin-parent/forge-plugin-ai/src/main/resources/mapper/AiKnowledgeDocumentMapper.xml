@@ -6,7 +6,7 @@
 
     <sql id="documentColumns">
         id, tenant_id, knowledge_id, file_id, doc_name, doc_type, source_type,
-        source_url, content_hash, chunk_count, process_status, process_error,
+        source_url, content_hash, chunk_count, process_status, process_attempt, process_error,
         create_by, create_time, create_dept, update_by, update_time, del_flag
     </sql>
 
@@ -53,27 +53,48 @@
 
     <update id="claimPendingDocument">
         UPDATE ai_knowledge_document
-        SET process_status = 'processing', process_error = NULL, update_time = CURRENT_TIMESTAMP
-        WHERE id = #{id} AND del_flag = 0 AND process_status = 'pending'
+        SET process_status = 'processing', process_error = NULL, update_time = CURRENT_TIMESTAMP,
+            process_deadline = TIMESTAMPADD(SECOND, #{timeoutSeconds}, CURRENT_TIMESTAMP)
+        WHERE id = #{id} AND del_flag = 0 AND process_status = 'pending' AND process_attempt = #{attempt}
+          AND process_deadline > CURRENT_TIMESTAMP
     </update>
 
-    <update id="queueFailedDocument">
+    <update id="requestProcessing">
         UPDATE ai_knowledge_document
-        SET process_status = 'pending', process_error = NULL, update_time = CURRENT_TIMESTAMP
-        WHERE id = #{id} AND del_flag = 0 AND process_status = 'failed'
+        SET process_status = 'pending', process_attempt = #{attempt}, process_error = NULL,
+            update_time = CURRENT_TIMESTAMP,
+            process_deadline = TIMESTAMPADD(SECOND, #{timeoutSeconds}, CURRENT_TIMESTAMP)
+        WHERE id = #{id} AND del_flag = 0 AND process_status = #{expectedStatus}
+          AND (process_status = 'failed' OR process_attempt IS NULL)
     </update>
 
-    <update id="updateProcessStatus">
+    <update id="finishAttempt">
         UPDATE ai_knowledge_document
         SET process_status = #{processStatus},
-            update_time = CURRENT_TIMESTAMP
-        <if test="processError != null">
-            , process_error = #{processError}
-        </if>
+            update_time = CURRENT_TIMESTAMP, process_error = #{processError}
         <if test="chunkCount != null">
             , chunk_count = #{chunkCount}
         </if>
-        WHERE id = #{id} AND del_flag = '0'
+        WHERE id = #{id} AND del_flag = '0' AND process_attempt = #{attempt}
+          AND process_status = #{expectedStatus}
+          AND (#{processStatus} != 'success' OR process_deadline > CURRENT_TIMESTAMP)
+    </update>
+
+    <select id="selectExpiredAttempts" resultType="com.mdframe.forge.plugin.ai.knowledge.domain.ExpiredDocumentAttempt">
+        SELECT id, tenant_id AS tenantId, process_attempt AS attempt
+        FROM ai_knowledge_document
+        WHERE del_flag = 0 AND process_status IN ('pending', 'processing')
+          AND process_attempt IS NOT NULL AND process_deadline &lt;= CURRENT_TIMESTAMP
+        ORDER BY process_deadline, id
+        LIMIT #{limit}
+    </select>
+
+    <update id="expireAttempt">
+        UPDATE ai_knowledge_document
+        SET process_status = 'failed', process_error = 'knowledge.document.processing.interrupted',
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND process_attempt = #{attempt} AND del_flag = 0
+          AND process_status IN ('pending', 'processing') AND process_deadline &lt;= CURRENT_TIMESTAMP
     </update>
 
 </mapper>

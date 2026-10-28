@@ -17,6 +17,8 @@ import com.mdframe.forge.starter.cache.managed.enums.CacheMode;
 import com.mdframe.forge.starter.cache.managed.enums.CacheScope;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.i18n.UiMessages;
+import com.mdframe.forge.starter.core.session.SessionHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -46,10 +48,10 @@ import java.util.Set;
 public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDictData> implements ISysDictDataService {
 
     private static final String DICT_VALUE_DUPLICATED_MESSAGE = "同一字典下的字典键值不能重复";
-    
+
     private final SysDictDataMapper dictDataMapper;
     private final ApplicationEventPublisher eventPublisher;
-    
+
     @Override
     public Page<SysDictData> selectDictDataPage(PageQuery pageQuery, SysDictDataQuery query) {
         LambdaQueryWrapper<SysDictData> wrapper = new LambdaQueryWrapper<>();
@@ -60,7 +62,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
                 .orderByAsc(SysDictData::getDictSort);
         return dictDataMapper.selectPage(pageQuery.toPage(), wrapper);
     }
-    
+
     @Override
     public List<SysDictData> selectDictDataList(SysDictDataQuery query) {
         LambdaQueryWrapper<SysDictData> wrapper = new LambdaQueryWrapper<>();
@@ -74,7 +76,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
         wrapper.orderByAsc(SysDictData::getDictSort);
         return dictDataMapper.selectList(wrapper);
     }
-    
+
     @Override
     @ForgeCacheable(cacheName = "system:dict-data", key = "#dictType")
     public List<SysDictData> selectDictDataByType(String dictType) {
@@ -98,30 +100,32 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
         }
         log.debug("请求清空受管字典缓存: dictType={}", dictType);
     }
-    
+
     @Override
     public SysDictData selectDictDataById(Long dictCode) {
         return dictDataMapper.selectById(dictCode);
     }
-    
+
     @Override
     public boolean insertDictData(SysDictDataDTO dto) {
         validateDictValueUnique(dto);
         SysDictData dictData = new SysDictData();
-        BeanUtil.copyProperties(dto, dictData);
+        BeanUtil.copyProperties(dto, dictData, "tenantId");
+        dictData.setTenantId(requireTrustedTenantId());
         boolean result = dictDataMapper.insert(dictData) > 0;
         if (result && dto.getDictType() != null) {
             eventPublisher.publishEvent(new DictChangeEvent(this, dto.getDictType()));
         }
         return result;
     }
-    
+
     @Override
     public boolean updateDictData(SysDictDataDTO dto) {
         SysDictData existing = dto.getDictCode() == null ? null : dictDataMapper.selectById(dto.getDictCode());
         validateDictValueUnique(dto);
         SysDictData dictData = new SysDictData();
-        BeanUtil.copyProperties(dto, dictData);
+        BeanUtil.copyProperties(dto, dictData, "tenantId");
+        dictData.setTenantId(existing == null ? requireTrustedTenantId() : existing.getTenantId());
         boolean result = dictDataMapper.updateById(dictData) > 0;
         if (result) {
             Set<String> dictTypes = new HashSet<>();
@@ -145,7 +149,15 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
             throw new BusinessException(DICT_VALUE_DUPLICATED_MESSAGE);
         }
     }
-    
+
+    private Long requireTrustedTenantId() {
+        Long tenantId = SessionHelper.getTenantId();
+        if (tenantId == null || tenantId <= 0) {
+            throw new BusinessException(UiMessages.translate("缺少可信租户上下文"));
+        }
+        return tenantId;
+    }
+
     @Override
     public boolean deleteDictDataById(Long dictCode) {
         SysDictData existing = dictDataMapper.selectById(dictCode);
@@ -155,7 +167,7 @@ public class SysDictDataServiceImpl extends ServiceImpl<SysDictDataMapper, SysDi
         }
         return result;
     }
-    
+
     @Override
     public boolean deleteDictDataByIds(Long[] dictCodes) {
         Set<String> dictTypes = new HashSet<>();

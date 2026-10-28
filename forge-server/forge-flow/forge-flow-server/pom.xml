@@ -80,6 +80,12 @@
             <artifactId>forge-plugin-generator</artifactId>
         </dependency>
 
+        <!-- Generator task bindings require the same persistent task owner in the Flow process. -->
+        <dependency>
+            <groupId>com.mdframe.forge</groupId>
+            <artifactId>forge-plugin-task</artifactId>
+        </dependency>
+
         <!-- 企业协同插件（COLLABORATION 消息渠道，待办企微卡片推送依赖本进程内渠道 Bean） -->
         <dependency>
             <groupId>com.mdframe.forge</groupId>
@@ -113,6 +119,19 @@
 
     <build>
         <finalName>${project.artifactId}</finalName>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../../db/migration</directory>
+                <targetPath>db/migration</targetPath>
+                <includes>
+                    <include>V1.0.2026100909__flow_terminal_event_outbox.sql</include>
+                    <include>V1.0.2026100911__flow_event_delivery_confirmation.sql</include>
+                </includes>
+            </testResource>
+        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

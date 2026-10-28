@@ -208,7 +208,7 @@
             :embedded-object-id="pageDesignObject.objectId"
             :embedded-suite-code="application.suiteCode"
             initial-panel="list"
-            :embedded-nav-panels="['list']"
+            :embedded-nav-panels="['list', 'form']"
             @dirty-change="embeddedDesignerDirty = $event"
             @saved="handleEmbeddedDesignerSaved"
           />

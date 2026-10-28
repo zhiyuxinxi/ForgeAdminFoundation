@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "capabilities": [
+    {
+      "id": "identity.organization",
+      "name": "统一组织业务目录",
+      "purpose": "按可信当前租户查询有效组织；system拥有组织主数据，业务保存稳定orgId而不是另建内部组织。",
+      "owner": "forge-starter-core公开TenantOrganizationDirectory；forge-plugin-system实现。",
+      "stage": "source-contract",
+      "keywords": [
+        "组织",
+        "部门",
+        "organization",
+        "orgId",
+        "directory"
+      ],
+      "usage": "注入com.mdframe.forge.starter.core.identity.TenantOrganizationDirectory；批量findActiveOrganizations后比较全部请求ID，缺失或停用不得作为新引用。分页findActiveChildren按同一父组织与末尾ID续取。业务自行校验操作和可选范围。",
+      "selection": "已明确引用现有内部组织时直接复用。外部单位/业务协作组与内部组织有真实语义差异才询问一次；名称是显示信息，身份始终是orgId。",
+      "limitations": "批量最多500，分页1..200；null父组织非法，0表示根。只检自身状态，不证明祖先或业务权限。不提供变更、任意租户或历史名称查询；历史ID/快照保留。目录源码和依赖声明不证明运行安装。",
+      "sources": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/src/main/java/com/mdframe/forge/starter/core/identity/TenantOrganizationDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.starter.core.identity;",
+            "public interface TenantOrganizationDirectory",
+            "List<TenantOrganization> findActiveOrganizations(Collection<Long> orgIds);",
+            "List<TenantOrganization> findActiveChildren(Long parentId, Long afterOrgId, int limit);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SystemTenantOrganizationDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.plugin.system.service.impl;",
+            "public class SystemTenantOrganizationDirectory implements TenantOrganizationDirectory"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/pom.xml",
+          "artifactId": "forge-starter-core",
+          "dependencies": []
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/pom.xml",
+          "artifactId": "forge-plugin-system",
+          "dependencies": [
+            "com.mdframe.forge:forge-starter-core"
+          ]
+        },
+        {
+          "path": "forge-server/forge-admin-server/pom.xml",
+          "artifactId": "forge-admin-server",
+          "dependencies": [
+            "com.mdframe.forge:forge-plugin-system"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "identity.member",
+      "name": "统一人员业务目录",
+      "purpose": "通过稳定userId查询当前租户有效成员，限定直接组织关系，不复制账号、成员或组织事实。",
+      "owner": "forge-starter-core公开TenantMemberDirectory；forge-plugin-system实现。",
+      "stage": "source-contract",
+      "keywords": [
+        "人员",
+        "成员",
+        "用户",
+        "member",
+        "userId",
+        "directory"
+      ],
+      "usage": "注入com.mdframe.forge.starter.core.identity.TenantMemberDirectory；已知ID用findActiveMembers，可选directOrgId限定直接组织；选择候选用findActiveMembersByOrg，保持同一组织/关键字分页。保存时比较实际返回与全部请求ID，并校验业务权限。",
+      "selection": "责任人字段引用userId，姓名只作显示或历史快照。直接组织成员与下级组织全部人员不相同，真实范围未明确时集中一次业务选择。",
+      "limitations": "批量最多500，分页1..200；候选查询必须指定有效直接组织。停用/缺失项被省略，空输入返回空；无任意租户、自动按姓名绑定、账号修改或审批人策略。历史记录不得因用户停用消失。",
+      "sources": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/src/main/java/com/mdframe/forge/starter/core/identity/TenantMemberDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.starter.core.identity;",
+            "public interface TenantMemberDirectory",
+            "List<TenantMember> findActiveMembers(Collection<Long> userIds, Long directOrgId);",
+            "List<TenantMember> findActiveMembersByOrg(Long directOrgId, String keyword, Long afterUserId, int limit);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SystemTenantMemberDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.plugin.system.service.impl;",
+            "public class SystemTenantMemberDirectory implements TenantMemberDirectory"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/pom.xml",
+          "artifactId": "forge-starter-core",
+          "dependencies": []
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/pom.xml",
+          "artifactId": "forge-plugin-system",
+          "dependencies": [
+            "com.mdframe.forge:forge-starter-core"
+          ]
+        },
+        {
+          "path": "forge-server/forge-admin-server/pom.xml",
+          "artifactId": "forge-admin-server",
+          "dependencies": [
+            "com.mdframe.forge:forge-plugin-system"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "identity.post",
+      "name": "统一岗位业务目录",
+      "purpose": "复用system岗位主数据，按可信当前租户校验稳定postId；部门岗位与orgId=null的租户级岗位分开选择，不创建另一套内部岗位。",
+      "owner": "forge-starter-core公开TenantPostDirectory；forge-plugin-system实现。",
+      "stage": "source-contract",
+      "keywords": [
+        "岗位",
+        "职位",
+        "post",
+        "postId",
+        "directory"
+      ],
+      "usage": "注入TenantPostDirectory。findActivePosts按明确ID批量核验；findActivePostsByOrg只查指定直接部门；findActiveTenantWidePosts明确只查orgId=null。动态低代码POST字段生成bigint/postSelect，沿受业务权限约束的references/{field}/posts候选和普通保存校验，显示快照单独存放。",
+      "selection": "已明确复用内部岗位时直接使用稳定postId。部门岗位与租户级岗位含义不同；已明确来源无需重问，真实来源歧义才用一次选择卡。",
+      "limitations": "输入ID最多500，候选页1..200，关键词最多100字符。目录不授予业务权限或证明人员持岗。业务ALL/TENANT_ALL才可选择租户级岗位，限定组织范围不可混入；SELF不推断持岗。历史未改变引用及快照保留。源码/依赖对齐不证明运行安装。",
+      "sources": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/src/main/java/com/mdframe/forge/starter/core/identity/TenantPostDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.starter.core.identity;",
+            "public interface TenantPostDirectory",
+            "List<TenantPost> findActivePosts(Collection<Long> postIds, Long directOrgId);",
+            "List<TenantPost> findActivePostsByOrg(Long directOrgId, String keyword, Long afterPostId, int limit);",
+            "List<TenantPost> findActiveTenantWidePosts(String keyword, Long afterPostId, int limit);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/src/main/java/com/mdframe/forge/plugin/system/service/impl/SystemTenantPostDirectory.java",
+          "declarations": [
+            "package com.mdframe.forge.plugin.system.service.impl;",
+            "public class SystemTenantPostDirectory implements TenantPostDirectory"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "path": "forge-server/forge-framework/forge-starter-parent/forge-starter-core/pom.xml",
+          "artifactId": "forge-starter-core",
+          "dependencies": []
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-system/pom.xml",
+          "artifactId": "forge-plugin-system",
+          "dependencies": [
+            "com.mdframe.forge:forge-starter-core"
+          ]
+        },
+        {
+          "path": "forge-server/forge-admin-server/pom.xml",
+          "artifactId": "forge-admin-server",
+          "dependencies": [
+            "com.mdframe.forge:forge-plugin-system"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workflow.process",
+      "name": "审批流程公共客户端",
+      "purpose": "通过已有FlowClient启动和查询审批流程，不将流程审批任务误当普通业务任务。",
+      "owner": "forge-flow-client的com.mdframe.forge.flow.client.FlowClient；流程服务拥有流程实例与审批状态。",
+      "stage": "source-contract",
+      "keywords": [
+        "流程",
+        "审批",
+        "workflow",
+        "FlowClient",
+        "process"
+      ],
+      "usage": "依赖com.mdframe.forge:forge-flow-client并读取当前公开重载。使用已有Spring自动配置客户端；业务键、稳定startRequestId及前序实例表达同轮重试/重新提交。核实际认证身份、流程服务配置与真实结果，不手工实例化旁路客户端。",
+      "selection": "审批、签收、驳回沿流程能力；普通人员工作义务沿task.business。已明确的流程模型直接沿用，名称相似不代表同一生命周期。",
+      "limitations": "源码客户端存在不证明流程服务可达、模型已发布或当前身份有权。必须按真实返回和未知结果恢复规则处理；不以HTTP成功推断业务审批完成。",
+      "sources": [
+        {
+          "path": "forge-server/forge-flow/forge-flow-client/src/main/java/com/mdframe/forge/flow/client/FlowClient.java",
+          "declarations": [
+            "package com.mdframe.forge.flow.client;",
+            "public class FlowClient",
+            "public FlowResult<String> startProcess(String modelKey, String businessKey, String businessType, String title, Map<String, Object> variables, String userId, String userName, String deptId, String deptName, String startRequestId, String previousProcessInstanceId) {",
+            "public FlowResult<FlowStartOutcome> getProcessStartStatus(String businessKey, String startRequestId) {"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "path": "forge-server/forge-flow/forge-flow-client/pom.xml",
+          "artifactId": "forge-flow-client",
+          "dependencies": []
+        },
+        {
+          "path": "forge-server/forge-admin-server/pom.xml",
+          "artifactId": "forge-admin-server",
+          "dependencies": [
+            "com.mdframe.forge:forge-flow-client"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "task.business",
+      "name": "普通业务任务公共引擎",
+      "purpose": "将检查、填写、完成义务等业务任务定义、实例、受理及终态回写交给统一owner；不同于Quartz机器调度或流程审批。",
+      "owner": "forge-task-api公开BusinessTaskEngine/TaskSourceHandler及PeriodicTaskEngine/TaskPeriodSourceHandler；forge-plugin-task实现，复用既有job与system。",
+      "stage": "source-candidate",
+      "keywords": [
+        "任务",
+        "任务引擎",
+        "派发",
+        "任务库",
+        "BusinessTaskEngine",
+        "task"
+      ],
+      "usage": "依赖forge-task-api并注入BusinessTaskEngine；define/definition/definitions区分不可变任务定义与实例。来源TaskSourceHandler必须实现validateCreation与validateCompletion，在当前事务内重新核验真实来源、接收人、到期时间及终态结果，再由authorize/onTerminal处理动作授权及回写。低代码来源lowcode.record通过BusinessBinding(type=TASK,targetType=OBJECT)保存definitionId、字段映射和状态合同；发布后GET /ai/crud/{configKey}/tasks读取绑定，POST /ai/crud/{configKey}/tasks/{bindingKey}/{recordId}按服务端映射生成并派发，GET同路径查询实例；客户端不能传tenant/assignee/回调URL。workspace/todo的业务任务页签消费assigned/get/start/complete；GET /ai/crud/{configKey}/task-actions向现有记录行投影派发/查看动作，GET /ai/business-tasks/{taskId}/form从实例固定已发布resultFields与modelSchema投影结果表单，不向用户提供原始JSON编辑器。 周期注入PeriodicTaskEngine或使用/api/task/schedules保存规则、preview、enabled、generate；内置task.periodic/self是公共确认来源。业务周期建源须显式实现TaskPeriodSourceHandler，在同master事务中准备当期真实来源，再沿原任务生命周期和回写。",
+      "selection": "任务库字段可能选择定义definitionId用于生成未来任务，或关联已存在taskId；需求已明确时直接执行，否则一次原生选择卡。选择结果与owner/API证据保存在已有任务材料中，续接沿同一来源。",
+      "limitations": "当前为源码候选，必须核编译、迁移、装配与运行后再称可用。调用者/租户来自可信上下文。当前回写只支持同master本地事务，禁止在回调内HTTP/消息或跨库写。分派不授予源业务记录权限，低代码仍需源query/edit与记录数据范围。结果表单支持已发布的单值文本、数值、布尔、日期与选项字段；复杂结果须由来源业务自己的执行入口提供。只有明确的task.periodic来源按其合同确认空对象，未知来源不推断相同语义；远程来源等未证明能力不能从名称推断。 周期规则和分配快照固定，已有Quartz每次重载发布人身份/权限，失败保留期次补发，最多200人/期。时间使用UTC，提前生成不提前执行，禁止逾期在公共完成入口生效。lowcode.record仍为一次来源绑定，尚未实现周期业务建源。定义与周期管理需task:definition:write/task:schedule:write；普通执行者沿task:instance:use及来源/assignee权限，不需管理权限。",
+      "sources": [
+        {
+          "path": "forge-server/forge-framework/forge-task-api/src/main/java/com/mdframe/forge/task/api/BusinessTaskEngine.java",
+          "declarations": [
+            "package com.mdframe.forge.task.api;",
+            "public interface BusinessTaskEngine",
+            "TaskDefinition define(Define command);",
+            "List<TaskDefinition> definitions(String sourceType, Long afterId, int limit);",
+            "BusinessTask create(Create command);",
+            "BusinessTask complete(long taskId, Complete command);",
+            "TaskDefinition definition(long id);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-task-api/src/main/java/com/mdframe/forge/task/api/TaskSourceHandler.java",
+          "declarations": [
+            "package com.mdframe.forge.task.api;",
+            "public interface TaskSourceHandler",
+            "String transactionDataSource();",
+            "void authorize(String sourceKey, Actor actor, Operation operation);",
+            "void onTerminal(BusinessTask task, Actor actor);",
+            "void validateCreation(TaskDefinition definition, BusinessTaskEngine.Create command, Actor actor);",
+            "void validateCompletion(BusinessTask task, String resultJson, Actor actor);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-task/src/main/java/com/mdframe/forge/plugin/task/service/DefaultBusinessTaskEngine.java",
+          "declarations": [
+            "package com.mdframe.forge.plugin.task.service;",
+            "public class DefaultBusinessTaskEngine implements BusinessTaskEngine"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator/service/task/LowcodeTaskPresentation.java",
+          "declarations": [
+            "package com.mdframe.forge.plugin.generator.service.task;",
+            "public class LowcodeTaskPresentation",
+            "public List<Action> actions(String configKey)",
+            "public Form form(long taskId)"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-task-api/src/main/java/com/mdframe/forge/task/api/PeriodicTaskEngine.java",
+          "declarations": [
+            "public interface PeriodicTaskEngine",
+            "Schedule define(Define command);",
+            "List<Occurrence> preview(Calendar calendar, int fromIndex, int count);",
+            "Run generate(long id, int limit);"
+          ]
+        },
+        {
+          "path": "forge-server/forge-framework/forge-task-api/src/main/java/com/mdframe/forge/task/api/TaskPeriodSourceHandler.java",
+          "declarations": [
+            "public interface TaskPeriodSourceHandler extends TaskSourceHandler",
+            "void validateSchedule(TaskDefinition definition, PeriodicTaskEngine.Define rule, Actor actor);"
+          ]
+        }
+      ],
+      "modules": [
+        {
+          "path": "forge-server/forge-framework/forge-task-api/pom.xml",
+          "artifactId": "forge-task-api",
+          "dependencies": []
+        },
+        {
+          "path": "forge-server/forge-framework/forge-plugin-parent/forge-plugin-task/pom.xml",
+          "artifactId": "forge-plugin-task",
+          "dependencies": [
+            "com.mdframe.forge:forge-task-api",
+            "com.mdframe.forge:forge-plugin-job",
+            "com.mdframe.forge:forge-plugin-system"
+          ]
+        },
+        {
+          "path": "forge-server/forge-admin-server/pom.xml",
+          "artifactId": "forge-admin-server",
+          "dependencies": [
+            "com.mdframe.forge:forge-plugin-task"
+          ]
+        }
+      ]
+    }
+  ]
+}

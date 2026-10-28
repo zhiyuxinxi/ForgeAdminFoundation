@@ -8,6 +8,7 @@ import {
   isRuntimeActionForPosition,
   matchesRuntimeDisplayCondition,
   resolveBusinessActionAttempt,
+  resolveDetailFlowRuntime,
   shouldHideProcessStartAction,
   shouldShowDetailFlowHistory,
   unwrapBusinessActionResult,
@@ -25,6 +26,18 @@ describe('business action runtime protocol', () => {
       isDetailMode: true,
       runtime: { documentEnabled: true },
     })).toBe(false)
+  })
+
+  it('keeps real record flow instance data when document runtime is unavailable', () => {
+    expect(resolveDetailFlowRuntime(
+      { documentEnabled: false, flowStatus: 'NOT_STARTED' },
+      { processInstanceId: 'process-2103233946292453378', status: 'IN_PROCESS' },
+    )).toMatchObject({
+      documentEnabled: false,
+      processInstanceId: 'process-2103233946292453378',
+      flowStatus: 'RUNNING',
+    })
+    expect(resolveDetailFlowRuntime(null, { status: 'DRAFT' })).toBeNull()
   })
 
   it('converts inputSchema into a managed AiForm schema', () => {

@@ -83,4 +83,22 @@ describe('aiTable checked row state', () => {
       textAlign: 'center',
     })
   })
+
+  it('reads default cell values from key-based columns and uses an em dash for missing values', () => {
+    const wrapper = mountTable({
+      columns: [
+        { key: 'name', title: '名称' },
+        { key: 'meta.owner', title: '负责人' },
+        { key: 'remark', title: '备注' },
+      ],
+      dataSource: [{ id: 1, name: '行动方案', meta: { owner: '张三' }, remark: '' }],
+    })
+
+    const columns = wrapper.findComponent(NDataTableStub).props('columns')
+    const row = { id: 1, name: '行动方案', meta: { owner: '张三' }, remark: '' }
+
+    expect(columns[0].render(row, 0).children).toBe('行动方案')
+    expect(columns[1].render(row, 0).children).toBe('张三')
+    expect(columns[2].render(row, 0).children).toBe('—')
+  })
 })

@@ -10,9 +10,9 @@
     <artifactId>forge-business-core</artifactId>
     <name>forge-business-core</name>
     <description>forge-business-core</description>
-    
+
     <dependencies>
-        
+
         <!-- Mysql驱动包 -->
         <dependency>
             <groupId>com.mysql</groupId>
@@ -24,12 +24,12 @@
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc8</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-web</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-auth</artifactId>
@@ -44,22 +44,22 @@
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-tenant</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-config</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-id</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-crypto</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-plugin-message</artifactId>
@@ -72,14 +72,14 @@
 
         <dependency>
             <groupId>com.mdframe.forge</groupId>
-            <artifactId>forge-plugin-generator</artifactId>
+            <artifactId>forge-lowcode-api</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>com.mdframe.forge</groupId>
             <artifactId>forge-starter-api-config</artifactId>
         </dependency>
-        
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -90,8 +90,8 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-    
+
     </dependencies>
-    
+
 
 </project>

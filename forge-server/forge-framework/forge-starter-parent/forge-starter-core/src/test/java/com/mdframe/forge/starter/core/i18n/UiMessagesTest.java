@@ -137,6 +137,32 @@ class UiMessagesTest {
         assertEquals("请先创建租户再授权业务数据源", UiMessages.translate("请先创建租户再授权业务数据源"));
     }
 
+    @Test void businessValidationAliasesReachTheErrorHandlerWithoutOverridingCoreOrData() {
+        LocaleContextHolder.setLocale(Locale.US);
+        assertEquals("Business test name is required", UiMessages.translate("业务测试名称不能为空"));
+        var errors = new org.springframework.validation.BeanPropertyBindingResult(new Object(), "request");
+        errors.addError(new org.springframework.validation.FieldError("request", "name", "业务测试名称不能为空"));
+        var response = new com.mdframe.forge.starter.core.exception.GlobalExceptionHandler()
+                .handleBindException(new org.springframework.validation.BindException(errors), new MockHttpServletRequest());
+        assertEquals(400, response.getCode());
+        assertEquals("name: Business test name is required", response.getMessage());
+
+        Map<String, String> original = Map.of("name", "业务测试名称不能为空");
+        RespInfo<?> businessError = RespInfo.build(409, "业务测试名称不能为空", original);
+        assertEquals(409, businessError.getCode());
+        assertEquals("Business test name is required", businessError.getMessage());
+        assertSame(original, businessError.getData());
+        assertEquals("业务测试名称不能为空", original.get("name"));
+        assertEquals("Operation successful", UiMessages.translate("操作成功"));
+        assertEquals("业务客户：{0}", UiMessages.translate("业务客户：{0}"));
+        assertEquals("未登记的客户文本", UiMessages.translate("未登记的客户文本"));
+
+        LocaleContextHolder.setLocale(Locale.SIMPLIFIED_CHINESE);
+        assertEquals("业务测试名称不能为空", UiMessages.translate("业务测试名称不能为空"));
+        LocaleContextHolder.setLocale(Locale.GERMAN);
+        assertEquals("业务测试名称不能为空", UiMessages.translate("业务测试名称不能为空"));
+    }
+
     @Test void rawCatalogCheckRejectsMissingKeysThatResourceBundleFallbackHides() throws IOException {
         String chinese = "shared=共享\nmissingEnglish=仅中文\n";
         String english = "shared=Shared\n";

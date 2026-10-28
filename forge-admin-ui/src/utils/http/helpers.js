@@ -34,8 +34,27 @@ function resolveErrorTitle(code) {
   }
 }
 
-function showCommonErrorTip(code, message, detail) {
-  if (window.$dialog?.error) {
+const TECHNICAL_SERVER_MESSAGE = /I\/O error|NullPointerException|SQLException|\w+(?:Exception|Error)\b|\bat\s+[\w.$]+\([^)]*\.java:\d+\)|org\.springframework\.|com\.fasterxml\.jackson\./i
+
+function sanitizeServerError(code, message, detail) {
+  const text = String(message || '')
+  if (Number(code) < 500 || !TECHNICAL_SERVER_MESSAGE.test(text))
+    return { message, detail }
+  console.error('[HTTP server error]', { code, method: detail?.method, traceId: detail?.traceId })
+  return {
+    message: localizeLabel('操作失败，请稍后重试或联系管理员'),
+    detail: detail ? { method: detail.method, url: detail.url, traceId: detail.traceId } : null,
+  }
+}
+
+function isWriteRequest(method) {
+  const normalized = String(method || '').toLowerCase()
+  return ['post', 'put', 'patch', 'delete'].includes(normalized)
+}
+
+function showCommonErrorTip(code, message, detail, method) {
+  // 查询类失败使用轻量 Toast；提交类失败才使用居中模态错误框。
+  if (window.$dialog?.error && (!method || isWriteRequest(method))) {
     showRequestErrorDialog({
       title: resolveErrorTitle(code),
       code,
@@ -50,7 +69,7 @@ function showCommonErrorTip(code, message, detail) {
   window.$message?.error(message)
 }
 
-export function resolveResError(code, message, needTip = true, detail = null) {
+export function resolveResError(code, message, needTip = true, detail = null, method = detail?.method) {
   // 检查是否在登录页面
   const isLoginPage = window.location.pathname === '/login'
   const authStore = useAuthStore()
@@ -89,8 +108,9 @@ export function resolveResError(code, message, needTip = true, detail = null) {
       message = message ?? t('common.unknownError', { code })
       break
   }
+  const safe = sanitizeServerError(code, message, detail)
   if (needTip) {
-    showCommonErrorTip(code, message, detail)
+    showCommonErrorTip(code, safe.message, safe.detail, method)
   }
-  return message
+  return safe.message
 }

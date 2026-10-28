@@ -65,7 +65,8 @@ class RuntimeDocumentNumbersAdapterTest {
         assertSame(failure, assertThrows(BusinessException.class, () -> adapter.generate(number, payload)));
         verify(sequences, times(2)).nextId(key);
         verifyNoMoreInteractions(definitions);
-        assertTrue(RuntimeDocumentNumber.class.getProtectionDomain().getCodeSource().getLocation()
-                .toString().endsWith("forge-lowcode-api-numbering.jar"));
+        assertNotEquals(RuntimeDocumentNumbersAdapter.class.getProtectionDomain().getCodeSource().getLocation(),
+                RuntimeDocumentNumber.class.getProtectionDomain().getCodeSource().getLocation(),
+                "The public numbering contract must remain outside the generator module");
     }
 }

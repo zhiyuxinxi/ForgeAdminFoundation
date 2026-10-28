@@ -22,6 +22,29 @@ import static org.mockito.Mockito.when;
 class FlowClientDelegatedIdentityTest {
 
     @Test
+    void shouldLoadCcFormWithCurrentDelegatedIdentity() {
+        RestTemplate restTemplate = mock(RestTemplate.class);
+        when(restTemplate.exchange(
+                eq("http://flow/api/flow/cc/form/cc-1"),
+                eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(
+                        "{\"code\":200,\"msg\":\"ok\",\"data\":{\"businessKey\":\"example_record:1\"}}",
+                        HttpStatus.OK));
+        FlowClient client = new FlowClient(restTemplate, "http://flow", "static-token");
+        client.setTokenProvider(() -> "delegated-token");
+
+        FlowResult<Map<String, Object>> result = client.getCcFormInfo("cc-1");
+
+        assertThat(result.isSuccess()).isTrue();
+        ArgumentCaptor<HttpEntity<String>> entity = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(eq("http://flow/api/flow/cc/form/cc-1"),
+                eq(HttpMethod.GET), entity.capture(), eq(String.class));
+        assertThat(entity.getValue().getHeaders().getFirst("Authorization"))
+                .isEqualTo("Bearer delegated-token");
+    }
+
+
+    @Test
     void shouldStartDelegatedFlowWithoutClientSuppliedUserFields() {
         RestTemplate restTemplate = mock(RestTemplate.class);
         when(restTemplate.exchange(

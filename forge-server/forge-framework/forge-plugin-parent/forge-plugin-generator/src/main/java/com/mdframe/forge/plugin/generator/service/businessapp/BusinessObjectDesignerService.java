@@ -142,6 +142,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
             Map.entry("regionTreeSelect", new ComponentFieldDefaults("REGION", "varchar", 32, 2, "eq")),
             Map.entry("orgTreeSelect", new ComponentFieldDefaults("DEPT", "bigint", null, null, "eq")),
             Map.entry("userSelect", new ComponentFieldDefaults("USER", "bigint", null, null, "eq")),
+            Map.entry("postSelect", new ComponentFieldDefaults("POST", "bigint", null, null, "eq")),
             Map.entry("fileUpload", new ComponentFieldDefaults("FILE", "varchar", 512, 2, "eq")),
             Map.entry("imageUpload", new ComponentFieldDefaults("IMAGE", "varchar", 512, 2, "eq")),
             Map.entry("objectReference", new ComponentFieldDefaults("REFERENCE", "bigint", null, null, "eq")),
@@ -152,7 +153,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
     );
     private static final Set<String> BUSINESS_COMPONENT_TYPES = Set.of(
             "select", "dictSelect", "radio", "checkbox", "cascader",
-            "regionTreeSelect", "orgTreeSelect", "userSelect",
+            "regionTreeSelect", "orgTreeSelect", "userSelect", "postSelect",
             "fileUpload", "imageUpload", "objectReference", "recordSelector"
     );
     private static final Set<String> GENERIC_COMPONENT_TYPES = Set.of(
@@ -2332,6 +2333,9 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
         if ("orgTreeSelect".equals(componentType) || "DEPT".equals(businessType)) {
             return "orgTreeSelect";
         }
+        if ("postSelect".equals(componentType) || "POST".equals(businessType)) {
+            return "postSelect";
+        }
         if ("userSelect".equals(componentType) || "USER".equals(businessType)) {
             return "userSelect";
         }
@@ -2356,7 +2360,7 @@ public class BusinessObjectDesignerService implements BusinessObjectDesignContex
 
     private String buildFormPlaceholder(String componentKey, String label) {
         if (Set.of("select", "radio", "checkbox", "dictSelect", "date", "datetime", "time",
-                "regionTreeSelect", "orgTreeSelect", "userSelect", "fileUpload", "imageUpload",
+                "regionTreeSelect", "orgTreeSelect", "userSelect", "postSelect", "fileUpload", "imageUpload",
                 "objectReference", "recordSelector").contains(componentKey)) {
             return "请选择" + label;
         }

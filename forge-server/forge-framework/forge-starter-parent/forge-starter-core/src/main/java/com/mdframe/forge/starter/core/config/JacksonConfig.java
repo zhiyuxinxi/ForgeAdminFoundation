@@ -3,6 +3,7 @@ package com.mdframe.forge.starter.core.config;
 import com.mdframe.forge.starter.core.i18n.UiMessages;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
@@ -17,7 +18,10 @@ import org.springframework.context.annotation.Bean;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.TimeZone;
@@ -35,19 +39,19 @@ public class JacksonConfig {
      * 支持多种日期格式的 LocalDateTime 反序列化器
      */
     public static class MultiFormatLocalDateTimeDeserializer extends JsonDeserializer<LocalDateTime> {
-        
+
         private static final DateTimeFormatter DEFAULT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        
+
         @Override
         public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
             String value = p.getValueAsString();
             if (value == null || value.isEmpty()) {
                 return null;
             }
-            
+
             // 去除前后空格
             value = value.trim();
-            
+
             // 尝试多种格式解析
             try {
                 // 先尝试默认格式
@@ -75,6 +79,43 @@ public class JacksonConfig {
         }
     }
 
+    /**
+     * 支持多种日期格式的 LocalDate 反序列化器。
+     * 兼容前端 n-date-picker 回传的毫秒时间戳（number）与 "yyyy-MM-dd" / ISO 字符串。
+     */
+    public static class MultiFormatLocalDateDeserializer extends JsonDeserializer<LocalDate> {
+
+        private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        @Override
+        public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            // 数字：前端日期选择器回传毫秒时间戳，按系统默认时区换算为日期
+            if (p.getCurrentToken() == JsonToken.VALUE_NUMBER_INT) {
+                long millis = p.getLongValue();
+                return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate();
+            }
+            String value = p.getValueAsString();
+            if (value == null || value.isEmpty()) {
+                return null;
+            }
+            value = value.trim();
+            try {
+                return LocalDate.parse(value, FORMATTER);
+            } catch (DateTimeParseException e1) {
+                // 兼容 "yyyy-MM-ddTHH:mm:ss" / "yyyy-MM-dd HH:mm:ss" 等，截取前 10 位日期
+                if (value.length() >= 10) {
+                    try {
+                        return LocalDate.parse(value.substring(0, 10));
+                    } catch (DateTimeParseException ignored) {
+                        // 落入统一报错
+                    }
+                }
+                log.warn("无法解析日期: {}", value);
+                throw new IOException("无法解析日期: " + value, e1);
+            }
+        }
+    }
+
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer customizer() {
         return builder -> {
@@ -88,6 +129,7 @@ public class JacksonConfig {
             javaTimeModule.addSerializer(LocalDateTime.class, new LocalDateTimeSerializer(formatter));
             // 使用支持多种格式的反序列化器
             javaTimeModule.addDeserializer(LocalDateTime.class, new MultiFormatLocalDateTimeDeserializer());
+            javaTimeModule.addDeserializer(LocalDate.class, new MultiFormatLocalDateDeserializer());
             builder.modules(javaTimeModule);
             builder.timeZone(TimeZone.getDefault());
             log.info("初始化 jackson 配置");

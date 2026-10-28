@@ -9,7 +9,6 @@ import com.mdframe.forge.plugin.ai.model.mapper.AiModelMapper;
 import com.mdframe.forge.plugin.ai.provider.mapper.AiProviderMapper;
 import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
@@ -29,7 +28,7 @@ class KnowledgeSearchVisibilityTest {
         live.setDocumentId(2L);
         live.setContent("current database content");
         when(chunks.selectSearchableByVectorIds(eq(1L), anyList())).thenReturn(List.of(live));
-        List<KnowledgeSearchResult> results = ReflectionTestUtils.invokeMethod(service, "searchableResults", 1L,
+        List<KnowledgeSearchResult> results = service.resolveSearchResults(1L,
                 List.of(hit("deleted", 3L), hit("foreign", 4L), hit("live", 999L), hit("live", 2L)));
         assertNotNull(results);
         assertEquals(1, results.size());

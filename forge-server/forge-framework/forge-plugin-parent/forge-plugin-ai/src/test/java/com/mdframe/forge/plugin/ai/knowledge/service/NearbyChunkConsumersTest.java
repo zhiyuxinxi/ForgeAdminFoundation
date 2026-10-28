@@ -104,7 +104,7 @@ class NearbyChunkConsumersTest {
         return result;
     }
 
-    private static AiKnowledgeChunk chunk(long id, Long document, int index) {
+    private static AiKnowledgeChunk chunk(long id, Long document, Integer index) {
         AiKnowledgeChunk chunk = new AiKnowledgeChunk();
         chunk.setId(id);
         chunk.setDocumentId(document);
@@ -163,6 +163,12 @@ class NearbyChunkConsumersTest {
             VectorStoreService vectors = mock(VectorStoreService.class);
             when(factory.getService(store)).thenReturn(vectors);
             when(vectors.search(any())).thenReturn(hits.stream().map(Fixture::vectorResult).toList());
+            List<String> vectorIds = hits.stream().map(KnowledgeSearchResult::getChunkId).distinct().toList();
+            when(chunks.selectSearchableByVectorIds(5L, vectorIds)).thenReturn(hits.stream().map(hit -> {
+                AiKnowledgeChunk live = chunk(Long.parseLong(hit.getChunkId()), hit.getDocumentId(), hit.getChunkIndex());
+                live.setVectorId(hit.getChunkId());
+                return live;
+            }).toList());
             return new KnowledgeSearchService(knowledge, chunks, models, providers, adapters,
                     mock(AiSecretCrypto.class), factory, stores);
         }

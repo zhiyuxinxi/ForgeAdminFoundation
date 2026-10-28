@@ -74,6 +74,14 @@ class AiProviderBaseUrlPolicyTest {
 
     @Test
     void blankBaseUrlWithoutDefaultShouldFail() {
+        assertThrows(BusinessException.class,
+                () -> AiProviderBaseUrlPolicy.normalizeAndValidate("openai_compatible", null, null));
+        assertThrows(BusinessException.class,
+                () -> AiProviderBaseUrlPolicy.normalizeAndValidate("openai_compatible", null));
+        assertThrows(BusinessException.class,
+                () -> AiProviderBaseUrlPolicy.normalizeAndValidate("openai_compatible", null, " "));
+        assertThrows(BusinessException.class,
+                () -> AiProviderBaseUrlPolicy.normalizeAndValidate("openai_compatible", "", null));
         // azure/custom 无固定官方端点，空地址仍需手动填写
         assertThrows(BusinessException.class,
                 () -> AiProviderBaseUrlPolicy.normalizeAndValidate("openai_compatible", "azure", null));

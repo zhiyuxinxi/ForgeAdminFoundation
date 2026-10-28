@@ -268,6 +268,7 @@ const fieldTypeOptions = [
   { label: '附件', value: 'FILE' },
   { label: '图片', value: 'IMAGE' },
   { label: '人员', value: 'USER' },
+  { label: '岗位', value: 'POST' },
   { label: '部门', value: 'DEPT' },
   { label: '地区', value: 'REGION' },
   { label: '引用对象', value: 'REFERENCE' },
@@ -275,6 +276,8 @@ const fieldTypeOptions = [
 
 const databaseMappingByField = computed(() => {
   const mappings = new Map()
+  if (props.tableMapping?.syncStatus === 'CHECK_FAILED')
+    return mappings
   for (const item of props.tableMapping?.fields || []) {
     if (item.fieldCode)
       mappings.set(`field:${item.fieldCode}`, item)

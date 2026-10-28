@@ -75,6 +75,9 @@ public class LowcodePublishService {
     private final LowcodeRuntimeDataSourceResolver runtimeDataSourceResolver;
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private com.mdframe.forge.plugin.generator.service.task.TaskBindingAuthoring taskBindings;
     /**
      * 领域菜单父级缓存（domainId → menuParentId），发布过程中多次递归查询时避免重复读写 sys_resource。
      */
@@ -128,6 +131,9 @@ public class LowcodePublishService {
         LowcodeRuntimeConfig runtimeConfig = runtimeConfigBuilder.buildRuntimeConfig(config.getConfigKey(), modelSchema, pageSchema);
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig, runtimeContext);
         applyDomainToConfig(config, domainContext);
+        if (taskBindings != null) {
+            taskBindings.publish(config);
+        }
         applyMenuConfig(config, dto);
         config.setMountTarget(resolveMountTarget(dto, config));
 
@@ -181,6 +187,9 @@ public class LowcodePublishService {
         applyRuntimeConfig(config, modelSchema, pageSchema, runtimeConfig, runtimeContext);
         applyDomainToConfig(config, domainContext);
         applyVersionRuntimeFields(config, targetVersion, snapshot, runtimeConfig);
+        if (taskBindings != null) {
+            taskBindings.retainPublishedLinks(config);
+        }
         applySnapshotMenuFields(config, snapshot);
 
         Long menuParentId = null;

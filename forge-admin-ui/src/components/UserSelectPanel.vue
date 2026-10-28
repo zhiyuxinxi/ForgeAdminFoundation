@@ -71,9 +71,9 @@
                 v-for="user in userList"
                 :key="user.id"
                 class="user-item"
-                :class="{ 'is-checked': checkedUserIds.includes(user.id), 'is-assigned': assignedSet.has(user.id) }"
+                :class="{ 'is-checked': checkedUserIds.includes(String(user.id)), 'is-assigned': assignedSet.has(String(user.id)) }"
               >
-                <n-checkbox :value="user.id" :disabled="assignedSet.has(user.id)" class="user-item-checkbox" />
+                <n-checkbox :value="String(user.id)" :disabled="assignedSet.has(String(user.id))" class="user-item-checkbox" />
                 <div class="user-item-avatar">
                   <i class="i-material-symbols:person text-18" />
                 </div>
@@ -81,7 +81,7 @@
                   <span class="user-item-name">{{ user.realName || user.username }}</span>
                   <span class="user-item-account">{{ user.username }}</span>
                   <span v-if="user.orgName" class="user-item-org">{{ user.orgName }}</span>
-                  <span v-if="assignedSet.has(user.id)" class="user-item-assigned-tag">{{ localizeLabel('已授权') }}</span>
+                  <span v-if="assignedSet.has(String(user.id))" class="user-item-assigned-tag">{{ localizeLabel('已授权') }}</span>
                 </div>
               </div>
             </n-checkbox-group>
@@ -164,7 +164,7 @@ const props = defineProps({
 const emit = defineEmits(['update:show', 'confirm'])
 
 // 已授权用户 ID 集合（用于快速判断）
-const assignedSet = computed(() => new Set(props.assignedUserIds))
+const assignedSet = computed(() => new Set(props.assignedUserIds.map(String)))
 
 const visible = ref(false)
 const orgLoading = ref(false)
@@ -343,7 +343,10 @@ function handlePageSizeChange(size) {
 }
 
 function handleConfirm() {
-  emit('confirm', [...checkedUserIds.value])
+  const selectedIds = [...checkedUserIds.value]
+  const selectedSet = new Set(selectedIds.map(String))
+  const selectedUsers = userList.value.filter(user => selectedSet.has(String(user.id)))
+  emit('confirm', selectedIds, selectedUsers)
 }
 
 function handleClose() {

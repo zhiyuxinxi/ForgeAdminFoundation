@@ -247,6 +247,7 @@ export default {
   '电子邮箱': 'Email',
   '入职日期': 'Hire date',
   '岗位': 'Position',
+  '岗位选择': 'Post selection',
   '职位': 'Position',
   '在职': 'Employed',
   '离职': 'Left',

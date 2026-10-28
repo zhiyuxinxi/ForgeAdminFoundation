@@ -101,6 +101,13 @@ public class BusinessFlowController {
         return RespInfo.success(flowService.getTaskFormReadonlyContext(query));
     }
 
+    @GetMapping("/task-form-context/cc/{ccId}")
+    @SaCheckPermission("flow:cc:business-form")
+    @OperationLog(module = "业务流程", type = OperationType.QUERY, desc = "查询本人抄送业务表单上下文")
+    public RespInfo<BusinessTaskFormContextVO> ccTaskFormReadonlyContext(@PathVariable String ccId) {
+        return RespInfo.success(flowService.getCcTaskFormReadonlyContext(ccId));
+    }
+
     @PutMapping("/task-form-context")
     @OperationLog(module = "业务流程", type = OperationType.UPDATE, desc = "保存业务待办表单字段")
     public RespInfo<BusinessTaskFormContextVO> saveTaskFormContext(@RequestBody BusinessTaskFormSaveDTO dto) {

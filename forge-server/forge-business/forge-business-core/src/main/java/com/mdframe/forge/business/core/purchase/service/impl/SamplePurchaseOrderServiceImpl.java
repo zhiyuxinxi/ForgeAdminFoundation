@@ -22,10 +22,11 @@ import com.mdframe.forge.flow.client.FlowResult;
 import com.mdframe.forge.flow.client.annotation.FlowBind;
 import com.mdframe.forge.flow.client.annotation.FlowCallback;
 import com.mdframe.forge.flow.client.annotation.FlowEventContext;
-import com.mdframe.forge.plugin.generator.domain.entity.AiBusinessBinding;
-import com.mdframe.forge.plugin.generator.mapper.BusinessBindingMapper;
+import com.mdframe.forge.lowcode.api.binding.BusinessFlowBinding;
+import com.mdframe.forge.lowcode.api.binding.BusinessFlowBindingQuery;
 import com.mdframe.forge.starter.core.domain.PageQuery;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.i18n.UiMessages;
 import com.mdframe.forge.starter.core.session.SessionHelper;
 import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import lombok.RequiredArgsConstructor;
@@ -61,7 +62,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
 
     private final FlowClient flowClient;
     private final IdentifierGenerator identifierGenerator;
-    private final BusinessBindingMapper businessBindingMapper;
+    private final BusinessFlowBindingQuery businessFlowBindingQuery;
 
     @Override
     public IPage<SamplePurchaseOrderVO> page(PageQuery pageQuery, SamplePurchaseOrderQuery query) {
@@ -74,11 +75,11 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     @Override
     public SamplePurchaseOrderVO detail(Long id) {
         if (id == null) {
-            throw new BusinessException("采购单ID不能为空");
+            throw new BusinessException(UiMessages.label("采购单ID不能为空", "Purchase order ID is required"));
         }
         SamplePurchaseOrderVO detail = getBaseMapper().selectDetail(resolveTenantId(), id);
         if (detail == null) {
-            throw new BusinessException("采购单不存在");
+            throw new BusinessException(UiMessages.label("采购单不存在", "Purchase order not found"));
         }
         reconcileStatusesWithActiveTasks(List.of(detail));
         return detail;
@@ -101,11 +102,11 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     @Override
     public SamplePurchaseOrderVO detailByBusinessKey(String businessKey) {
         if (!StringUtils.hasText(businessKey)) {
-            throw new BusinessException("采购单业务Key不能为空");
+            throw new BusinessException(UiMessages.label("采购单业务Key不能为空", "Purchase order business key is required"));
         }
         SamplePurchaseOrder entity = getBaseMapper().selectByBusinessKey(resolveTenantId(), businessKey.trim());
         if (entity == null) {
-            throw new BusinessException("采购单不存在");
+            throw new BusinessException(UiMessages.label("采购单不存在", "Purchase order not found"));
         }
         return detail(entity.getId());
     }
@@ -134,12 +135,12 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     @Transactional(rollbackFor = Exception.class)
     public void update(SamplePurchaseOrderDTO dto) {
         if (dto == null || dto.getId() == null) {
-            throw new BusinessException("采购单ID不能为空");
+            throw new BusinessException(UiMessages.label("采购单ID不能为空", "Purchase order ID is required"));
         }
         validateBase(dto);
         SamplePurchaseOrder entity = requireEntity(dto.getId());
         if (!STATUS_DRAFT.equals(entity.getStatus()) && !STATUS_NEED_MODIFY.equals(entity.getStatus())) {
-            throw new BusinessException("只有草稿或待修改采购单允许编辑");
+            throw new BusinessException(UiMessages.label("只有草稿或待修改采购单允许编辑", "Only draft or pending-modification purchase orders can be edited"));
         }
         applyBaseFields(entity, dto);
         updateById(entity);
@@ -150,7 +151,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     public void delete(Long id) {
         SamplePurchaseOrder entity = requireEntity(id);
         if (!List.of(STATUS_DRAFT, STATUS_REJECTED, STATUS_CANCELED).contains(entity.getStatus())) {
-            throw new BusinessException("当前状态不允许删除");
+            throw new BusinessException(UiMessages.label("当前状态不允许删除", "Deletion is not allowed in the current status"));
         }
         removeById(id);
     }
@@ -159,7 +160,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     public String submit(Long id, SamplePurchaseOrderSubmitDTO dto) {
         SamplePurchaseOrder entity = requireEntity(id);
         if (!STATUS_DRAFT.equals(entity.getStatus())) {
-            throw new BusinessException("只有草稿采购单允许发起流程");
+            throw new BusinessException(UiMessages.label("只有草稿采购单允许发起流程", "Only draft purchase orders can start a workflow"));
         }
         validateSubmit(dto);
         ensureFlowModel();
@@ -202,7 +203,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                 SessionHelper.getMainOrgId() == null ? null : String.valueOf(SessionHelper.getMainOrgId()),
                 null);
         if (result == null || !result.isSuccess() || !StringUtils.hasText(result.getData())) {
-            throw new BusinessException("流程发起失败: " + (result == null ? "无返回结果" : result.getMsg()));
+            throw new BusinessException(UiMessages.label("流程发起失败: ", "Failed to start workflow: ")
+                    + (result == null ? UiMessages.label("无返回结果", "no response") : result.getMsg()));
         }
 
         // 流程启动成功后更新单据状态（自动提交，不占用长事务）
@@ -218,7 +220,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         } catch (Exception e) {
             log.error("流程已启动但单据状态更新失败，请人工处理: orderId={}, processInstanceId={}",
                     entity.getId(), result.getData(), e);
-            throw new BusinessException("流程已启动但单据状态更新失败，请联系管理员处理");
+            throw new BusinessException(UiMessages.label("流程已启动但单据状态更新失败，请联系管理员处理", "Workflow started but document status update failed; contact an administrator"));
         }
         return result.getData();
     }
@@ -227,7 +229,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     @Transactional(rollbackFor = Exception.class)
     public SamplePurchaseOrderVO saveTaskFields(SamplePurchaseOrderTaskSaveDTO dto) {
         if (dto == null) {
-            throw new BusinessException("保存参数不能为空");
+            throw new BusinessException(UiMessages.label("保存参数不能为空", "Save parameters are required"));
         }
         SamplePurchaseOrder entity = resolveTaskEntity(dto);
         String taskDefKey = StringUtils.hasText(dto.getTaskDefKey()) ? dto.getTaskDefKey() : "";
@@ -242,7 +244,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                 }
                 if (dto.getAmountCent() != null) {
                     if (dto.getAmountCent() <= 0) {
-                        throw new BusinessException("采购金额必须大于0");
+                        throw new BusinessException(UiMessages.label("采购金额必须大于0", "Purchase amount must be greater than zero"));
                     }
                     entity.setAmountCent(dto.getAmountCent());
                 }
@@ -265,7 +267,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                 ensureApprovalState(entity, dto);
                 entity.setCountersignRemark(dto.getCountersignRemark());
             }
-            default -> throw new BusinessException("当前节点不允许保存采购单字段: " + taskDefKey);
+            default -> throw new BusinessException(UiMessages.label("当前节点不允许保存采购单字段: ", "Purchase order fields cannot be saved at the current task: ") + taskDefKey);
         }
         updateById(entity);
         return detail(entity.getId());
@@ -283,8 +285,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         if (created) {
             FlowResult<Map<String, Object>> createdResult = flowClient.createModel(buildFlowModelPayload(null, bpmnXml));
             if (createdResult == null || !createdResult.isSuccess() || createdResult.getData() == null) {
-                throw new BusinessException("创建采购单测试流程失败: "
-                        + (createdResult == null ? "无返回结果" : createdResult.getMsg()));
+                throw new BusinessException(UiMessages.label("创建采购单测试流程失败: ", "Failed to create purchase order test workflow: ")
+                        + (createdResult == null ? UiMessages.label("无返回结果", "no response") : createdResult.getMsg()));
             }
             model = createdResult.getData();
         } else {
@@ -294,8 +296,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             if (!StringUtils.hasText(existingBpmnXml)) {
                 FlowResult<Map<String, Object>> updatedResult = flowClient.updateModel(buildFlowModelPayload(model.get("id"), bpmnXml));
                 if (updatedResult == null || !updatedResult.isSuccess() || updatedResult.getData() == null) {
-                    throw new BusinessException("更新采购单测试流程失败: "
-                            + (updatedResult == null ? "无返回结果" : updatedResult.getMsg()));
+                    throw new BusinessException(UiMessages.label("更新采购单测试流程失败: ", "Failed to update purchase order test workflow: ")
+                            + (updatedResult == null ? UiMessages.label("无返回结果", "no response") : updatedResult.getMsg()));
                 }
                 model = updatedResult.getData();
                 shouldDeploy = true;
@@ -308,8 +310,8 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         if (shouldDeploy) {
             FlowResult<String> deployedResult = flowClient.deployModel(Objects.toString(model.get("id"), ""));
             if (deployedResult == null || !deployedResult.isSuccess()) {
-                throw new BusinessException("发布采购单测试流程失败: "
-                        + (deployedResult == null ? "无返回结果" : deployedResult.getMsg()));
+                throw new BusinessException(UiMessages.label("发布采购单测试流程失败: ", "Failed to deploy purchase order test workflow: ")
+                        + (deployedResult == null ? UiMessages.label("无返回结果", "no response") : deployedResult.getMsg()));
             }
             deploymentId = deployedResult.getData();
         }
@@ -320,8 +322,12 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
         vo.setDeploymentId(deploymentId);
         vo.setStatus(shouldDeploy ? 1 : toInteger(model.get("status")));
         vo.setMessage(shouldDeploy
-                ? preserved ? "采购单测试流程已发布，已保留流程设计器中的节点配置" : "采购单测试流程已初始化并发布"
-                : preserved ? "采购单测试流程已存在，已保留流程设计器中的节点配置" : "采购单测试流程已存在，无需重复发布");
+                ? preserved
+                ? UiMessages.label("采购单测试流程已发布，已保留流程设计器中的节点配置", "Purchase order test workflow deployed; node configuration from the workflow designer was preserved")
+                : UiMessages.label("采购单测试流程已初始化并发布", "Purchase order test workflow initialized and deployed")
+                : preserved
+                ? UiMessages.label("采购单测试流程已存在，已保留流程设计器中的节点配置", "Purchase order test workflow already exists; node configuration from the workflow designer was preserved")
+                : UiMessages.label("采购单测试流程已存在，无需重复发布", "Purchase order test workflow already exists and does not need to be redeployed"));
         return vo;
     }
 
@@ -438,7 +444,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             return;
         }
         if (!STATUS_NEED_MODIFY.equals(entity.getStatus())) {
-            throw new BusinessException("当前采购单不是待修改状态，不能执行申请人修改节点");
+            throw new BusinessException(UiMessages.label("当前采购单不是待修改状态，不能执行申请人修改节点", "The purchase order is not pending modification; the applicant modification task cannot be performed"));
         }
     }
 
@@ -452,7 +458,7 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
             return;
         }
         if (!STATUS_IN_PROCESS.equals(entity.getStatus())) {
-            throw new BusinessException("当前采购单不是审批中状态，不能保存审批节点字段");
+            throw new BusinessException(UiMessages.label("当前采购单不是审批中状态，不能保存审批节点字段", "The purchase order is not under approval; approval task fields cannot be saved"));
         }
     }
 
@@ -584,19 +590,16 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
     }
 
     private JSONObject loadFlowBindingConfig() {
-        AiBusinessBinding binding = businessBindingMapper.selectBindingByTypeAndCode(
-                resolveTenantId(), "OBJECT", BUSINESS_TYPE, "FLOW");
-        if (binding == null) {
-            binding = businessBindingMapper.selectBindingByTypeAndCode(
-                    resolveTenantId(), "OBJECT", BUSINESS_TYPE, "APPROVAL");
-        }
-        if (binding == null || !StringUtils.hasText(binding.getBindingConfig())) {
+        BusinessFlowBinding binding = businessFlowBindingQuery
+                .findForObject(resolveTenantId(), BUSINESS_TYPE)
+                .orElse(null);
+        if (binding == null || !StringUtils.hasText(binding.bindingConfig())) {
             return new JSONObject();
         }
         try {
-            return JSON.parseObject(binding.getBindingConfig());
+            return JSON.parseObject(binding.bindingConfig());
         } catch (Exception e) {
-            log.warn("采购单流程标题模板配置解析失败: bindingId={}", binding.getId(), e);
+            log.warn("采购单流程标题模板配置解析失败: bindingId={}", binding.bindingId(), e);
             return new JSONObject();
         }
     }
@@ -660,31 +663,31 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
 
     private void validateBase(SamplePurchaseOrderDTO dto) {
         if (dto == null) {
-            throw new BusinessException("采购单参数不能为空");
+            throw new BusinessException(UiMessages.label("采购单参数不能为空", "Purchase order parameters are required"));
         }
         if (!StringUtils.hasText(dto.getTitle())) {
-            throw new BusinessException("采购主题不能为空");
+            throw new BusinessException(UiMessages.label("采购主题不能为空", "Purchase subject is required"));
         }
         if (!StringUtils.hasText(dto.getSupplierName())) {
-            throw new BusinessException("供应商不能为空");
+            throw new BusinessException(UiMessages.label("供应商不能为空", "Supplier is required"));
         }
         if (dto.getAmountCent() == null || dto.getAmountCent() <= 0) {
-            throw new BusinessException("采购金额必须大于0");
+            throw new BusinessException(UiMessages.label("采购金额必须大于0", "Purchase amount must be greater than zero"));
         }
     }
 
     private void validateSubmit(SamplePurchaseOrderSubmitDTO dto) {
         if (dto == null) {
-            throw new BusinessException("审批配置不能为空");
+            throw new BusinessException(UiMessages.label("审批配置不能为空", "Approval configuration is required"));
         }
         if (dto.getDeptLeaderId() == null) {
-            throw new BusinessException("请选择部门负责人");
+            throw new BusinessException(UiMessages.label("请选择部门负责人", "Select a department leader"));
         }
         if (dto.getEngineeringManagerId() == null) {
-            throw new BusinessException("请选择工程部经理");
+            throw new BusinessException(UiMessages.label("请选择工程部经理", "Select an engineering manager"));
         }
         if (dto.getCountersignUserIds() == null || dto.getCountersignUserIds().stream().filter(Objects::nonNull).distinct().count() < 2) {
-            throw new BusinessException("会签节点至少选择2名人员");
+            throw new BusinessException(UiMessages.label("会签节点至少选择2名人员", "Select at least two users for the countersign task"));
         }
     }
 
@@ -712,16 +715,16 @@ public class SamplePurchaseOrderServiceImpl extends ServiceImpl<SamplePurchaseOr
                 return entity;
             }
         }
-        throw new BusinessException("未找到待办关联的采购单");
+        throw new BusinessException(UiMessages.label("未找到待办关联的采购单", "Purchase order associated with the pending task was not found"));
     }
 
     private SamplePurchaseOrder requireEntity(Long id) {
         if (id == null) {
-            throw new BusinessException("采购单ID不能为空");
+            throw new BusinessException(UiMessages.label("采购单ID不能为空", "Purchase order ID is required"));
         }
         SamplePurchaseOrder entity = getById(id);
         if (entity == null || !Objects.equals(entity.getTenantId(), resolveTenantId())) {
-            throw new BusinessException("采购单不存在");
+            throw new BusinessException(UiMessages.label("采购单不存在", "Purchase order not found"));
         }
         return entity;
     }

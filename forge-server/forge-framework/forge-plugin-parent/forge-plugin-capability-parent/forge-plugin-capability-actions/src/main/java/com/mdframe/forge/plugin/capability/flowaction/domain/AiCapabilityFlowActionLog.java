@@ -22,6 +22,8 @@ public class AiCapabilityFlowActionLog extends TenantEntity {
     private Long id;
 
     private String requestId;
+    /** Null on legacy reservations; immutable identity for newly submitted flow starts. */
+    private String flowStartRequestId;
     private Long clientId;
     private Long capabilityId;
     private String capabilityCode;

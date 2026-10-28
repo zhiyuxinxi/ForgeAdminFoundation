@@ -540,6 +540,10 @@ export function businessTaskFormReadonlyContext(params = {}) {
   return request.get('/ai/business/flow/task-form-context/readonly', { params })
 }
 
+export function businessCcTaskFormReadonlyContext(ccId) {
+  return request.get(`/ai/business/flow/task-form-context/cc/${encodeURIComponent(ccId)}`)
+}
+
 export function saveBusinessTaskFormContext(data) {
   return request.put('/ai/business/flow/task-form-context', data)
 }

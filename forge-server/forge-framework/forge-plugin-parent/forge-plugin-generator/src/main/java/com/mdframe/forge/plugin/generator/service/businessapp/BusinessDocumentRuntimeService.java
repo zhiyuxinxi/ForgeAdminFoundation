@@ -192,6 +192,16 @@ public class BusinessDocumentRuntimeService {
 
     public void validateStartAllowed(String objectCode, Long recordId, boolean checkPermission) {
         BusinessDocumentRuntimeVO runtime = getRuntime(objectCode, recordId);
+        validateStartAccess(runtime, recordId, checkPermission);
+        validateNewStartState(runtime, checkPermission);
+    }
+
+    /** Replaying a committed request keeps current permissions without requiring a new-start state. */
+    public void validateStartReplayAllowed(String objectCode, Long recordId, boolean checkPermission) {
+        validateStartAccess(getRuntime(objectCode, recordId), recordId, checkPermission);
+    }
+
+    private void validateStartAccess(BusinessDocumentRuntimeVO runtime, Long recordId, boolean checkPermission) {
         if (!Boolean.TRUE.equals(runtime.getDocumentEnabled())) {
             throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "当前对象未启用单据模式"));
         }
@@ -202,6 +212,9 @@ public class BusinessDocumentRuntimeService {
                 || !runtime.getAvailableActions().contains("START_FLOW"))) {
             throw new BusinessException("缺少发起主流程权限");
         }
+    }
+
+    private void validateNewStartState(BusinessDocumentRuntimeVO runtime, boolean checkPermission) {
         if ("CONFIG_FLOW".equals(runtime.getNextAction())) {
             throw new BusinessException(StringUtils.defaultIfBlank(runtime.getMessage(), "请先配置主流程"));
         }

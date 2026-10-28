@@ -2,6 +2,7 @@ package com.mdframe.forge.plugin.system.service.impl;
 
 import cn.hutool.core.util.StrUtil;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
+import com.mdframe.forge.plugin.system.util.UserPhoneValidator;
 import com.mdframe.forge.plugin.system.entity.SysUser;
 import com.mdframe.forge.plugin.system.entity.SysOrg;
 import com.mdframe.forge.plugin.system.entity.SysRegion;
@@ -32,6 +33,8 @@ final class UserProfileOperations {
             throw new RuntimeException("用户未登录");
         }
 
+        UserPhoneValidator.validateOptionalPhone(dto.getPhone());
+
         SysUser user = new SysUser();
         user.setId(currentUserId);
         user.setUsername(dto.getUsername());
@@ -51,6 +54,8 @@ final class UserProfileOperations {
     }
 
     boolean updateCurrentUserFromManagement(SysUserDTO dto) {
+        UserPhoneValidator.validateOptionalPhone(dto.getPhone());
+
         SysUser user = new SysUser();
         user.setId(access.requireLoginUser().getUserId());
         user.setUsername(dto.getUsername());

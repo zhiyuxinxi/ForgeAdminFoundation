@@ -1,5 +1,7 @@
 package com.mdframe.forge.plugin.generator.service.runtime.child;
 
+import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.i18n.UiMessages;
 import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,6 +68,32 @@ public final class ChildRowPolicy {
             return (Map<String, Object>) children;
         }
         return Map.of();
+    }
+
+    /** Validate the complete envelope before any parent or child write. */
+    public static Map<String, Object> validatedChildrenPayload(Map<String, Object> data,
+                                                              List<RuntimeChildRelation> relations) {
+        if (data == null || !data.containsKey("children")) {
+            return Map.of();
+        }
+        if (!(data.get("children") instanceof Map<?, ?> children)) {
+            throw new BusinessException(UiMessages.message("lowcode.children.invalid"));
+        }
+        Set<String> allowed = relations.stream().map(RuntimeChildRelation::modelCode).collect(Collectors.toSet());
+        for (Map.Entry<?, ?> entry : children.entrySet()) {
+            if (!(entry.getKey() instanceof String key) || !allowed.contains(key)) {
+                throw new BusinessException(UiMessages.message("lowcode.children.unknown", entry.getKey()));
+            }
+            Object value = entry.getValue();
+            // A single row object is a supported legacy input; [] explicitly clears replacement children.
+            if (value instanceof Map<?, ?>) {
+                continue;
+            }
+            if (!(value instanceof List<?> rows) || rows.stream().anyMatch(row -> !(row instanceof Map<?, ?>))) {
+                throw new BusinessException(UiMessages.message("lowcode.children.rows.invalid", entry.getKey()));
+            }
+        }
+        return extractChildrenPayload(data);
     }
 
     @SuppressWarnings("unchecked")

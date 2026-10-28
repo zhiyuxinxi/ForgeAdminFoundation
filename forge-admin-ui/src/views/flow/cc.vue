@@ -10,7 +10,7 @@
             <span v-if="unreadCc > 0" class="tab-badge">{{ unreadCc > 99 ? '99+' : unreadCc }}{{ localizeLabel('未读') }}</span>
           </div>
         </n-tab>
-        <n-tab name="sent">
+        <n-tab v-if="canViewSent" name="sent">
           <div class="tab-content">
             <i class="i-material-symbols:outbox" />
             {{ localizeLabel('我发送的') }}
@@ -104,7 +104,7 @@
               {{ currentCc ? getRowDisplayTitle(currentCc) : localizeLabel('抄送详情') }}
             </div>
             <div class="cc-detail-meta">
-              {{ activeTab === 'received' ? localizeLabel('抄送给我的') : localizeLabel('我发送的') }}
+              {{ currentCcTab === 'received' ? localizeLabel('抄送给我的') : localizeLabel('我发送的') }}
             </div>
           </div>
           <span class="read-tag" :class="currentCc?.isRead === 1 ? 'read' : 'unread'">
@@ -117,11 +117,11 @@
         <div class="cc-info-grid">
           <div class="cc-info-card">
             <div class="cc-info-label">
-              {{ activeTab === 'received' ? localizeLabel('发送人') : localizeLabel('抄送人') }}
+              {{ currentCcTab === 'received' ? localizeLabel('发送人') : localizeLabel('抄送人') }}
             </div>
             <div class="cc-user-line">
-              <UserAvatar :name="activeTab === 'received' ? (currentCc.sendUserName || localizeLabel('未知')) : (currentCc.ccUserName || localizeLabel('未知'))" :size="28" />
-              <span>{{ activeTab === 'received' ? (currentCc.sendUserName || '-') : (currentCc.ccUserName || '-') }}</span>
+              <UserAvatar :name="currentCcTab === 'received' ? (currentCc.sendUserName || localizeLabel('未知')) : (currentCc.ccUserName || localizeLabel('未知'))" :size="28" />
+              <span>{{ currentCcTab === 'received' ? (currentCc.sendUserName || '-') : (currentCc.ccUserName || '-') }}</span>
             </div>
           </div>
           <div class="cc-info-card">
@@ -141,7 +141,7 @@
             {{ currentCc.content || localizeLabel('暂无内容') }}
           </div>
         </div>
-        <div class="cc-business-form-panel">
+        <div v-if="currentCcTab === 'received'" class="cc-business-form-panel">
           <div class="cc-business-form-head">
             <div>
               <div class="cc-business-form-title">
@@ -156,6 +156,20 @@
           <div v-if="ccFormLoading" class="cc-form-loading">
             <n-spin size="small" />
             <span>{{ localizeLabel('加载表单中...') }}</span>
+          </div>
+          <div v-else-if="useCcBusinessCodeForm" class="cc-business-code-form readonly">
+            <AiForm
+              v-model:value="ccBusinessFormData"
+              :schema="readonlyCcBusinessFields"
+              :field-permissions="readonlyCcFieldPermissions"
+              :show-actions="false"
+              :show-feedback="false"
+              :grid-cols="ccBusinessFormGridCols"
+              :label-placement="ccBusinessFormLabelPlacement"
+              :label-width="ccBusinessFormLabelWidth"
+              :context="ccBusinessFormRenderContext"
+              :form-assets="ccBusinessFormContext.formAssets || []"
+            />
           </div>
           <FlowBusinessForm
             v-else-if="useCcExternalForm"
@@ -189,6 +203,7 @@ import { localizeLabel as translateUiText } from '@/locales'
 import { NButton } from 'naive-ui'
 
 import { computed, onMounted, reactive, ref } from 'vue'
+import { businessCcTaskFormReadonlyContext } from '@/api/business-app'
 import flowApi from '@/api/flow'
 import FlowBusinessForm from '@/components/common/FlowBusinessForm.vue'
 import UserAvatar from '@/components/common/UserAvatar.vue'
@@ -200,6 +215,13 @@ import { getRowDisplayTitle } from './utils/processDisplay'
 
 const userStore = useUserStore()
 const { dict, getLabel } = useDict('flow_read_status')
+const canViewSent = computed(() => {
+  const permissions = userStore.getDataPermission || []
+  return userStore.isAdmin
+    || permissions.includes('**')
+    || permissions.includes('*:*:*')
+    || permissions.includes('flow:cc:sent')
+})
 const loading = ref(false)
 const dataSource = ref([])
 const activeTab = ref('received')
@@ -227,10 +249,46 @@ const readOptions = computed(() => toNumberOptions(dict.value.flow_read_status))
 const unreadCc = ref(0)
 const showDetailModal = ref(false)
 const currentCc = ref(null)
+const currentCcTab = ref('received')
 const ccFormInfo = ref(null)
+const ccBusinessFormContext = ref(null)
+const ccBusinessFormData = ref({})
 const ccFormLoading = ref(false)
 const ccFormError = ref('')
-const useCcExternalForm = computed(() => ccFormInfo.value?.formType === 'external' && ccFormInfo.value?.formUrl)
+const useCcBusinessCodeForm = computed(() => ccBusinessFormContext.value?.configured === true
+  && ccBusinessFormContext.value?.formType === 'business-code')
+const useCcExternalForm = computed(() => !useCcBusinessCodeForm.value
+  && ccFormInfo.value?.formType === 'external' && ccFormInfo.value?.formUrl)
+const readonlyCcBusinessFields = computed(() => (ccBusinessFormContext.value?.fields || [])
+  .map(toReadonlyField))
+const readonlyCcFieldPermissions = computed(() => (ccBusinessFormContext.value?.fieldPermissions || [])
+  .map(toReadonlyField))
+const ccBusinessFormGridCols = computed(() => Math.max(1, Number(ccBusinessFormContext.value?.gridCols || 2)))
+const ccBusinessFormLabelPlacement = computed(() => ['left', 'top'].includes(ccBusinessFormContext.value?.labelPlacement)
+  ? ccBusinessFormContext.value.labelPlacement
+  : 'left')
+const ccBusinessFormLabelWidth = computed(() => ccBusinessFormContext.value?.labelWidth || '110')
+const ccBusinessFormRenderContext = computed(() => ({
+  cc: currentCc.value,
+  taskFormInfo: ccFormInfo.value,
+  businessFormContext: ccBusinessFormContext.value,
+  formAssets: ccBusinessFormContext.value?.formAssets || [],
+  readOnly: true,
+}))
+
+function toReadonlyField(field = {}) {
+  return {
+    ...field,
+    writable: false,
+    readonly: true,
+    disabled: true,
+    props: {
+      ...(field.props || {}),
+      disabled: true,
+      readonly: true,
+    },
+  }
+}
 
 function toNumberOptions(options = []) {
   return options.map(item => ({
@@ -242,7 +300,7 @@ function toNumberOptions(options = []) {
 async function loadData() {
   loading.value = true
   try {
-    const params = { pageNum: pagination.page, pageSize: pagination.pageSize, userId: userStore.userId, title: queryParams.title || undefined }
+    const params = { pageNum: pagination.page, pageSize: pagination.pageSize, title: queryParams.title || undefined }
     let res
     if (activeTab.value === 'received') {
       if (queryParams.isRead !== null)
@@ -283,38 +341,57 @@ function handleTabChange() {
 
 async function openCcDetail(row) {
   currentCc.value = row
+  currentCcTab.value = activeTab.value
   showDetailModal.value = true
-  loadCcFormInfo(row)
-  if (activeTab.value === 'received' && row.isRead === 0)
-    await handleMarkRead(row.id, false)
+  ccFormInfo.value = null
+  ccBusinessFormContext.value = null
+  ccBusinessFormData.value = {}
+  ccFormLoading.value = false
+  ccFormError.value = ''
+  if (currentCcTab.value === 'received') {
+    loadCcFormInfo(row)
+    if (row.isRead === 0)
+      await handleMarkRead(row.id, false)
+  }
 }
 
 async function loadCcFormInfo(row) {
-  ccFormInfo.value = null
-  ccFormError.value = ''
-  if (!row?.id) {
+  if (currentCcTab.value !== 'received' || !row?.id) {
     return
   }
   const ccId = row.id
+  const isCurrentRecipientCc = () => currentCcTab.value === 'received' && currentCc.value?.id === ccId
   ccFormLoading.value = true
   try {
     const res = await flowApi.getCcFormInfo(ccId)
-    if (currentCc.value?.id !== ccId) {
+    if (!isCurrentRecipientCc()) {
       return
     }
-    if (res.code === 200) {
-      ccFormInfo.value = res.data || null
-    }
-    else {
+    if (res.code !== 200) {
       ccFormError.value = res.message || localizeLabel('业务表单加载失败')
+      return
+    }
+
+    ccFormInfo.value = res.data || null
+    if (ccFormInfo.value?.formMode === 'BUSINESS_CODE_FORM') {
+      const contextRes = await businessCcTaskFormReadonlyContext(ccId)
+      if (!isCurrentRecipientCc()) {
+        return
+      }
+      if (contextRes.code !== 200 || contextRes.data?.configured !== true) {
+        ccFormError.value = contextRes.message || localizeLabel('业务表单加载失败')
+        return
+      }
+      ccBusinessFormContext.value = contextRes.data
+      ccBusinessFormData.value = { ...(contextRes.data.recordData || {}) }
     }
   }
   catch (error) {
-    if (currentCc.value?.id === ccId)
+    if (isCurrentRecipientCc())
       ccFormError.value = error?.message || localizeLabel('业务表单加载失败')
   }
   finally {
-    if (currentCc.value?.id === ccId)
+    if (isCurrentRecipientCc())
       ccFormLoading.value = false
   }
 }

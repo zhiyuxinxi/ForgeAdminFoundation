@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.capability.flowaction.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.flow.client.FlowStartOutcomeUnknownException;
 import com.mdframe.forge.plugin.capability.flowaction.domain.AiCapabilityFlowActionLog;
 import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionExecutionLogMapper;
 import com.mdframe.forge.plugin.capability.execution.SecureActionDescriptor;
@@ -43,6 +44,48 @@ class FlowActionExecutionLogServiceTest {
     private final RecordingTransactionManager transactionManager = new RecordingTransactionManager();
     private final FlowActionExecutionLogService service = new FlowActionExecutionLogService(
             mapper, objectMapper, transactionManager);
+
+    @Test
+    void unknownStartKeepsItsReservationIdentityAcrossNewTransportRequests() {
+        Map<String, Object> command = input("同意");
+        AiCapabilityFlowActionLog reservation = recoverableLog(command, "FAILED");
+        reservation.setFlowStartRequestId("flow-action-100");
+        when(mapper.selectByIdempotency(1L, 301L, 10L, "APPROVE", "flow-action-key-1001"))
+                .thenReturn(reservation);
+        when(mapper.updateResultByIdentity(any())).thenReturn(1);
+        List<String> startIds = new ArrayList<>();
+        FlowStartOutcomeUnknownException unknown = new FlowStartOutcomeUnknownException(
+                "order:1001", "flow-action-100", new IllegalStateException("response lost"));
+
+        assertThatThrownBy(() -> service.executeWithAttempt(descriptor(), identity(), command,
+                "transport-first", attempt -> {
+                    startIds.add(attempt.startRequestId());
+                    throw unknown;
+                })).isInstanceOf(BusinessException.class).hasCause(unknown);
+        assertThat(reservation.getErrorCode()).isEqualTo("FLOW_START_OUTCOME_UNKNOWN");
+        assertThat(reservation.getExecuteStatus()).isEqualTo("FAILED");
+
+        service.executeWithAttempt(descriptor(), identity(), command, "transport-retry", attempt -> {
+            startIds.add(attempt.startRequestId());
+            return Map.of("executeStatus", "SUCCESS");
+        });
+        assertThat(startIds).containsExactly("flow-action-100", "flow-action-100");
+    }
+
+    @Test
+    void legacyReservationDoesNotInventANewRemoteStartIdentity() {
+        Map<String, Object> command = input("同意");
+        AiCapabilityFlowActionLog reservation = recoverableLog(command, "FAILED");
+        when(mapper.selectByIdempotency(1L, 301L, 10L, "APPROVE", "flow-action-key-1001"))
+                .thenReturn(reservation);
+        when(mapper.updateResultByIdentity(any())).thenReturn(1);
+
+        service.executeWithAttempt(descriptor(), identity(), command, "transport-after-upgrade", attempt -> {
+            assertThat(attempt.startRequestId()).isNull();
+            return Map.of("executeStatus", "SUCCESS");
+        });
+        assertThat(reservation.getFlowStartRequestId()).isNull();
+    }
 
     @Test
     void shouldReserveBeforeSideEffectAndPersistSafeResult() {

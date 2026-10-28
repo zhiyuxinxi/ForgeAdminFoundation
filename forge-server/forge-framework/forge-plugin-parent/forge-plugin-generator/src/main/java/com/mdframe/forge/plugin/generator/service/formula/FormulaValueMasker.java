@@ -18,8 +18,9 @@ public class FormulaValueMasker {
     private static final Pattern MOBILE_PATTERN =
         Pattern.compile("(?<!\\d)(1[3-9]\\d)\\d{4}(\\d{4})(?!\\d)");
 
+    // 18 位身份证：6 位地区 + 8 位出生日期 + 4 位校验/顺序；中间出生月日共 4 位
     private static final Pattern ID_CARD_PATTERN =
-        Pattern.compile("(?<!\\d)([1-9]\\d{5}\\d{4})\\d{6}([0-9Xx]{4})(?!\\d)");
+        Pattern.compile("(?<!\\d)([1-9]\\d{5}\\d{4})\\d{4}(\\d{3}[0-9Xx])(?!\\d)");
 
     private static final Pattern BANK_CARD_PATTERN =
         Pattern.compile("(?<!\\d)(\\d{6})\\d{6,9}(\\d{4})(?!\\d)");

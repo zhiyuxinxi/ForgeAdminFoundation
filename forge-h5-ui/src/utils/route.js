@@ -39,6 +39,47 @@ export function buildLoginUrl(redirect = getCurrentRoutePath()) {
   return buildUrl(LOGIN_PAGE, redirect ? { redirect } : {})
 }
 
+/**
+ * 基于运行 location 构造同源 hash 路由并导航（子路径部署安全的登录重定向）。
+ *
+ * 背景：H5 部署在子路径（如 /forge-h5/）时，直接调用全局 uni.reLaunch 可能因全局 uni
+ * 路由 API 缺失而落入整页导航兜底（window.location.href = '/pages/...'），丢失基址与
+ * hash 导致 Nginx 404。只改写 location.hash 不会触碰 pathname，因此对开发根路径与
+ * 任意受控子路径都成立，且不硬编码主机/IP。
+ *
+ * @param {string} pagePathWithQuery 页面路径（可带 query），如 /pages/login/index?redirect=…
+ */
+export function navigateToHashRoute(pagePathWithQuery) {
+  if (typeof window === 'undefined' || typeof window.location === 'undefined') {
+    return false
+  }
+  const nextHash = String(pagePathWithQuery || '').startsWith('#')
+    ? String(pagePathWithQuery)
+    : `#${pagePathWithQuery}`
+  if (window.location.hash === nextHash) {
+    return false
+  }
+  window.location.hash = nextHash
+  return true
+}
+
+/**
+ * 归一化登录回跳目标：仅允许本地页面路径，杜绝开放重定向。
+ * 拒绝协议（http/https）、双斜线、javascript:、反斜线、路径穿越；非法值回退首页。
+ *
+ * @param {*} value 原始 redirect 值（onLoad 已由路由解码一次）
+ * @returns {string} 安全的本地面路径或首页
+ */
+export function normalizeRedirectTarget(value) {
+  const raw = String(value ?? '').trim()
+  if (/^\/pages\//.test(raw)
+    && !/https?:|javascript\s*:|\\|(^|\/)\.\./.test(raw)
+    && !raw.startsWith('//')) {
+    return raw
+  }
+  return HOME_PAGE
+}
+
 function callUniRoute(method, options = {}, fallbackMethod = 'reLaunch') {
   if (typeof uni !== 'undefined' && typeof uni?.[method] === 'function') {
     uni[method](options)
@@ -95,6 +136,12 @@ export function redirectToLogin(options = {}) {
     method = 'reLaunch',
   } = options
   const url = buildLoginUrl(redirect)
+  // H5：用同源 hash 导航（只改 location.hash，保持任意子路径基址），避免全局 uni 路由
+  // API 缺失时整页导航丢失 base/hash 导致 404；非 H5 平台继续走 uni 路由。
+  if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+    navigateToHashRoute(url)
+    return
+  }
   callUniRoute(method, { url }, 'redirectTo')
 }
 

@@ -155,8 +155,6 @@ class BusinessApplicationPageDesignServiceTest {
         when(objectCreateService.create(any())).thenReturn(OBJECT_ID);
         when(objectService.requireEntity(OBJECT_ID)).thenReturn(savedObject());
         when(designerService.loadContext(OBJECT_ID)).thenReturn(designerContext(blankModel));
-        when(ddlService.previewCreateTable(any())).thenThrow(
-                new BusinessException("数据模型至少需要一个业务字段"));
 
         BusinessApplicationPageDesignVO result = service.save(APPLICATION_ID, request);
 

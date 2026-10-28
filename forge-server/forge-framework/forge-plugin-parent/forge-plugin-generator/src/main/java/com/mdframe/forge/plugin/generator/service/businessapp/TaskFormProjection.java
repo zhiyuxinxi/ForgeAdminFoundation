@@ -184,7 +184,7 @@ final class TaskFormProjection {
             case "select", "radio", "radioButton", "checkbox", "date", "datetime", "daterange", "datetimerange",
                     "month", "year", "time", "timerange", "switch", "imageUpload", "fileUpload", "slider", "rate",
                     "color", "regionTreeSelect", "treeSelect", "transfer", "customSelect", "objectReference",
-                    "recordSelector", "userSelect", "orgTreeSelect", "cascader", "text", "slot" -> type;
+                    "recordSelector", "userSelect", "postSelect", "orgTreeSelect", "cascader", "text", "slot" -> type;
             case "upload" -> "fileUpload";
             default -> "input";
         };
@@ -249,7 +249,7 @@ final class TaskFormProjection {
                 StringUtils.trimToNull(textValue(field.get("type"))),
                 StringUtils.trimToNull(textValue(field.get("componentType"))),
                 StringUtils.trimToNull(textValue(field.get("componentKey")))));
-        return Set.of("objectReference", "recordSelector", "userSelect", "orgTreeSelect",
+        return Set.of("objectReference", "recordSelector", "userSelect", "postSelect", "orgTreeSelect",
                         "treeSelect", "cascader", "select", "dictSelect").contains(type)
                 || StringUtils.isNotBlank(textValue(field.get("referenceObjectCode")))
                 || StringUtils.isNotBlank(textValue(props.get("referenceObjectCode")))

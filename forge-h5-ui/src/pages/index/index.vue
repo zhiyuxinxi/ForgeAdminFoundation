@@ -30,7 +30,7 @@
           </button>
         </view>
         <view class="attention-grid">
-          <button class="attention-card" @click="goTodo">
+          <button class="attention-card" @click="handleTodoCardClick">
             <view class="attention-card-top">
               <view class="attention-icon">
                 <AiIcon icon="/static/icons/ai-icon/check-square.svg" color="#2563eb" size="sm" />
@@ -38,12 +38,12 @@
               <text class="attention-label">{{ L("待办") }}</text>
             </view>
             <view class="attention-count-line">
-              <text class="attention-count">{{ todoCount > 99 ? '99+' : todoCount }}</text>
-              <text class="attention-unit">{{ L("项") }}</text>
+              <text class="attention-count">{{ todoSummaryError ? '--' : (todoCount > 99 ? '99+' : todoCount) }}</text>
+              <text class="attention-unit">{{ todoSummaryError ? '' : L('项') }}</text>
             </view>
-            <text class="attention-desc">{{ todoCount > 0 ? L("等待你处理") : L("暂时已清空") }}</text>
+            <text class="attention-desc">{{ todoSummaryError ? L('加载失败') : (todoCount > 0 ? L('等待你处理') : L('暂时已清空')) }}</text>
             <view class="attention-link">
-              <text>{{ todoCount > 0 ? L("去处理") : L("查看待办") }}</text>
+              <text>{{ todoSummaryError ? L('点击重试') : (todoCount > 0 ? L('去处理') : L('查看待办')) }}</text>
               <AiIcon icon="/static/icons/ai-icon/arrow-right.svg" color="#2563eb" size="sm" />
             </view>
           </button>
@@ -193,11 +193,14 @@ import { ensureLogin } from '@/utils/auth-guard'
 import { resolveStaticUrl } from '@/utils/assets'
 import { DEFAULT_AVATAR_URL } from '@/utils/file'
 import { toast } from '@/utils/notify'
+import { buildRoutePayload } from '@/utils/route-payload'
 
 const authStore = useAuthStore()
 
 const unreadCount = ref(0)
 const todoCount = ref(0)
+// 待办摘要加载失败时不得显示“0 项 / 暂时已清空”，需展示明确错误提示
+const todoSummaryError = ref(false)
 const latestMessages = ref([])
 const menuSheetVisible = ref(false)
 const menuSearchKeyword = ref('')
@@ -463,6 +466,15 @@ function goTodo() {
   uni.switchTab({ url: '/pages/todo' })
 }
 
+function handleTodoCardClick() {
+  if (todoSummaryError.value) {
+    // 摘要加载失败时点击即重试，成功后再进入待办
+    fetchTodoSummary()
+    return
+  }
+  goTodo()
+}
+
 function handleShortcut(item) {
   if (item.isMore) {
     openMenuSheet()
@@ -511,12 +523,14 @@ function openBackendMenu(item) {
       uni.navigateTo({ url: path })
       return
     }
-    uni.navigateTo({ url: `/pages/app-entry?title=${encodeURIComponent(item.label)}&path=${encodeURIComponent(path)}` })
+    // 单次传输协议：版本化 base64url JSON payload（仅 URL-safe 字符），
+    // 避免预编码导致的 %25 双编码与明文拼接导致的 &/=/# 截断或参数走私
+    uni.navigateTo({ url: `/pages/app-entry?q=${buildRoutePayload({ title: item.label, path })}` })
     return
   }
   const lowcodeConfigKey = resolveLowcodeConfigKey(path)
   if (lowcodeConfigKey) {
-    uni.navigateTo({ url: `/pages/lowcode-runtime?configKey=${encodeURIComponent(lowcodeConfigKey)}&title=${encodeURIComponent(item.label)}` })
+    uni.navigateTo({ url: `/pages/lowcode-runtime?q=${buildRoutePayload({ configKey: lowcodeConfigKey, title: item.label })}` })
     return
   }
   toast(L("{0}页面待接入", [item.label]), { type: 'info' })
@@ -561,9 +575,12 @@ async function fetchTodoSummary() {
   try {
     const res = await api.getTodoTasks({ pageNum: 1, pageSize: 1, userId })
     todoCount.value = Number(res?.data?.total || 0)
+    todoSummaryError.value = false
   }
   catch (error) {
+    // 网络/权限错误不得降级为“暂时已清空”
     todoCount.value = 0
+    todoSummaryError.value = true
     console.error('加载待办摘要失败:', error)
   }
 }

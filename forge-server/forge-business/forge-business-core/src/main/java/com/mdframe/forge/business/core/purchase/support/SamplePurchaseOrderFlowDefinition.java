@@ -2,9 +2,9 @@ package com.mdframe.forge.business.core.purchase.support;
 
 import com.mdframe.forge.business.core.purchase.dto.SamplePurchaseOrderTaskSaveDTO;
 import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO;
-import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormContextQueryDTO;
-import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDTO;
-import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTaskFormContextVO;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormContextQueryDTO;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormSaveDTO;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormContextVO;
 import lombok.experimental.UtilityClass;
 import org.springframework.util.StringUtils;
 

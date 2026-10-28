@@ -77,9 +77,15 @@
           <AiListSkeleton v-if="loading" :rows="2" compact />
           <view v-else class="list-foot">{{ hasMore ? L("上拉加载更多") : L("没有更多{0}", [scopeLabel]) }}</view>
         </template>
+        <view v-else-if="loadError" class="state-box">
+          <AiIcon :icon="loadErrorIcon" :color="loadErrorColor" size="lg" />
+          <text class="state-title">{{ loadErrorTitle }}</text>
+          <text class="state-copy">{{ loadErrorDescription }}</text>
+          <button class="retry-button" @click="refreshList">{{ L("重新加载") }}</button>
+        </view>
         <view v-else class="state-box">
           <AiIcon icon="/static/icons/ai-icon/check-circle.svg" color="#1677ff" size="lg" />
-          <text class="state-title">{{ flowServiceUnavailable ? L("流程服务不可用") : L("暂无{0}", [scopeLabel]) }}</text>
+          <text class="state-title">{{ L('暂无{0}', [scopeLabel]) }}</text>
           <text class="state-copy">{{ emptyDescription }}</text>
         </view>
       </scroll-view>
@@ -117,6 +123,7 @@ import api from '@/api'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { toast } from '@/utils/notify'
+import { TODO_LOAD_STATE, classifyTodoLoadError } from '@/utils/todo-load-state'
 
 const authStore = useAuthStore()
 const tasks = ref([])
@@ -130,7 +137,8 @@ const categoryFilter = ref('')
 const categoryOptions = ref([{ get "label"() { return L("全部流程") }, value: '' }])
 const categoryPickerVisible = ref(false)
 const loading = ref(false)
-const flowServiceUnavailable = ref(false)
+// 加载错误态：'' 无错误；network-error / forbidden / server-error 时展示明确错误与重试
+const loadError = ref('')
 
 const statusFilters = [
   { get "label"() { return L("全部") }, value: '' },
@@ -144,11 +152,26 @@ const workScopes = [
 ]
 const userId = computed(() => authStore.userInfo?.id || authStore.userInfo?.userId || authStore.userInfo?.user_id || '')
 const hasMore = computed(() => tasks.value.length < total.value)
-const selectedCategoryLabel = computed(() => categoryOptions.value.find(item => String(item.value) === String(categoryFilter.value))?.label || L("全部流程"))
-const scopeLabel = computed(() => workScopes.find(item => item.value === activeScope.value)?.label || L("待办"))
-const emptyDescription = computed(() => flowServiceUnavailable.value
-  ? L("请确认流程服务可用后重试")
-  : keyword.value ? L("没有符合当前条件的{0}", [scopeLabel.value]) : L("当前没有{0}", [scopeLabel.value]))
+const selectedCategoryLabel = computed(() => categoryOptions.value.find(item => String(item.value) === String(categoryFilter.value))?.label || L('全部流程'))
+const scopeLabel = computed(() => workScopes.find(item => item.value === activeScope.value)?.label || L('待办'))
+const emptyDescription = computed(() => keyword.value
+  ? L('没有符合当前条件的{0}', [scopeLabel.value])
+  : L('当前没有{0}', [scopeLabel.value]))
+
+const loadErrorIcon = computed(() => loadError.value === TODO_LOAD_STATE.FORBIDDEN
+  ? '/static/icons/ai-icon/lock.svg'
+  : '/static/icons/ai-icon/wifi-off.svg')
+const loadErrorColor = computed(() => loadError.value === TODO_LOAD_STATE.FORBIDDEN ? '#dc2626' : '#f59e0b')
+const loadErrorTitle = computed(() => {
+  if (loadError.value === TODO_LOAD_STATE.FORBIDDEN) return L('暂无访问权限')
+  if (loadError.value === TODO_LOAD_STATE.NETWORK_ERROR) return L('网络连接失败')
+  return L('加载失败')
+})
+const loadErrorDescription = computed(() => {
+  if (loadError.value === TODO_LOAD_STATE.FORBIDDEN) return L('当前账号没有访问待办的权限，请联系管理员开通')
+  if (loadError.value === TODO_LOAD_STATE.NETWORK_ERROR) return L('请检查网络后重试，或下拉刷新重新加载')
+  return L('流程服务暂时不可用，请稍后重试')
+})
 
 onShow(async () => {
   const ok = await ensureLogin({ redirect: '/pages/todo' })
@@ -172,7 +195,7 @@ async function loadTasks({ reset = false } = {}) {
   }
   loading.value = true
   try {
-    flowServiceUnavailable.value = false
+    loadError.value = ''
     const params = {
       pageNum: pageNum.value,
       pageSize: pageSize.value,
@@ -188,8 +211,13 @@ async function loadTasks({ reset = false } = {}) {
     pageNum.value += 1
   }
   catch (error) {
-    flowServiceUnavailable.value = isFlowServiceUnavailableError(error)
-    if (!flowServiceUnavailable.value) console.error('加载待办失败:', error)
+    // 网络错误 / 403 权限不足必须显示明确错误态，不能降级为空列表
+    const state = classifyTodoLoadError(error)
+    if (state === TODO_LOAD_STATE.SUCCESS) {
+      return
+    }
+    loadError.value = state
+    if (state !== TODO_LOAD_STATE.NETWORK_ERROR) console.error('加载待办失败:', error)
   }
   finally { loading.value = false }
 }
@@ -215,7 +243,7 @@ function selectCategory(value) {
 async function loadCategories() {
   try {
     const res = await api.getFlowCategories()
-    categoryOptions.value = [{ label: L("全部流程"), value: '' }, ...flattenCategories(res?.data)]
+    categoryOptions.value = [{ get "label"() { return L("全部流程") }, value: '' }, ...flattenCategories(res?.data)]
   }
   catch (error) { console.error('加载流程分类失败:', error) }
 }
@@ -276,10 +304,6 @@ function statusText(task) {
 function canWithdraw(task) { return Number(task.status) === 0 || Number(task.status) === 1 || ['RUNNING', 'IN_PROCESS'].includes(String(task.status || '').toUpperCase()) }
 function resolveScopeApi() { return activeScope.value === 'done' ? api.getDoneFlowTasks : activeScope.value === 'started' ? api.getStartedFlowTasks : api.getTodoTasks }
 function priorityClass(task) { return Number(task.priority || 0) >= 3 ? 'urgent' : Number(task.priority || 0) >= 2 ? 'high' : '' }
-function isFlowServiceUnavailableError(error) {
-  const status = Number(error?.code || error?.error?.status || 0)
-  return error?.code === 'NETWORK_ERROR' || status === 404 || (status === 500 && !error?.error?.data)
-}
 </script>
 
 <style lang="scss" scoped>
@@ -321,6 +345,8 @@ function isFlowServiceUnavailableError(error) {
 .state-box { display: flex; min-height: 420rpx; flex-direction: column; align-items: center; justify-content: center; gap: 16rpx; color: var(--text-muted); font-size: 25rpx; text-align: center; }
 .state-title { color: var(--text-strong); font-size: 29rpx; font-weight: 600; }
 .state-copy { max-width: 480rpx; line-height: 1.5; }
+.retry-button { height: 60rpx; margin: 10rpx 0 0; padding: 0 32rpx; border: 1rpx solid #b7d7ff; border-radius: 30rpx; color: var(--primary-color); font-size: 24rpx; background: #fff; }
+.retry-button::after { border: 0; }
 .list-foot { padding: 28rpx 0; color: var(--text-muted); font-size: 22rpx; text-align: center; }
 
 .todo-page { background: var(--page-bg); }

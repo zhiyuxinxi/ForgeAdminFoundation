@@ -102,6 +102,28 @@ class FlowStartRecoveryClientTest {
         verify(rest, times(1)).exchange(eq(url), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class));
     }
 
+    @Test
+    void recoveryReadsTypedOriginalEventAndNeverCallsLatestVariablesOrRestarts() {
+        var rest = mock(RestTemplate.class);
+        URI url = URI.create("http://flow/api/flow/instance/recovery/order%3A1?startRequestId=original");
+        when(rest.exchange(eq(url), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("""
+                        {"code":200,"data":{"outcome":{"state":"STARTED","businessKey":"order:1",
+                        "startRequestId":"original","processInstanceId":"instance","processStatus":"approved","roundNo":1},
+                        "terminalEvent":{"eventId":"event","tenantId":"7","processInstanceId":"instance",
+                        "businessKey":"order:1","eventType":"PROCESS_COMPLETED","eventTime":"2026-10-16T01:00:00",
+                        "variables":{"amount":19}}}}
+                        """));
+        var result = new FlowClient(rest, "http://flow", "current-token")
+                .getProcessStartRecovery("order:1", "original");
+        assertTrue(result.isSuccess());
+        assertEquals("original", result.getData().outcome().startRequestId());
+        assertEquals(19, result.getData().terminalEvent().getVariables().get("amount"));
+        assertEquals(2026, result.getData().terminalEvent().getEventTime().getYear());
+        verify(rest).exchange(eq(url), eq(HttpMethod.GET), any(HttpEntity.class), eq(String.class));
+        org.mockito.Mockito.verifyNoMoreInteractions(rest);
+    }
+
     private FlowResult<String> start(FlowClient client) {
         return client.startProcess("approval", "business-1", "type", "title", Map.of(),
                 "501", "Owner", "1", "Department", "request-1", null);

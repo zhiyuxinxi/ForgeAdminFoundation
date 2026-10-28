@@ -131,4 +131,54 @@ class TenantMemberDirectoryMapperTest {
         jdbc.update("UPDATE sys_tenant SET tenant_status=0 WHERE id=2");
         assertThat(directory.findActiveMembers(List.of(102L), null)).isEmpty();
     }
+
+    @Test
+    void postLookupUsesRealAssignmentsActiveIdentitiesAndStableCursorAcrossTenantBoundaries() {
+        preparePosts();
+        assertThat(directory.findActiveMembersByPost(30L, null, 20)).extracting(TenantMember::userId)
+                .containsExactly(101L, 102L, 108L);
+        assertThat(directory.findActiveMembersByPost(30L, null, 1)).extracting(TenantMember::userId)
+                .containsExactly(101L);
+        assertThat(directory.findActiveMembersByPost(30L, 101L, 1)).extracting(TenantMember::userId)
+                .containsExactly(102L);
+        assertThat(directory.findActiveMembersByPost(30L, 102L, 1)).extracting(TenantMember::userId)
+                .containsExactly(108L);
+        assertThat(directory.findActiveMembersByPost(30L, 108L, 1)).isEmpty();
+        assertThat(directory.findActiveMembersByPost(31L, null, 20)).extracting(TenantMember::userId)
+                .containsExactly(108L);
+        for (Long postId : List.of(32L, 33L, 34L, 35L, 36L, 37L, 999L)) {
+            assertThat(directory.findActiveMembersByPost(postId, null, 20)).isEmpty();
+        }
+    }
+
+    @Test
+    void postLookupObservesAssignmentPostOrganizationAndMembershipRevocationWithoutCacheReplay() {
+        preparePosts();
+        assertThat(directory.findActiveMembersByPost(30L, null, 20)).hasSize(3);
+        jdbc.update("DELETE FROM sys_user_post WHERE user_id=101 AND tenant_id=2 AND post_id=30");
+        assertThat(directory.findActiveMembersByPost(30L, null, 20)).extracting(TenantMember::userId)
+                .containsExactly(102L, 108L);
+        jdbc.update("UPDATE sys_user_tenant SET status=0 WHERE user_id=102 AND tenant_id=2");
+        assertThat(directory.findActiveMembersByPost(30L, null, 20)).extracting(TenantMember::userId)
+                .containsExactly(108L);
+        jdbc.update("UPDATE sys_org SET org_status=0 WHERE id=10");
+        assertThat(directory.findActiveMembersByPost(30L, null, 20)).isEmpty();
+        assertThat(directory.findActiveMembersByPost(31L, null, 20)).hasSize(1);
+        jdbc.update("UPDATE sys_post SET post_status=0 WHERE id=31");
+        assertThat(directory.findActiveMembersByPost(31L, null, 20)).isEmpty();
+        jdbc.update("UPDATE sys_post SET post_status=1 WHERE id=31");
+        jdbc.update("UPDATE sys_tenant SET tenant_status=0 WHERE id=2");
+        assertThat(directory.findActiveMembersByPost(31L, null, 20)).isEmpty();
+    }
+
+    private void preparePosts() {
+        jdbc.execute("CREATE TABLE sys_post(id BIGINT PRIMARY KEY,tenant_id BIGINT,org_id BIGINT,post_status INT,del_flag BIGINT)");
+        jdbc.execute("CREATE TABLE sys_user_post(user_id BIGINT,tenant_id BIGINT,post_id BIGINT)");
+        jdbc.execute("INSERT INTO sys_post VALUES(30,2,10,1,0),(31,2,NULL,1,0),(32,2,10,0,0),"
+                + "(33,2,10,1,33),(34,2,11,1,0),(35,2,12,1,0),(36,2,20,1,0),(37,3,20,1,0)");
+        jdbc.execute("INSERT INTO sys_user_post VALUES(101,2,30),(102,2,30),(102,2,30),"
+                + "(103,2,30),(104,2,30),(105,2,30),(106,2,30),(107,3,30),(108,2,30),"
+                + "(108,2,31),(101,2,32),(101,2,33),(101,2,34),(101,2,35),(101,2,36),"
+                + "(101,2,37),(101,3,37)");
+    }
 }

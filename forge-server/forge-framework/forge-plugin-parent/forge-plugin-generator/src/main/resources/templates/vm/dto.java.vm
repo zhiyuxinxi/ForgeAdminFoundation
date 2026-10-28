@@ -1,6 +1,11 @@
 package ${packageName}.${moduleName}.dto;
 
 import lombok.Data;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Null;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
 
 import java.io.Serializable;
 #if(${hasDate})
@@ -12,7 +17,7 @@ import java.math.BigDecimal;
 
 /**
  * ${functionName}新增/修改DTO
- * 
+ *
  * @author ${author}
  * @date ${datetime}
  */
@@ -21,11 +26,39 @@ public class ${className}DTO implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
+    public interface Create extends Default {}
+    public interface Update extends Default {}
+
 #foreach ($column in $columns)
-#if($column.isInsert == 1 || $column.isEdit == 1)
+#if($column.isPk == 1 || $fieldContract.writable($column))
     /**
      * $column.columnComment
      */
+#if($column.isPk == 1)
+    @NotNull(groups = Update.class)
+#if($column.isIncrement == 1 || $column.javaType == 'Long')
+    @Null(groups = Create.class)
+#else
+    @NotNull(groups = Create.class)
+#end
+#else
+#if($column.isRequired == 1)
+#if($column.javaType == 'String')
+    @NotBlank(groups = {#if($column.isInsert == 1)Create.class#end#if($column.isInsert == 1 && $column.isEdit == 1), #end#if($column.isEdit == 1)Update.class#end})
+#else
+    @NotNull(groups = {#if($column.isInsert == 1)Create.class#end#if($column.isInsert == 1 && $column.isEdit == 1), #end#if($column.isEdit == 1)Update.class#end})
+#end
+#end
+#end
+#if($column.isPk != 1 && $column.isInsert != 1)
+    @Null(groups = Create.class)
+#end
+#if($column.isPk != 1 && $column.isEdit != 1)
+    @Null(groups = Update.class)
+#end
+#if($fieldContract.maxLength($column) > 0)
+    @Size(max = $fieldContract.maxLength($column))
+#end
     private $column.javaType $column.javaField;
 
 #end

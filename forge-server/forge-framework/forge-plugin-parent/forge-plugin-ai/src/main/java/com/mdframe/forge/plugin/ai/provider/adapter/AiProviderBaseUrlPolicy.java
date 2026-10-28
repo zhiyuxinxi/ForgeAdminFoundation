@@ -61,7 +61,8 @@ public final class AiProviderBaseUrlPolicy {
             if (adapter == AiProviderAdapterCode.DASHSCOPE_NATIVE) {
                 return DASHSCOPE_NATIVE_BASE_URL;
             }
-            String defaultBaseUrl = PROVIDER_TYPE_DEFAULT_BASE_URL.get(providerType);
+            // Map.of 的不可变映射不接受 null key，先做空值保护再查默认端点
+            String defaultBaseUrl = providerType == null ? null : PROVIDER_TYPE_DEFAULT_BASE_URL.get(providerType);
             if (defaultBaseUrl != null) {
                 return defaultBaseUrl;
             }

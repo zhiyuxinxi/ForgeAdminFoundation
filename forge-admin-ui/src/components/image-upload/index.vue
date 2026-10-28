@@ -119,6 +119,7 @@ import { useStorageConfig } from '@/composables/useStorageConfig'
 import { getLocale, localizeLabel, t } from '@/locales'
 import { useAuthStore } from '@/store'
 import { generateUUID, getFileUrl, request, resolveRenderableFileUrl } from '@/utils'
+import { serializeFinishedImageValue, upsertFinishedImage } from './image-upload-value'
 
 const props = defineProps({
   // v-model 绑定的值
@@ -389,19 +390,21 @@ function handleFinish({ file, event }) {
         }
       }
 
-      // 缓存文件属性
+      // Naive Upload 的回调 file 与受控 fileList 中的对象不保证是同一引用。
+      // 必须同步写回真实列表并立即更新 v-model，避免上传 HTTP 已完成但新增请求仍提交空 photoIds。
+      const { finishedFile, fileList: nextList } = upsertFinishedImage(fileList.value, file, fileData, displayUrl)
       const cachedProps = {
-        fileId: fileData.fileId,
-        filePath: fileData.filePath,
-        originalUrl: fileData.fileId || fileData.filePath,
-        url: displayUrl,
-        thumbnailUrl: displayUrl,
+        fileId: finishedFile.fileId,
+        filePath: finishedFile.filePath,
+        originalUrl: finishedFile.originalUrl,
+        url: finishedFile.url,
+        thumbnailUrl: finishedFile.thumbnailUrl,
+        name: finishedFile.name,
+        metadata: finishedFile.metadata,
       }
-      filePropsCache.set(file.id, cachedProps)
-
-      Object.assign(file, cachedProps)
-      file.status = 'finished'
-      file.percentage = 100
+      filePropsCache.set(finishedFile.id, cachedProps)
+      fileList.value = nextList
+      Object.assign(file, finishedFile)
 
       // 后台异步解析 blob URL 以优化非本地文件的展示
       resolveRenderableFileUrl(fileData).then((blobUrl) => {
@@ -422,10 +425,7 @@ function handleFinish({ file, event }) {
 
       window.$message.success(localizeLabel('图片上传成功'))
       emit('success', fileData)
-
-      setTimeout(() => {
-        emitValue()
-      }, 100)
+      emitValue()
 
       return file
     }
@@ -559,32 +559,7 @@ function handleFileListChange(newFileList) {
 
 // 触发值更新
 function emitValue() {
-  const finishedFiles = fileList.value.filter(file => file.status === 'finished')
-
-  if (props.valueType === 'array') {
-    // 返回数组（优先使用 fileId，其次 filePath，再其次 originalUrl）
-    const result = finishedFiles.map((file) => {
-      const value = file.fileId || file.filePath || file.originalUrl
-      // 过滤掉 blob: URL 和空值
-      if (!value || (typeof value === 'string' && value.startsWith('blob:'))) {
-        return null
-      }
-      return value
-    }).filter(Boolean)
-    emit('update:modelValue', result)
-  }
-  else {
-    // 返回逗号分隔的字符串（优先使用 fileId，其次 filePath，再其次 originalUrl）
-    const result = finishedFiles.map((file) => {
-      const value = file.fileId || file.filePath || file.originalUrl
-      // 过滤掉 blob: URL 和空值
-      if (!value || (typeof value === 'string' && value.startsWith('blob:'))) {
-        return null
-      }
-      return value
-    }).filter(Boolean).join(',')
-    emit('update:modelValue', result)
-  }
+  emit('update:modelValue', serializeFinishedImageValue(fileList.value, props.valueType))
 }
 
 // 从文件路径中提取文件名

@@ -1,6 +1,7 @@
 package com.mdframe.forge.plugin.capability.flowaction.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
 import com.mdframe.forge.plugin.capability.controlplane.service.CapabilityCatalogService;
 import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionExecutionLogMapper;
 import com.mdframe.forge.plugin.capability.flowaction.mapper.FlowActionSourceMapper;
@@ -15,6 +16,7 @@ import com.mdframe.forge.flow.client.FlowClient;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudService;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowService;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeWriteTransactions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -36,6 +38,8 @@ class FlowActionAutoConfigurationTest {
             .withBean(FlowActionExecutionLogMapper.class, () -> mock(FlowActionExecutionLogMapper.class))
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
             .withBean(DynamicCrudService.class, () -> mock(DynamicCrudService.class))
+            .withBean(RuntimeIdentityReferenceService.class, () -> mock(RuntimeIdentityReferenceService.class))
+            .withBean(RuntimeWriteTransactions.class, () -> mock(RuntimeWriteTransactions.class))
             .withBean(LowcodeRuntimeDataSourceResolver.class,
                     () -> mock(LowcodeRuntimeDataSourceResolver.class))
             .withBean(BusinessFlowService.class, () -> mock(BusinessFlowService.class));

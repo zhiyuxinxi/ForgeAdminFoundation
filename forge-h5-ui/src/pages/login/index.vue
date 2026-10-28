@@ -43,13 +43,21 @@
           <text class="panel-subtitle">{{ L("使用您的企业账号登录") }}</text>
         </view>
 
-        <view class="form-stack">
+        <!-- #ifdef H5
+          uni-app 会把 <form> 编译成 <uni-form> 自定义元素，密码输入不在原生 form
+          内，Chromium 持续告警 "Password field is not contained in a form"；
+          H5 因此使用 NativeForm 渲染原生 <form>（render() 直接创建原生元素）。
+          两分支字段必须保持同步。
+        #endif -->
+        <!-- #ifdef H5 -->
+        <native-form class="form-stack" @submit="handleLogin">
           <view class="field">
             <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/user.svg')" mode="aspectFit" />
             <input
               v-model="form.username"
               class="field-input"
-              :placeholder="L(&quot;请输入用户名&quot;)"
+              name="username"
+              :placeholder="L('请输入用户名')"
               placeholder-class="field-placeholder"
               confirm-type="next"
             />
@@ -60,6 +68,7 @@
             <input
               v-model="form.password"
               class="field-input"
+              name="password"
               :password="!showPassword"
               :placeholder="L(&quot;请输入密码&quot;)"
               placeholder-class="field-placeholder"
@@ -81,7 +90,8 @@
               <input
                 v-model="form.code"
                 class="field-input"
-                :placeholder="L(&quot;请输入验证码&quot;)"
+                name="code"
+                :placeholder="L('请输入验证码')"
                 placeholder-class="field-placeholder"
                 confirm-type="done"
                 @confirm="handleLogin"
@@ -96,12 +106,77 @@
               </view>
             </view>
           </view>
-        </view>
 
-        <button class="login-button" :disabled="loading" @click="handleLogin">
-          <text>{{ loading ? L("登录中...") : L("登录") }}</text>
-          <text class="button-arrow">→</text>
-        </button>
+          <button class="login-button" :disabled="loading" @click="handleLogin">
+            <text>{{ loading ? L('登录中...') : L('登录') }}</text>
+            <text class="button-arrow">→</text>
+          </button>
+        </native-form>
+        <!-- #endif -->
+        <!-- #ifndef H5 -->
+        <form class="form-stack" @submit="handleLogin">
+          <view class="field">
+            <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/user.svg')" mode="aspectFit" />
+            <input
+              v-model="form.username"
+              class="field-input"
+              name="username"
+              :placeholder="L('请输入用户名')"
+              placeholder-class="field-placeholder"
+              confirm-type="next"
+            />
+          </view>
+
+          <view class="field">
+            <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/lock.svg')" mode="aspectFit" />
+            <input
+              v-model="form.password"
+              class="field-input"
+              name="password"
+              :password="!showPassword"
+              :placeholder="L('请输入密码')"
+              placeholder-class="field-placeholder"
+              confirm-type="done"
+              @confirm="handleLogin"
+            />
+            <view class="password-toggle" @click.stop="togglePassword">
+              <image
+                class="toggle-icon"
+                :src="assetUrl(showPassword ? '/static/icons/ai-icon/eye-off.svg' : '/static/icons/ai-icon/eye.svg')"
+                mode="aspectFit"
+              />
+            </view>
+          </view>
+
+          <view class="captcha-row">
+            <view class="field captcha-input-wrap">
+              <image class="field-icon" :src="assetUrl('/static/icons/ai-icon/shield.svg')" mode="aspectFit" />
+              <input
+                v-model="form.code"
+                class="field-input"
+                name="code"
+                :placeholder="L('请输入验证码')"
+                placeholder-class="field-placeholder"
+                confirm-type="done"
+                @confirm="handleLogin"
+              />
+            </view>
+            <view class="captcha-image" :class="{ 'captcha-refreshing': captcha.loading }" @click="loadCaptcha">
+              <image v-if="captcha.image" class="captcha-img" :src="captcha.image" mode="aspectFit" />
+              <text v-else class="captcha-empty">{{ captcha.loading ? L('加载中') : L('刷新') }}</text>
+              <view class="captcha-lines" />
+              <view class="captcha-hover">
+                <image class="refresh-icon" :src="assetUrl('/static/icons/ai-icon/refresh-cw.svg')" mode="aspectFit" />
+              </view>
+            </view>
+          </view>
+
+          <button class="login-button" form-type="submit" :disabled="loading" @click="handleLogin">
+            <text>{{ loading ? L('登录中...') : L('登录') }}</text>
+            <text class="button-arrow">→</text>
+          </button>
+        </form>
+        <!-- #endif -->
 
       </view>
 
@@ -119,8 +194,11 @@ import LanguageSwitch from '@/components/LanguageSwitch.vue'
 import { L } from '@/locales'
 import { useAuthStore } from '@/store'
 import api from '@/api'
+import NativeForm from '@/components/NativeForm.vue'
 import { resolveStaticUrl } from '@/utils/assets'
+import { createGuardedLoginHandler, LOGIN_INVALID_REASON } from '@/utils/login-submit-guard'
 import { notify, toast } from '@/utils/notify'
+import { normalizeRedirectTarget } from '@/utils/route'
 import { getWeComAutoLoginPromise, isWeComAutoLoginPending } from '@/utils/wecom'
 
 function normalizeLoginError(error) {
@@ -132,7 +210,10 @@ function normalizeLoginError(error) {
 }
 
 export default {
-  components: { LanguageSwitch },
+  components: {
+    NativeForm,
+    LanguageSwitch,
+  },
   data() {
     return {
       title: import.meta.env.VITE_TITLE || '',
@@ -154,8 +235,49 @@ export default {
       },
     }
   },
+  created() {
+    // 表单 submit、键盘 Enter（@confirm）与按钮点击复用同一 guarded handler，
+    // 请求进行中忽略重复触发，loading 态由 onPending 同步。
+    this.loginHandler = createGuardedLoginHandler({
+      getPayload: () => ({
+        username: this.form.username,
+        password: this.form.password,
+        code: this.form.code,
+        codeKey: this.captcha.codeKey,
+      }),
+      submit: async (payload) => {
+        const authStore = useAuthStore()
+        await authStore.login(payload)
+      },
+      onInvalid: (reason) => {
+        if (reason === LOGIN_INVALID_REASON.CAPTCHA) {
+          toast(L('请先刷新验证码'), { type: 'warning' })
+          return
+        }
+        toast(L('请输入用户名、密码和验证码'), { type: 'warning' })
+      },
+      onPending: (pending) => {
+        this.loading = pending
+      },
+      onSuccess: () => {
+        toast(L('登录成功'), { type: 'success' })
+        this.goTarget()
+      },
+      onFailure: (error) => {
+        console.error('登录失败:', error)
+        notify({
+          title: L('登录失败'),
+          description: normalizeLoginError(error),
+          type: 'error',
+          duration: 3600,
+        })
+        this.loadCaptcha()
+      },
+    })
+  },
   onLoad(options = {}) {
-    this.redirect = options.redirect ? decodeURIComponent(options.redirect) : '/pages/index/index'
+    // 路由已解码一次；再做开放重定向防护：仅允许本地 /pages/ 路径，非法值回退首页
+    this.redirect = normalizeRedirectTarget(options.redirect)
     const authStore = useAuthStore()
     if (authStore.isLogin) {
       this.goTarget()
@@ -229,43 +351,7 @@ export default {
       uni.reLaunch({ url })
     },
     async handleLogin() {
-      const username = this.form.username.trim()
-      const password = this.form.password
-      const code = this.form.code.trim()
-      if (!username || !password || !code) {
-        toast(L("请输入用户名、密码和验证码"), { type: 'warning' })
-        return
-      }
-      if (!this.captcha.codeKey) {
-        toast(L("请先刷新验证码"), { type: 'warning' })
-        return
-      }
-
-      this.loading = true
-      try {
-        const authStore = useAuthStore()
-        await authStore.login({
-          username,
-          password,
-          code,
-          codeKey: this.captcha.codeKey,
-        })
-        toast(L("登录成功"), { type: 'success' })
-        this.goTarget()
-      }
-      catch (error) {
-        console.error('登录失败:', error)
-        notify({
-          title: L("登录失败"),
-          description: normalizeLoginError(error),
-          type: 'error',
-          duration: 3600,
-        })
-        this.loadCaptcha()
-      }
-      finally {
-        this.loading = false
-      }
+      return this.loginHandler()
     },
   },
 }

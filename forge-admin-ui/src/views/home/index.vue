@@ -28,7 +28,7 @@
         </button>
       </div>
 
-      <div class="guide-pane">
+      <div v-if="guideSteps.length" class="guide-pane">
         <div class="guide-head">
           <span>{{ localizeLabel('业务系统搭建路径') }}</span>
           <button type="button" @click="goTo('/app-center')">
@@ -170,7 +170,7 @@
         </section>
 
         <section class="app-row">
-          <div class="dashboard-pane app-pane">
+          <div v-if="showWorkbenchApplications" class="dashboard-pane app-pane">
             <div class="dashboard-header">
               <div>
                 <h2>{{ localizeLabel('我的应用') }}</h2>
@@ -217,7 +217,7 @@
       </div>
 
       <aside class="side-column">
-        <section class="dashboard-pane quick-pane">
+        <section v-if="quickLinks.length" class="dashboard-pane quick-pane">
           <div class="dashboard-header compact">
             <div>
               <h2>{{ localizeLabel('快捷入口') }}</h2>
@@ -325,11 +325,13 @@ import wechatGroupQr from '@/assets/images/forge-wechat-group.png'
 import wechatSupportQr from '@/assets/images/forge-wechat-support.png'
 import welcomeAvatar from '@/assets/images/home-welcome-avatar.png'
 import { locale, localizeLabel, t } from '@/locales'
-import { useUserStore } from '@/store'
+import { usePermissionStore, useUserStore } from '@/store'
 import { request } from '@/utils'
+import { canLoadHomeWorkbench, filterAccessibleHomeItems, loadAccessibleHomeWorkbench, resolveHomeAdminStatsAccess, resolveHomeFlowApiAccess } from './home-access'
 
 const router = useRouter()
 const userStore = useUserStore()
+const permissionStore = usePermissionStore()
 
 const onlineCount = ref(0)
 const todayLoginCount = ref(0)
@@ -358,27 +360,29 @@ let userChart = null
 const displayName = computed(() => userStore.realName || userStore.username || '管理员')
 const welcomeTitle = computed(() => t('home.welcome', { name: displayName.value }))
 
-const topMetrics = computed(() => [
-  { get label() { return localizeLabel('在线用户') }, value: onlineCount.value, desc: localizeLabel('当前活跃会话'), path: '/system/online' },
-  { get label() { return localizeLabel('今日登录') }, value: todayLoginCount.value, desc: localizeLabel('登录审计记录'), path: '/system/login-log' },
-  { get label() { return localizeLabel('待办任务') }, value: todoCount.value, desc: localizeLabel('需要处理的审批'), path: '/flow/todo' },
-])
+const topMetrics = computed(() => filterAccessibleHomeItems([
+  { label: localizeLabel('在线用户'), value: onlineCount.value, desc: localizeLabel('当前活跃会话'), path: '/system/online' },
+  { label: localizeLabel('今日登录'), value: todayLoginCount.value, desc: localizeLabel('登录审计记录'), path: '/system/login-log' },
+  { label: localizeLabel('待办任务'), value: todoCount.value, desc: localizeLabel('需要处理的审批'), path: '/flow/todo' },
+], permissionStore.accessRoutes))
 
-const flowTiles = computed(() => [
-  { get title() { return localizeLabel('我发起的') }, value: startedCount.value, desc: t('home.pending', { count: pendingStarted.value }), path: '/flow/started', icon: 'i-material-symbols:rocket-launch-rounded', tone: 'started' },
-  { get title() { return localizeLabel('我的待办') }, value: todoCount.value, desc: localizeLabel('待签收 / 待处理'), path: '/flow/todo', icon: 'i-material-symbols:pending-actions-rounded', tone: 'todo' },
-  { get title() { return localizeLabel('我的已办') }, value: doneCount.value, desc: localizeLabel('已处理任务'), path: '/flow/done', icon: 'i-material-symbols:task-alt-rounded', tone: 'done' },
-  { get title() { return localizeLabel('发起流程') }, value: localizeLabel('发起'), desc: localizeLabel('选择流程模板'), path: '/flow/template', icon: 'i-material-symbols:add-task-rounded', tone: 'create' },
-  { get title() { return localizeLabel('抄送我的') }, value: localizeLabel('查看'), desc: localizeLabel('关注流转信息'), path: '/flow/cc', icon: 'i-material-symbols:forward-to-inbox-rounded', tone: 'cc' },
-  { get title() { return localizeLabel('流程监控') }, value: localizeLabel('监控'), desc: localizeLabel('运行状态追踪'), path: '/flow/monitor', icon: 'i-material-symbols:monitor-heart-rounded', tone: 'monitor' },
-])
+const flowTiles = computed(() => filterAccessibleHomeItems([
+  { title: localizeLabel('我发起的'), value: startedCount.value, desc: t('home.pending', { count: pendingStarted.value }), path: '/flow/started', icon: 'i-material-symbols:rocket-launch-rounded', tone: 'started' },
+  { title: localizeLabel('我的待办'), value: todoCount.value, desc: localizeLabel('待签收 / 待处理'), path: '/flow/todo', icon: 'i-material-symbols:pending-actions-rounded', tone: 'todo' },
+  { title: localizeLabel('我的已办'), value: doneCount.value, desc: localizeLabel('已处理任务'), path: '/flow/done', icon: 'i-material-symbols:task-alt-rounded', tone: 'done' },
+  { title: localizeLabel('发起流程'), value: localizeLabel('发起'), desc: localizeLabel('选择流程模板'), path: '/flow/template', icon: 'i-material-symbols:add-task-rounded', tone: 'create' },
+  { title: localizeLabel('抄送我的'), value: localizeLabel('查看'), desc: localizeLabel('关注流转信息'), path: '/flow/cc', icon: 'i-material-symbols:forward-to-inbox-rounded', tone: 'cc' },
+  { title: localizeLabel('流程监控'), value: localizeLabel('监控'), desc: localizeLabel('运行状态追踪'), path: '/flow/monitor', icon: 'i-material-symbols:monitor-heart-rounded', tone: 'monitor' },
+], permissionStore.accessRoutes))
 
-const guideSteps = [
-  { get title() { return localizeLabel('创建应用') }, desc: localizeLabel('定义业务系统入口'), path: '/app-center', icon: 'i-material-symbols:add-box-rounded' },
-  { get title() { return localizeLabel('设计对象') }, desc: localizeLabel('配置表单、列表和字段'), path: '/ai/lowcode-apps', icon: 'i-material-symbols:edit-document-rounded' },
-  { get title() { return localizeLabel('编排流程') }, desc: localizeLabel('绑定审批与状态流转'), path: '/flow/model', icon: 'i-material-symbols:account-tree-rounded' },
-  { get title() { return localizeLabel('发布授权') }, desc: localizeLabel('菜单发布并配置权限'), path: '/system/menu', icon: 'i-material-symbols:shield-person-rounded' },
-]
+const guideSteps = computed(() => filterAccessibleHomeItems([
+  { title: localizeLabel('创建应用'), desc: localizeLabel('定义业务系统入口'), path: '/app-center', icon: 'i-material-symbols:add-box-rounded' },
+  { title: localizeLabel('设计对象'), desc: localizeLabel('配置表单、列表和字段'), path: '/ai/lowcode-apps', icon: 'i-material-symbols:edit-document-rounded' },
+  { title: localizeLabel('编排流程'), desc: localizeLabel('绑定审批与状态流转'), path: '/flow/model', icon: 'i-material-symbols:account-tree-rounded' },
+  { title: localizeLabel('发布授权'), desc: localizeLabel('菜单发布并配置权限'), path: '/system/menu', icon: 'i-material-symbols:shield-person-rounded' },
+], permissionStore.accessRoutes))
+
+const showWorkbenchApplications = computed(() => canLoadHomeWorkbench(permissionStore.accessRoutes))
 
 const appShortcuts = computed(() => distributedApplications.value.map(application => ({
   id: application.id,
@@ -388,24 +392,27 @@ const appShortcuts = computed(() => distributedApplications.value.map(applicatio
   icon: application.icon || 'i-material-symbols:apps-rounded',
 })))
 
-const quickLinks = [
-  { get title() { return localizeLabel('用户管理') }, icon: 'i-material-symbols:person-rounded', path: '/system/user' },
-  { get title() { return localizeLabel('角色管理') }, icon: 'i-material-symbols:admin-panel-settings-rounded', path: '/system/role' },
-  { get title() { return localizeLabel('组织管理') }, icon: 'i-material-symbols:account-tree-rounded', path: '/system/org' },
-  { get title() { return localizeLabel('菜单管理') }, icon: 'i-material-symbols:menu-open-rounded', path: '/system/menu' },
-  { get title() { return localizeLabel('岗位管理') }, icon: 'i-material-symbols:badge-rounded', path: '/system/post' },
-  { get title() { return localizeLabel('文件中心') }, icon: 'i-material-symbols:folder-open-rounded', path: '/system/file-list' },
-]
+const quickLinks = computed(() => filterAccessibleHomeItems([
+  { title: localizeLabel('用户管理'), icon: 'i-material-symbols:person-rounded', path: '/system/user' },
+  { title: localizeLabel('角色管理'), icon: 'i-material-symbols:admin-panel-settings-rounded', path: '/system/role' },
+  { title: localizeLabel('组织管理'), icon: 'i-material-symbols:account-tree-rounded', path: '/system/org' },
+  { title: localizeLabel('菜单管理'), icon: 'i-material-symbols:menu-open-rounded', path: '/system/menu' },
+  { title: localizeLabel('岗位管理'), icon: 'i-material-symbols:badge-rounded', path: '/system/post' },
+  { title: localizeLabel('文件中心'), icon: 'i-material-symbols:folder-open-rounded', path: '/system/file-list' },
+], permissionStore.accessRoutes))
 
 const systemMetrics = computed(() => {
   const userBase = Math.max(totalUserCount.value, 1)
   const flowBase = Math.max(startedCount.value + doneCount.value + todoCount.value, 1)
   const noticeBase = Math.max(noticeList.value.length, unreadNotice.value, 1)
-  return [
-    { get label() { return localizeLabel('用户规模') }, value: totalUserCount.value, percent: clampPercent((totalUserCount.value / userBase) * 100) },
-    { get label() { return localizeLabel('流程处理') }, value: doneCount.value, percent: clampPercent((doneCount.value / flowBase) * 100) },
-    { get label() { return localizeLabel('未读公告') }, value: unreadNotice.value, percent: clampPercent((unreadNotice.value / noticeBase) * 100) },
+  const metrics = [
+    { label: localizeLabel('流程处理'), value: doneCount.value, percent: clampPercent((doneCount.value / flowBase) * 100) },
+    { label: localizeLabel('未读公告'), value: unreadNotice.value, percent: clampPercent((unreadNotice.value / noticeBase) * 100) },
   ]
+  if (resolveHomeAdminStatsAccess(permissionStore.accessRoutes).users) {
+    metrics.unshift({ label: localizeLabel('用户规模'), value: totalUserCount.value, percent: clampPercent((totalUserCount.value / userBase) * 100) })
+  }
+  return metrics
 })
 
 function clampPercent(value) {
@@ -414,24 +421,31 @@ function clampPercent(value) {
 
 async function loadUserStats() {
   const today = new Date().toISOString().split('T')[0]
+  const access = resolveHomeAdminStatsAccess(permissionStore.accessRoutes)
   const [onlineResult, userResult, loginResult] = await Promise.allSettled([
-    request.get('/auth/online/page', {
-      params: { pageNum: 1, pageSize: 1 },
-      needTip: false,
-    }),
-    request.get('/system/user/page', {
-      params: { pageNum: 1, pageSize: 1 },
-      needTip: false,
-    }),
-    request.get('/system/loginLog/page', {
-      params: { pageNum: 1, pageSize: 1, startTime: today, endTime: today },
-      needTip: false,
-    }),
+    access.online
+      ? request.get('/auth/online/page', {
+          params: { pageNum: 1, pageSize: 1 },
+          needTip: false,
+        })
+      : Promise.resolve(null),
+    access.users
+      ? request.get('/system/user/page', {
+          params: { pageNum: 1, pageSize: 1 },
+          needTip: false,
+        })
+      : Promise.resolve(null),
+    access.loginLogs
+      ? request.get('/system/loginLog/page', {
+          params: { pageNum: 1, pageSize: 1, startTime: today, endTime: today },
+          needTip: false,
+        })
+      : Promise.resolve(null),
   ])
 
-  onlineCount.value = onlineResult.status === 'fulfilled' ? onlineResult.value.data?.total || 0 : 0
-  totalUserCount.value = userResult.status === 'fulfilled' ? userResult.value.data?.total || 0 : 0
-  todayLoginCount.value = loginResult.status === 'fulfilled' ? loginResult.value.data?.total || 0 : 0
+  onlineCount.value = onlineResult.status === 'fulfilled' ? onlineResult.value?.data?.total || 0 : 0
+  totalUserCount.value = userResult.status === 'fulfilled' ? userResult.value?.data?.total || 0 : 0
+  todayLoginCount.value = loginResult.status === 'fulfilled' ? loginResult.value?.data?.total || 0 : 0
 }
 
 async function loadFlowData() {
@@ -441,16 +455,23 @@ async function loadFlowData() {
   }
   try {
     const silentConfig = { needTip: false }
+    const access = resolveHomeFlowApiAccess(userStore.apiPermissions, userStore.isAdmin)
     const [todoRes, doneRes, startedRes] = await Promise.all([
-      flowApi.getTodoTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig),
-      flowApi.getDoneTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig),
-      flowApi.getStartedTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig),
+      access.todo
+        ? flowApi.getTodoTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig)
+        : Promise.resolve(null),
+      access.done
+        ? flowApi.getDoneTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig)
+        : Promise.resolve(null),
+      access.started
+        ? flowApi.getStartedTasks({ pageNum: 1, pageSize: 1, userId: userStore.userId }, silentConfig)
+        : Promise.resolve(null),
     ])
 
-    todoCount.value = todoRes.data?.total || 0
-    doneCount.value = doneRes.data?.total || 0
-    startedCount.value = startedRes.data?.total || 0
-    pendingStarted.value = startedRes.data?.records?.filter(item => item.status === 1).length || 0
+    todoCount.value = todoRes?.data?.total || 0
+    doneCount.value = doneRes?.data?.total || 0
+    startedCount.value = startedRes?.data?.total || 0
+    pendingStarted.value = startedRes?.data?.records?.filter(item => item.status === 1).length || 0
   }
   catch {
     todoCount.value = 0
@@ -464,6 +485,12 @@ async function loadFlowData() {
 async function loadTodoList() {
   if (!userStore.userId) {
     console.warn('用户ID未初始化，跳过加载待办列表')
+    return
+  }
+  const access = resolveHomeFlowApiAccess(userStore.apiPermissions, userStore.isAdmin)
+  if (!access.todo) {
+    todoList.value = []
+    todoLoading.value = false
     return
   }
   todoLoading.value = true
@@ -495,10 +522,17 @@ async function loadNoticeList() {
 }
 
 async function loadWorkbenchApplications() {
+  if (!showWorkbenchApplications.value) {
+    distributedApplications.value = []
+    appLoading.value = false
+    return
+  }
   appLoading.value = true
   try {
-    const response = await businessApplicationWorkbench()
-    distributedApplications.value = response.data || []
+    distributedApplications.value = await loadAccessibleHomeWorkbench(
+      permissionStore.accessRoutes,
+      businessApplicationWorkbench,
+    )
   }
   catch {
     distributedApplications.value = []

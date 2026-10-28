@@ -1,5 +1,11 @@
 // Public display text only. Never translate record values or user-entered text.
 export default {
+  '暂无访问权限': 'Access unavailable',
+  '网络连接失败': 'Network connection failed',
+  '当前账号没有访问待办的权限，请联系管理员开通': 'Your account cannot access tasks. Contact an administrator for access.',
+  '请检查网络后重试，或下拉刷新重新加载': 'Check your network and try again, or pull down to reload.',
+  '流程服务暂时不可用，请稍后重试': 'The workflow service is temporarily unavailable. Try again later.',
+
   "上一页": "Previous",
   "上传中": "Uploading",
   "上传附件": "Upload attachments",
@@ -141,6 +147,7 @@ export default {
   "请输入审批意见": "Enter comments",
   "请输入密码": "Enter your password",
   "请输入当前密码": "Enter your current password",
+  "请输入正确的手机号": "Enter a valid mobile number",
   "请输入手机号": "Enter your mobile number",
   "请输入用户名": "Enter your username",
   "请输入邮箱": "Enter your email address",

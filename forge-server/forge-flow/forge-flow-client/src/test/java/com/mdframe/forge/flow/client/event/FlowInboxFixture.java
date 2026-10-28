@@ -28,6 +28,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 final class FlowInboxFixture implements AutoCloseable {
+    private static final Path MIGRATION = Path.of("forge-server/db/migration/"
+            + "V1.0.2026100910__flow_event_consumer_inbox.sql");
+    private static final Path MAPPER = Path.of("forge-server/forge-flow/forge-flow-client/"
+            + "src/main/resources/mapper/FlowEventInboxMapper.xml");
     final DriverManagerDataSource source = new DriverManagerDataSource(
             "jdbc:h2:mem:inbox" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=5000", "sa", "");
     final DataSourceTransactionManager transactions = new DataSourceTransactionManager(source);
@@ -37,17 +41,32 @@ final class FlowInboxFixture implements AutoCloseable {
     final FlowEventInboxMapper mapper;
 
     FlowInboxFixture() throws Exception {
-        String migration = Files.readString(Path.of("forge-server/db/migration/"
-                + "V1.0.2026100910__flow_event_consumer_inbox.sql"), StandardCharsets.UTF_8);
+        this(Path.of(""));
+    }
+
+    FlowInboxFixture(Path workingDirectory) throws Exception {
+        Path root = repositoryRoot(workingDirectory);
+        String migration = Files.readString(root.resolve(MIGRATION), StandardCharsets.UTF_8);
         jdbc.execute(migration.replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", ""));
         jdbc.execute("CREATE TABLE callback_effect (callback_name VARCHAR(80), event_id VARCHAR(64), "
                 + "PRIMARY KEY(callback_name,event_id))");
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         factory.setConfiguration(new MybatisConfiguration());
-        factory.setMapperLocations(new FileSystemResource("forge-server/forge-flow/forge-flow-client/"
-                + "src/main/resources/mapper/FlowEventInboxMapper.xml"));
+        factory.setMapperLocations(new FileSystemResource(root.resolve(MAPPER)));
         mapper = new SqlSessionTemplate(factory.getObject()).getMapper(FlowEventInboxMapper.class);
+    }
+
+    private static Path repositoryRoot(Path workingDirectory) {
+        for (Path current = workingDirectory.toAbsolutePath().normalize(); current != null;
+                current = current.getParent()) {
+            if (Files.isRegularFile(current.resolve("forge-server/pom.xml"))
+                    && Files.isRegularFile(current.resolve(MIGRATION))
+                    && Files.isRegularFile(current.resolve(MAPPER))) {
+                return current;
+            }
+        }
+        throw new IllegalStateException("Cannot locate Flow inbox fixture resources from " + workingDirectory);
     }
 
     Callback add(String name) {

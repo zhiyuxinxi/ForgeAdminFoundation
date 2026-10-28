@@ -11,13 +11,14 @@
     <name>forge-plugin-parent</name>
     <description>forge-plugin-parent</description>
     <packaging>pom</packaging>
-    
+
     <properties>
     </properties>
-    
+
     <modules>
         <module>forge-plugin-system</module>
         <module>forge-plugin-job</module>
+        <module>forge-plugin-task</module>
         <module>forge-plugin-message</module>
         <module>forge-plugin-flow</module>
         <module>forge-plugin-collaboration</module>

@@ -6,7 +6,7 @@ const DEFAULT_TIMEOUT = 30000
  * 使用浏览器后置摄像头扫描条形码/二维码。
  * 该适配器只负责设备能力和结果采集，业务查询仍由 SCAN_COMPLETE 字段事件完成。
  */
-export function scanWithH5Camera({ timeoutMs = DEFAULT_TIMEOUT, signal, formats = [] } = {}) {
+export function scanWithH5Camera({ timeoutMs = DEFAULT_TIMEOUT, signal, formats = [], hint: hintText } = {}) {
   if (typeof document === 'undefined' || typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia)
     return Promise.reject(createH5ScanError('SCAN_UNSUPPORTED', '当前浏览器没有摄像头能力'))
 
@@ -54,7 +54,7 @@ export function scanWithH5Camera({ timeoutMs = DEFAULT_TIMEOUT, signal, formats 
       fontSize: '13px',
     })
     const hint = document.createElement('span')
-    hint.textContent = '请将条形码放入取景框'
+    hint.textContent = hintText || '请将条形码放入取景框'
     const cancel = document.createElement('button')
     cancel.type = 'button'
     cancel.textContent = '取消'

@@ -14,9 +14,10 @@ import com.mdframe.forge.starter.tenant.context.TenantContextHolder;
 import org.flowable.common.engine.api.delegate.event.FlowableEngineEventType;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,8 +45,7 @@ final class FlowTerminalOutboxFixture implements AutoCloseable {
 
     FlowTerminalOutboxFixture(Function<DataSource, FlowEventDeliveryRecorder> recorderFactory) throws Exception {
         runtime = new FlowStartRoundDatabaseFixture();
-        String migration = Files.readString(Path.of("forge-server/db/migration/"
-                + "V1.0.2026100909__flow_terminal_event_outbox.sql"), StandardCharsets.UTF_8);
+        String migration = readMigration("V1.0.2026100909__flow_terminal_event_outbox.sql");
         runtime.jdbc.execute(migration.replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", ""));
         outbox = newReader();
         model.setNotifyType("redis");
@@ -62,9 +62,18 @@ final class FlowTerminalOutboxFixture implements AutoCloseable {
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(runtime.jdbc.getDataSource());
         factory.setConfiguration(configuration);
-        factory.setMapperLocations(new FileSystemResource("forge-server/forge-framework/forge-plugin-parent/"
-                + "forge-plugin-flow/src/main/resources/mapper/FlowEventOutboxMapper.xml"));
+        factory.setMapperLocations(new ClassPathResource("mapper/FlowEventOutboxMapper.xml"));
         return new SqlSessionTemplate(factory.getObject()).getMapper(FlowEventOutboxMapper.class);
+    }
+
+    static String readMigration(String name) throws IOException {
+        for (Path root = Path.of("").toAbsolutePath(); root != null; root = root.getParent()) {
+            Path migration = root.resolve("forge-server/db/migration").resolve(name);
+            if (Files.isRegularFile(migration)) {
+                return Files.readString(migration, StandardCharsets.UTF_8).replace("\r\n", "\n");
+            }
+        }
+        throw new IOException("Flow test migration not found: " + name);
     }
 
     String start(String key, String previous) {

@@ -130,7 +130,8 @@ public class BusinessFlowService {
         this.redissonClientProvider = redissonClientProvider;
         this.actionExecutionServiceProvider = actionExecutionServiceProvider;
         this.flowStarts = new BusinessFlowStartCoordinator(runtimeMetadata(), flowInstanceLinkMapper,
-                documentRuntimeService, dynamicCrudService, statusUpdates(), redissonClientProvider);
+                documentRuntimeService, dynamicCrudService, statusUpdates(), redissonClientProvider,
+                new BusinessFlowStartRecovery(flowInstanceLinkMapper, callbackResults()));
     }
 
     // Stateless read collaborators keep the existing extension constructor and optional FlowClient contract.
@@ -352,6 +353,19 @@ public class BusinessFlowService {
         BusinessTaskFormContextQueryDTO effectiveQuery = query == null ? new BusinessTaskFormContextQueryDTO() : query;
         TaskFormRuntimeContext runtime = resolveTaskFormRuntimeContext(effectiveQuery, false);
         BusinessTaskFormContextVO context = buildTaskFormContext(effectiveQuery, runtime);
+        makeBusinessTaskFormReadonly(context);
+        return context;
+    }
+
+    /**
+     * 查询当前登录用户本人收到的抄送所关联的业务表单上下文。
+     * 收件归属先由流程服务的抄送详情接口校验，再消费其返回的流程/业务身份。
+     */
+    public BusinessTaskFormContextVO getCcTaskFormReadonlyContext(String ccId) {
+        CcTaskFormLookup.VerifiedForm form = CcTaskFormLookup.read(flowClient, ccId);
+        BusinessTaskFormContextQueryDTO query = form.query();
+        TaskFormRuntimeContext runtime = resolveTaskFormRuntimeContext(query, false);
+        BusinessTaskFormContextVO context = buildTaskFormContext(query, runtime, form.data());
         makeBusinessTaskFormReadonly(context);
         return context;
     }
@@ -663,8 +677,16 @@ public class BusinessFlowService {
         taskAuthorization.validate(query, writeRequired, flowClient, this::resolveUserId);
     }
 
+
+
     private BusinessTaskFormContextVO buildTaskFormContext(BusinessTaskFormContextQueryDTO query,
                                                            TaskFormRuntimeContext runtime) {
+        return buildTaskFormContext(query, runtime, null);
+    }
+
+    private BusinessTaskFormContextVO buildTaskFormContext(BusinessTaskFormContextQueryDTO query,
+                                                           TaskFormRuntimeContext runtime,
+                                                           Map<String, Object> trustedFlowFormInfo) {
         BusinessTaskFormContextVO vo = new BusinessTaskFormContextVO();
         vo.setTaskId(StringUtils.trimToNull(query.getTaskId()));
         vo.setBusinessKey(runtime.businessKey());
@@ -681,7 +703,7 @@ public class BusinessFlowService {
             return vo;
         }
 
-        JSONObject nodeForm = resolveTaskNodeForm(runtime, query);
+        JSONObject nodeForm = resolveTaskNodeForm(runtime, query, trustedFlowFormInfo);
         if (nodeForm == null || nodeForm.isEmpty()) {
             vo.getWarnings().add("当前节点未配置业务表单策略");
             return vo;
@@ -730,7 +752,18 @@ public class BusinessFlowService {
     }
 
     private void makeBusinessTaskFormReadonly(BusinessTaskFormContextVO context) {
+        if (context == null) {
+            return;
+        }
         taskFormProjection.makeBusinessTaskFormReadonly(context);
+        context.setAllowApprove(false);
+        context.setAllowReject(false);
+        context.setAllowRejectToStart(false);
+        context.setAllowDelegate(false);
+        context.setAllowReturn(false);
+        context.setAllowTerminate(false);
+        context.setRequireComment(false);
+        context.setRequireSignature(false);
     }
 
     private BusinessTaskFormContextVO buildBusinessCodeFormContext(BusinessTaskFormContextQueryDTO query,
@@ -847,7 +880,13 @@ public class BusinessFlowService {
     }
 
     private JSONObject resolveTaskNodeForm(TaskFormRuntimeContext runtime, BusinessTaskFormContextQueryDTO query) {
-        JSONObject flowNodeForm = resolveFlowNodeForm(runtime, query);
+        return resolveTaskNodeForm(runtime, query, null);
+    }
+
+    private JSONObject resolveTaskNodeForm(TaskFormRuntimeContext runtime,
+                                           BusinessTaskFormContextQueryDTO query,
+                                           Map<String, Object> trustedFlowFormInfo) {
+        JSONObject flowNodeForm = resolveFlowNodeForm(runtime, query, trustedFlowFormInfo);
         if (!flowNodeForm.isEmpty()) {
             return flowNodeForm;
         }
@@ -855,12 +894,19 @@ public class BusinessFlowService {
     }
 
     private JSONObject resolveFlowNodeForm(TaskFormRuntimeContext runtime, BusinessTaskFormContextQueryDTO query) {
+        return resolveFlowNodeForm(runtime, query, null);
+    }
+
+    private JSONObject resolveFlowNodeForm(TaskFormRuntimeContext runtime,
+                                           BusinessTaskFormContextQueryDTO query,
+                                           Map<String, Object> trustedFlowFormInfo) {
         String objectCode = StringUtils.trimToNull(runtime.objectCode());
         if (StringUtils.isBlank(objectCode)) {
             return new JSONObject();
         }
-        Map<String, Object> formInfo = new FlowNodeFormReader(flowClient)
-                .load(runtime.businessKey(), runtime.bindingConfig(), query);
+        Map<String, Object> formInfo = trustedFlowFormInfo == null
+                ? new FlowNodeFormReader(flowClient).load(runtime.businessKey(), runtime.bindingConfig(), query)
+                : trustedFlowFormInfo;
         FlowNodeFormResolution resolution = new FlowNodeFormResolution(runtime.configKey(), formInfo, query);
         JSONObject runtimeAsset = resolveBusinessTaskFormAsset(objectCode, resolution.runtimeFormKey());
         resolution.selectRuntimeAsset(runtimeAsset);

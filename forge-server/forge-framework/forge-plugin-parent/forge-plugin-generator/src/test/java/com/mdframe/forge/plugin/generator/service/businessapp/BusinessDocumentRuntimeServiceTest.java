@@ -9,6 +9,7 @@ import com.mdframe.forge.plugin.generator.mapper.BusinessObjectMapper;
 import com.mdframe.forge.plugin.generator.mapper.BusinessProcessRunMapper;
 import com.mdframe.forge.plugin.generator.service.DynamicCrudService;
 import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessDocumentRuntimeVO;
+import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,32 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @DisplayName("BusinessDocumentRuntimeService")
 class BusinessDocumentRuntimeServiceTest {
+
+    @Test
+    void originalRequestReplayKeepsPermissionChecksWithoutRequiringNewStartState() {
+        var service = mock(BusinessDocumentRuntimeService.class, CALLS_REAL_METHODS);
+        var runtime = new BusinessDocumentRuntimeVO();
+        runtime.setDocumentEnabled(true);
+        runtime.setBusinessKey("order:19");
+        runtime.setAvailableActions(List.of("START_FLOW"));
+        runtime.setNextAction("VIEW_FLOW");
+        doReturn(runtime).when(service).getRuntime("order", 19L);
+        assertThrows(BusinessException.class, () -> service.validateStartAllowed("order", 19L, true));
+        assertDoesNotThrow(() -> service.validateStartReplayAllowed("order", 19L, true));
+        runtime.setAvailableActions(List.of("VIEW"));
+        assertThrows(BusinessException.class, () -> service.validateStartReplayAllowed("order", 19L, true));
+        runtime.setDocumentEnabled(false);
+        assertThrows(BusinessException.class, () -> service.validateStartReplayAllowed("order", 19L, false));
+    }
 
     @Test
     @DisplayName("application-level flow history remains available without document mode")

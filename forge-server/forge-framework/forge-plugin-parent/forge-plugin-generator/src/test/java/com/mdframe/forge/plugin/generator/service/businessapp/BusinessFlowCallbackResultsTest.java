@@ -65,7 +65,7 @@ class BusinessFlowCallbackResultsTest {
         callback.setTenantId(7L);
         callback.setProcessInstanceId("process");
         callback.setResult("APPROVED");
-        when(links.selectByProcessInstanceId(7L, "process")).thenReturn(link);
+        when(links.selectByProcessInstanceIdForUpdate(7L, "process")).thenReturn(link);
         when(configs.selectPublishedByObjectCodeOrConfigKey(7L, "order")).thenReturn(config);
         when(data.selectById("order-config", 19L)).thenReturn(Map.of("id", 19L));
     }
@@ -170,6 +170,35 @@ class BusinessFlowCallbackResultsTest {
         context.setBusinessKey(null);
         service.handleFlowEngineEvent(context);
         verifyNoInteractions(events, data);
+    }
+
+    @Test
+    void unknownExplicitInstanceCannotResolveToLatestDocumentRound() {
+        callback.setProcessInstanceId("old-unbound-process");
+        callback.setBusinessKey("order:19");
+        when(links.selectLatestByBusinessKeyForUpdate(7L, "order:19")).thenReturn(link);
+
+        assertThrows(BusinessException.class, () -> service.handleFlowCallback(callback));
+
+        verify(links).selectByProcessInstanceIdForUpdate(7L, "old-unbound-process");
+        verify(links, never()).selectLatestByBusinessKeyForUpdate(anyLong(), anyString());
+        verify(links, never()).updateById(any(AiBusinessFlowInstanceLink.class));
+        verifyNoInteractions(documents, configs, bindings, data, actions, events);
+    }
+
+    @Test
+    void unknownEngineInstanceDoesNotCompleteLatestDocumentRound() {
+        when(links.selectLatestByBusinessKeyForUpdate(7L, "order:19")).thenReturn(link);
+        FlowEventContext context = FlowEventContext.builder().tenantId(7L)
+                .processInstanceId("old-unbound-process").businessKey("order:19")
+                .event(FlowCallback.ON_COMPLETED).build();
+
+        service.handleFlowEngineEvent(context);
+
+        verify(links).selectByProcessInstanceIdForUpdate(7L, "old-unbound-process");
+        verify(links, never()).selectLatestByBusinessKeyForUpdate(anyLong(), anyString());
+        verify(links, never()).updateById(any(AiBusinessFlowInstanceLink.class));
+        verifyNoInteractions(documents, configs, bindings, data, actions, events);
     }
 
     @Test

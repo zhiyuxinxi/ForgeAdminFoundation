@@ -33,23 +33,26 @@ class DocumentProcessServiceIntegrityTest {
     private final AiStoreInstanceService instances = mock(AiStoreInstanceService.class);
     private final VectorStoreService store = mock(VectorStoreService.class);
     private final ChunkerRegistry chunker = mock(ChunkerRegistry.class);
-    private final DocumentVectorIndexer indexer = new DocumentVectorIndexer(documentMapper, chunkMapper,
-            modelMapper, providerMapper, adapters, mock(AiSecretCrypto.class), stores, instances);
+    private final AiSecretCrypto secrets = mock(AiSecretCrypto.class);
+    private final DocumentVectorIndexer indexer = new DocumentVectorIndexer(documentMapper,
+            modelMapper, providerMapper, adapters, secrets, stores, instances,
+            new DocumentIndexPublisher(documentMapper, chunkMapper));
     private final DocumentProcessService service = new DocumentProcessService(knowledgeMapper, documentMapper,
             chunkMapper, mock(DocumentParserRegistry.class), chunker, mock(FileManager.class),
-            indexer, mock(DocumentProcessDispatcher.class));
+            indexer, mock(DocumentProcessDispatcher.class), mock(DocumentProcessState.class));
 
     @Test
     void duplicatePendingWorkerDoesNotParseOrIndexTwice() {
         AiKnowledgeDocument document = new AiKnowledgeDocument();
         document.setSourceType("manual");
         when(documentMapper.selectById(2L)).thenReturn(document);
-        when(documentMapper.claimPendingDocument(2L)).thenReturn(1, 0);
+        when(documentMapper.claimPendingDocument(2L, "attempt", 1800)).thenReturn(1, 0);
+        currentAttempt("attempt");
         when(chunker.chunk(anyString(), any(), any())).thenReturn(List.of());
-        ReflectionTestUtils.invokeMethod(service, "processDocument", 2L, knowledge());
-        ReflectionTestUtils.invokeMethod(service, "processDocument", 2L, knowledge());
+        ReflectionTestUtils.invokeMethod(service, "processDocument", 2L, knowledge(), "attempt");
+        ReflectionTestUtils.invokeMethod(service, "processDocument", 2L, knowledge(), "attempt");
         verify(chunker).chunk(anyString(), any(), any());
-        verify(documentMapper).updateProcessStatus(2L, "success", null, 0);
+        verify(documentMapper).finishAttempt(2L, "attempt", "processing", "success", null, 0);
     }
 
     @Test
@@ -58,7 +61,8 @@ class DocumentProcessServiceIntegrityTest {
         AiKnowledgeChunk old = new AiKnowledgeChunk();
         old.setVectorId("doc_2_chunk_0");
         when(chunkMapper.selectByDocumentId(2L)).thenReturn(List.of(old));
-        indexer.replaceChunks(2L, knowledge(), List.of());
+        currentAttempt("attempt");
+        assertTrue(indexer.replaceChunks(2L, knowledge(), List.of(), "attempt"));
         verify(store).delete(argThat(request -> request.getIds().equals(List.of("doc_2_chunk_0"))));
         verify(chunkMapper).deleteByDocumentId(2L);
         verify(store, never()).insert(any());
@@ -83,6 +87,65 @@ class DocumentProcessServiceIntegrityTest {
 
     @Test
     void incompatibleSharedCollectionIsNeverRecreatedBySingleDocumentImport() {
+        configureEmbeddingStore();
+        doAnswer(call -> {
+            VectorStoreService.CreateCollectionRequest request = call.getArgument(0);
+            assertFalse(request.isForceRecreate());
+            assertEquals("knowledge_1", request.getCollectionName());
+            throw new BusinessException("existing collection has incompatible dimension");
+        }).when(store).createCollectionIfAbsent(any());
+        BusinessException failure = assertThrows(BusinessException.class, () -> indexer.replaceChunks(2L, knowledge(), List.of(ChunkResult.of(0, "content", 1)), "attempt"));
+        assertEquals("existing collection has incompatible dimension", failure.getMessage());
+        verify(store).createCollectionIfAbsent(any());
+        verify(chunkMapper, never()).insert(any(AiKnowledgeChunk.class));
+        verify(store, never()).insert(any());
+    }
+
+    @Test
+    void staleRemoteOutputHasSeparateIdsAndCannotPublishOrDeleteNewAttempt() {
+        configureEmbeddingStore();
+        currentAttempt("new-attempt");
+        assertFalse(indexer.replaceChunks(2L, knowledge(), List.of(ChunkResult.of(0, "old content", 1)), "old-attempt"));
+        verify(store).insert(argThat(request -> request.getIds().equals(List.of("doc_2_old-attempt_chunk_0"))));
+        verify(store).delete(argThat(request -> request.getIds().equals(List.of("doc_2_old-attempt_chunk_0"))));
+        verify(chunkMapper, never()).deleteByDocumentId(anyLong());
+        verify(chunkMapper, never()).insert(any(AiKnowledgeChunk.class));
+    }
+
+    @Test
+    void uncertainPublicationNeverDeletesPotentiallyCommittedVectors() {
+        configureEmbeddingStore();
+        when(documentMapper.selectByIdForUpdate(2L)).thenThrow(new IllegalStateException("database outcome unknown"));
+        assertThrows(IllegalStateException.class, () -> indexer.replaceChunks(2L, knowledge(),
+                List.of(ChunkResult.of(0, "content", 1)), "attempt"));
+        verify(store).insert(any());
+        verify(store, never()).delete(any());
+    }
+
+    @Test
+    void supersededVectorCleanupFailureDoesNotUndoPublishedEmptyIndex() {
+        configureStore();
+        currentAttempt("attempt");
+        AiKnowledgeChunk old = new AiKnowledgeChunk();
+        old.setVectorId("old-attempt");
+        when(chunkMapper.selectByDocumentId(2L)).thenReturn(List.of(old));
+        doThrow(new BusinessException("cleanup unavailable")).when(store).delete(any());
+        assertTrue(indexer.replaceChunks(2L, knowledge(), List.of(), "attempt"));
+        verify(documentMapper).finishAttempt(2L, "attempt", "processing", "success", null, 0);
+    }
+
+    private void currentAttempt(String attempt) {
+        AiKnowledgeDocument document = new AiKnowledgeDocument();
+        document.setId(2L);
+        document.setKnowledgeId(1L);
+        document.setTenantId(7L);
+        document.setProcessAttempt(attempt);
+        document.setProcessStatus("processing");
+        when(documentMapper.selectByIdForUpdate(2L)).thenReturn(document);
+        when(documentMapper.finishAttempt(eq(2L), eq(attempt), eq("processing"), eq("success"), isNull(), anyInt())).thenReturn(1);
+    }
+
+    private void configureEmbeddingStore() {
         AiModel model = new AiModel();
         model.setProviderId(4L);
         model.setModelId("embedding");
@@ -90,21 +153,13 @@ class DocumentProcessServiceIntegrityTest {
         AiProvider provider = new AiProvider();
         provider.setBaseUrl("http://model.invalid");
         provider.setApiKey("test-only");
+        when(secrets.decrypt("test-only")).thenReturn("decrypted-test-only");
         when(providerMapper.selectById(4L)).thenReturn(provider);
         AiEmbeddingModelAdapter adapter = mock(AiEmbeddingModelAdapter.class);
         when(adapters.getEmbedding("embedding")).thenReturn(adapter);
         when(adapter.embed(anyString(), anyString(), anyString(), anyList()))
                 .thenReturn(List.of(List.of(1.0F, 2.0F)));
         configureStore();
-        doAnswer(call -> {
-            VectorStoreService.CreateCollectionRequest request = call.getArgument(0);
-            assertFalse(request.isForceRecreate());
-            assertEquals("knowledge_1", request.getCollectionName());
-            throw new BusinessException("existing collection has incompatible dimension");
-        }).when(store).createCollectionIfAbsent(any());
-        assertThrows(BusinessException.class, () -> indexer.replaceChunks(2L, knowledge(), List.of(ChunkResult.of(0, "content", 1))));
-        verify(chunkMapper, never()).insert(any(AiKnowledgeChunk.class));
-        verify(store, never()).insert(any());
     }
 
     private AiKnowledge knowledge() {

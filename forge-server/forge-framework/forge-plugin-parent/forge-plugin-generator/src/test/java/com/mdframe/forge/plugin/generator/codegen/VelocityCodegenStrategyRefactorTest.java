@@ -89,7 +89,7 @@ class VelocityCodegenStrategyRefactorTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static VelocityCodegenStrategy strategy(LowcodeStaticCodegenContributor contributor) {
+    static VelocityCodegenStrategy strategy(LowcodeStaticCodegenContributor contributor) {
         GenTableColumnMapper mapper = mock(GenTableColumnMapper.class);
         when(mapper.selectDbTableColumnsByName(anyString())).thenReturn(List.of());
         when(mapper.selectConfiguredColumnsByTableName(anyString())).thenReturn(List.of());
@@ -107,7 +107,7 @@ class VelocityCodegenStrategyRefactorTest {
                 new LowcodeProtocolSnapshotBuilder(JSON), provider);
     }
 
-    private static LowcodeStaticCodegenContributor contributor() {
+    static LowcodeStaticCodegenContributor contributor() {
         return new LowcodeStaticCodegenContributor() {
             @Override public String capabilityId() { return "quality-fixture"; }
             @Override public void contributeContext(AiCrudConfig config, VelocityContext context) {
@@ -122,7 +122,7 @@ class VelocityCodegenStrategyRefactorTest {
         };
     }
 
-    private static AiCrudConfig fixture(String scenario) throws Exception {
+    static AiCrudConfig fixture(String scenario) throws Exception {
         String layout = switch (scenario) {
             case "master-detail" -> "master-detail-crud";
             case "tree" -> "tree-crud";

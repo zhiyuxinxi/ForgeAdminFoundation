@@ -135,7 +135,7 @@ class BusinessProcessServiceTest {
         BusinessObjectProcessVO summary = new BusinessObjectProcessVO();
         summary.setId("1001");
         summary.setProcessCode("order_created_update");
-        summary.setStartNodeType("START_EVENT");
+        summary.setDraftSchemaJson("{\"nodes\":[{\"id\":\"action\",\"type\":\"ACTION\"},{\"id\":\"start\",\"type\":\"START_EVENT\"}]}");
         when(processMapper.selectBySubjectObjectCode(1L, "order")).thenReturn(List.of(summary));
 
         List<BusinessObjectProcessVO> result = service.listByObjectCode("  order  ");
@@ -143,6 +143,7 @@ class BusinessProcessServiceTest {
         assertEquals(1, result.size());
         assertEquals("1001", result.get(0).getId());
         assertEquals("START_EVENT", result.get(0).getStartNodeType());
+        assertNull(result.get(0).getDraftSchemaJson(), "The canvas must not leak into the process summary");
         verify(processMapper).selectBySubjectObjectCode(1L, "order");
     }
 

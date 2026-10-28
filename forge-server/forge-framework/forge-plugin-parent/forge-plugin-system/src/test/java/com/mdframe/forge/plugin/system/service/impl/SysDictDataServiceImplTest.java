@@ -9,21 +9,35 @@ import com.mdframe.forge.starter.cache.managed.annotation.ForgeCacheEvict;
 import com.mdframe.forge.starter.cache.managed.annotation.ForgeCacheable;
 import com.mdframe.forge.starter.cache.managed.enums.CacheMode;
 import com.mdframe.forge.starter.cache.managed.enums.CacheScope;
+import com.mdframe.forge.starter.core.context.ExecutionIdentity;
+import com.mdframe.forge.starter.core.context.ExecutionIdentityContextHolder;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.session.LoginUser;
+import com.mdframe.forge.starter.core.session.SessionHelper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mockStatic;
 
 class SysDictDataServiceImplTest {
+
+    @AfterEach
+    void resetLocale() {
+        LocaleContextHolder.resetLocaleContext();
+    }
 
     @Test
     void dictionaryReadAndEvictionShouldDeclareManagedCacheContracts() throws NoSuchMethodException {
@@ -83,14 +97,34 @@ class SysDictDataServiceImplTest {
     }
 
     @Test
-    void insertShouldSaveWhenValueIsUnique() {
+    void missingTrustedTenantShouldUseTheRequestLocaleWithoutChangingTheGuard() {
+        MapperStub stub = new MapperStub();
+        LocaleContextHolder.setLocale(Locale.US);
+
+        try (var session = mockStatic(SessionHelper.class)) {
+            session.when(SessionHelper::getTenantId).thenReturn(null);
+
+            assertThatThrownBy(() -> service(stub).insertDictData(dto(null, "sys_status", "1")))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessage("Trusted tenant context is missing");
+            assertThat(stub.inserted.get()).isFalse();
+        }
+    }
+
+    @Test
+    void insertShouldUseTrustedSessionTenantAndIgnoreRequestTenant() {
         MapperStub stub = new MapperStub();
         SysDictDataServiceImpl service = service(stub);
+        SysDictDataDTO dto = dto(null, "example_type", "EXAMPLE_VALUE");
+        dto.setTenantId(99L);
 
-        assertThat(service.insertDictData(dto(null, "sys_status", "1"))).isTrue();
+        try (ExecutionIdentityContextHolder.Scope ignored = trustedIdentity(1L)) {
+            assertThat(service.insertDictData(dto)).isTrue();
+        }
 
-        assertThat(stub.uniqueCheckArguments.get()).containsExactly("sys_status", "1", null);
-        assertThat(stub.inserted.get()).isTrue();
+        assertThat(stub.uniqueCheckArguments.get()).containsExactly(
+                "example_type", "EXAMPLE_VALUE", null);
+        assertThat(stub.insertedEntity.get().getTenantId()).isEqualTo(1L);
     }
 
     @Test
@@ -109,19 +143,32 @@ class SysDictDataServiceImplTest {
     }
 
     @Test
-    void updateShouldExcludeCurrentDictItemFromUniqueCheck() {
+    void updateShouldExcludeCurrentItemAndPreserveStoredTenant() {
         MapperStub stub = new MapperStub();
-        stub.existing.set(entity(2L, "sys_status", "1"));
+        SysDictData existing = entity(2L, "sys_status", "1");
+        existing.setTenantId(1L);
+        stub.existing.set(existing);
         SysDictDataServiceImpl service = service(stub);
+        SysDictDataDTO dto = dto(2L, "sys_status", "1");
+        dto.setTenantId(99L);
 
-        assertThat(service.updateDictData(dto(2L, "sys_status", "1"))).isTrue();
+        assertThat(service.updateDictData(dto)).isTrue();
 
         assertThat(stub.uniqueCheckArguments.get()).containsExactly("sys_status", "1", 2L);
-        assertThat(stub.updated.get()).isTrue();
+        assertThat(stub.updatedEntity.get().getTenantId()).isEqualTo(1L);
     }
 
     private SysDictDataServiceImpl service(MapperStub stub) {
         return new SysDictDataServiceImpl(stub.mapper(), event -> { });
+    }
+
+    private ExecutionIdentityContextHolder.Scope trustedIdentity(Long tenantId) {
+        LoginUser user = new LoginUser();
+        user.setUserId(7L);
+        user.setTenantId(tenantId);
+        ExecutionIdentity identity = new ExecutionIdentity(
+                user, "USER", 7L, null, 1L, "test-client", "test-token", Set.of());
+        return ExecutionIdentityContextHolder.open(identity);
     }
 
     private SysDictDataDTO dto(Long dictCode, String dictType, String dictValue) {
@@ -146,6 +193,8 @@ class SysDictDataServiceImplTest {
         private final AtomicReference<Object[]> uniqueCheckArguments = new AtomicReference<>();
         private final AtomicBoolean inserted = new AtomicBoolean();
         private final AtomicBoolean updated = new AtomicBoolean();
+        private final AtomicReference<SysDictData> insertedEntity = new AtomicReference<>();
+        private final AtomicReference<SysDictData> updatedEntity = new AtomicReference<>();
         private final AtomicReference<String> selectedType = new AtomicReference<>();
         private List<SysDictData> enabledData = List.of();
         private int duplicateCount;
@@ -166,10 +215,12 @@ class SysDictDataServiceImplTest {
                         }
                         case "insert" -> {
                             inserted.set(true);
+                            insertedEntity.set((SysDictData) args[0]);
                             yield 1;
                         }
                         case "updateById" -> {
                             updated.set(true);
+                            updatedEntity.set((SysDictData) args[0]);
                             yield 1;
                         }
                         default -> throw new UnsupportedOperationException(method.getName());

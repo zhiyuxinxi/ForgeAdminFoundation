@@ -31,6 +31,7 @@
     :label-width="field.labelWidth"
     :show-label="field.showLabel !== false"
     :show-feedback="field.showFeedback !== false"
+    :feedback="identityLookupError || undefined"
     :required="isFieldRequired"
     :data-ai-field="field.field"
     :style="field.formItemStyle"
@@ -561,8 +562,36 @@
           :filterable="field.filterable !== false"
           :multiple="field.multiple"
           :cascade="field.cascade !== false"
+          :on-load="identityReference ? loadIdentityChildren : undefined"
           @update:value="handleTreeSelectUpdate(field, $event)"
           v-on="getComponentEvents(field)"
+        />
+
+        <!-- 岗位复用同一业务字段范围，名称与稳定 ID 分开保存 -->
+        <PostSelectPicker
+          v-else-if="field.type === 'postSelect' && identityReference"
+          v-bind="field.props"
+          :model-value="value"
+          :label-value="resolveUserSelectLabel(field)"
+          :placeholder="getPlaceholder(field)"
+          :disabled="disabledHandler(field)"
+          :clearable="field.clearable !== false"
+          :multiple="field.multiple"
+          :reference="identityReference"
+          @update:model-value="handleUpdate"
+          @update:label-value="handleUserSelectLabelUpdate(field, $event)"
+          @select="getComponentEvents(field).select?.($event)"
+        />
+        <n-select
+          v-else-if="field.type === 'postSelect'"
+          v-bind="field.props"
+          :value="resolveOptionValue(value)"
+          :options="currentOptions"
+          :placeholder="getPlaceholder(field)"
+          :disabled="disabledHandler(field)"
+          :multiple="field.multiple"
+          :clearable="field.clearable !== false"
+          @update:value="handleUpdate"
         />
 
         <!-- 系统用户选择 -->
@@ -576,6 +605,7 @@
           :clearable="field.clearable !== false"
           :multiple="field.multiple"
           :size="field.size"
+          :reference="identityReference"
           @update:model-value="handleUpdate"
           @update:label-value="handleUserSelectLabelUpdate(field, $event)"
           @select="handleUserSelect(field, $event)"
@@ -814,6 +844,8 @@ import { useClipboard } from '@vueuse/core'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { queryBusinessRecordSelector } from '@/api/business-app'
+import { loadOrganizationBranch, resolveIdentityReference } from '@/components/common/identity-reference'
+import PostSelectPicker from '@/components/common/PostSelectPicker.vue'
 import UserSelectPicker from '@/components/common/UserSelectPicker.vue'
 import DictSelect from '@/components/DictSelect.vue'
 import FileUpload from '@/components/file-upload/index.vue'
@@ -858,6 +890,8 @@ const emit = defineEmits(['update:value'])
 const route = useRoute()
 const { copy } = useClipboard()
 const remoteOptions = ref([])
+const identityLookupError = ref('')
+const identityReference = computed(() => resolveIdentityReference(props.field, props.context))
 const remoteLoading = ref(false)
 const dictOptions = ref([])
 const sourceDictOptions = ref([])
@@ -882,6 +916,7 @@ const ORG_TREE_SELECT_TYPES = new Set([
 ])
 const USER_SELECT_TYPES = new Set([
   'userSelect',
+  'postSelect',
   'userPicker',
   'user',
   'userName',
@@ -1243,6 +1278,8 @@ function resolveOptionSource(field = {}) {
     return null
   if (shouldSuppressDesignerRemoteOptions(field))
     return null
+  if (isOrgTreeSelectField(field) && identityReference.value)
+    return { type: 'identityOrganization', reference: identityReference.value }
   const configuredSource = field.optionSource || field.props?.optionSource
   if (hasEffectiveOptionSource(configuredSource)) {
     const source = normalizeOptionSource(configuredSource)
@@ -1256,6 +1293,8 @@ function resolveOptionSource(field = {}) {
       return generated
   }
   if (isOrgTreeSelectField(field)) {
+    if (field.options?.length || field.props?.options?.length)
+      return null
     return {
       type: 'tree',
       api: 'get@/system/org/tree',
@@ -1456,7 +1495,14 @@ async function loadRemoteOptions(source, keyword = '') {
   }
   const requestSeq = ++remoteRequestSeq
   remoteLoading.value = true
+  identityLookupError.value = ''
   try {
+    if (source.type === 'identityOrganization') {
+      const options = await loadOrganizationBranch(request, source.reference)
+      if (requestSeq === remoteRequestSeq)
+        remoteOptions.value = options
+      return
+    }
     if (source.type === 'businessRecordSelector') {
       const objectCode = normalizeRecordSelectorConfig(source).objectCode
       const selectorPayload = {
@@ -1529,6 +1575,8 @@ async function loadRemoteOptions(source, keyword = '') {
     remoteOptions.value = normalizeRemoteOptions(res, source)
   }
   catch (error) {
+    if (source.type === 'identityOrganization' && requestSeq === remoteRequestSeq)
+      identityLookupError.value = error?.message || String(error)
     console.warn(`[AiFormItem] 加载 ${props.field?.field || ''} 选项失败:`, {
       error,
       field: props.field,
@@ -1546,6 +1594,18 @@ async function loadRemoteOptions(source, keyword = '') {
   finally {
     if (requestSeq === remoteRequestSeq)
       remoteLoading.value = false
+  }
+}
+
+async function loadIdentityChildren(option) {
+  try {
+    const children = await loadOrganizationBranch(request, identityReference.value, option.value)
+    option.children = children
+    option.isLeaf = children.length === 0
+  }
+  catch (error) {
+    identityLookupError.value = error?.message || String(error)
+    throw error
   }
 }
 

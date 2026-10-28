@@ -496,6 +496,7 @@ import { pickFirstNonEmptyFieldPermissions } from '@/utils/field-permissions'
 import { buildFlowCategoryTreeOptions, resolveFlowCategoryLabel } from './utils/categoryOptions'
 import { FLOW_PRIORITY_LABEL_FALLBACK, getFlowPriorityClass, isUrgentFlowPriority, resolveFlowPriorityLevel, shouldShowFlowPriority } from './utils/priority'
 import { getBusinessFormDisplayTitle, getRowDisplayTitle, getTaskDisplayName } from './utils/processDisplay'
+import { shouldUseBusinessCodeComponentForm } from './utils/taskFormPresentation'
 
 const userStore = useUserStore()
 const route = useRoute()
@@ -561,7 +562,7 @@ const businessFormLabelPlacement = computed(() => ['left', 'top'].includes(busin
   ? businessFormContext.value.labelPlacement
   : 'left')
 const businessFormLabelWidth = computed(() => businessFormContext.value?.labelWidth || '100')
-const useBusinessCodeComponentForm = computed(() => useBusinessCodeForm.value && Boolean(businessCodeFormUrl.value))
+const useBusinessCodeComponentForm = computed(() => shouldUseBusinessCodeComponentForm(businessFormContext.value))
 const useComponentTaskForm = computed(() => useExternalForm.value || useBusinessCodeComponentForm.value)
 const componentTaskFormUrl = computed(() => useBusinessCodeComponentForm.value ? businessCodeFormUrl.value : taskFormInfo.value?.formUrl)
 const componentTaskFormInfo = computed(() => ({

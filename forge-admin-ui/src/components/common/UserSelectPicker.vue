@@ -7,6 +7,7 @@
         :placeholder="localizeLabel(placeholder)"
         :disabled="disabled"
         :size="size"
+        :status="status"
         readonly
         @click="openModal"
       />
@@ -34,6 +35,9 @@
       :title="localizeLabel(title)"
       :multiple="multiple"
       :selected-users="selectedUsers"
+      :require-department="requireDepartment"
+      :require-post="requirePost"
+      :reference="reference"
       @confirm="handleConfirm"
     />
   </div>
@@ -46,6 +50,7 @@ import UserSelectModal from '@/components/common/UserSelectModal.vue'
 import { localizeLabel } from '@/locales'
 
 const props = defineProps({
+  reference: { type: Object, default: null },
   modelValue: {
     type: [String, Number, Array],
     default: null,
@@ -73,6 +78,18 @@ const props = defineProps({
   clearable: {
     type: Boolean,
     default: true,
+  },
+  requireDepartment: {
+    type: Boolean,
+    default: false,
+  },
+  requirePost: {
+    type: Boolean,
+    default: false,
+  },
+  status: {
+    type: String,
+    default: undefined,
   },
   size: {
     type: String,

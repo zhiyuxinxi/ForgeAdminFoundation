@@ -1,6 +1,8 @@
 {
   "name": "uni-preset-vue",
   "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.5",
   "type": "module",
   "scripts": {
     "dev:custom": "uni -p",
@@ -34,7 +36,8 @@
     "build:mp-xhs": "uni build -p mp-xhs",
     "build:quickapp-webview": "uni build -p quickapp-webview",
     "build:quickapp-webview-huawei": "uni build -p quickapp-webview-huawei",
-    "build:quickapp-webview-union": "uni build -p quickapp-webview-union"
+    "build:quickapp-webview-union": "uni build -p quickapp-webview-union",
+    "test:unit": "node --test src/utils/__tests__/*.test.js"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-5000720260410001",
@@ -53,7 +56,7 @@
     "@dcloudio/uni-mp-weixin": "3.0.0-5000720260410001",
     "@dcloudio/uni-mp-xhs": "3.0.0-5000720260410001",
     "@dcloudio/uni-quickapp-webview": "3.0.0-5000720260410001",
-    "@vueuse/core": "14.2.1",
+    "@vueuse/core": "10.11.1",
     "axios": "^1.15.2",
     "clipboard": "^2.0.11",
     "crypto-js": "^4.2.0",
@@ -64,12 +67,12 @@
     "pinia-plugin-persistedstate": "3.2.0",
     "sm-crypto": "^0.4.0",
     "uview-plus": "^3.8.18",
-    "vue": "^3.4.21",
+    "vue": "3.4.21",
     "vue-i18n": "^9.1.9",
-    "vue-router": "^5.0.6"
+    "vue-router": "4.5.1"
   },
   "devDependencies": {
-    "@dcloudio/types": "^3.4.8",
+    "@dcloudio/types": "3.4.28",
     "@dcloudio/uni-automator": "3.0.0-5000720260410001",
     "@dcloudio/uni-cli-shared": "3.0.0-5000720260410001",
     "@dcloudio/uni-stacktracey": "3.0.0-5000720260410001",
@@ -78,7 +81,7 @@
     "@unocss/preset-mini": "^66.6.8",
     "@unocss/preset-rem-to-px": "^66.6.8",
     "@unocss/preset-uno": "^66.6.8",
-    "@vue/runtime-core": "^3.4.21",
+    "@vue/runtime-core": "3.4.21",
     "glob": "^11.0.3",
     "sass": "^1.93.2",
     "unocss": "^66.6.8",

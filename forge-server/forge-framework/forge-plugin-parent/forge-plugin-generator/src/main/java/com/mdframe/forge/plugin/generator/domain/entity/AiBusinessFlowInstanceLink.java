@@ -34,6 +34,12 @@ public class AiBusinessFlowInstanceLink extends TenantEntity {
 
     private String processInstanceId;
 
+    /** Explicit request identity; legacy associations retain null. */
+    private String startRequestId;
+
+    /** Canonical caller input, independent of later document-state changes. */
+    private String startRequestDigest;
+
     private String flowStatus;
 
     private Long startUserId;

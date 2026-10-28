@@ -455,7 +455,7 @@ defineExpose({
   flex: 0 0 auto;
 }
 
-.forge-form-modal > :deep(.n-card__content) {
+.forge-form-modal > :deep(.n-card-content) {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;

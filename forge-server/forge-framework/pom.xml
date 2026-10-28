@@ -13,7 +13,7 @@
     <description>forge-framework</description>
     <packaging>pom</packaging>
     <version>${revision}</version>
-    
+
     <properties>
         <java.version>17</java.version>
         <revision>1.0.0</revision>
@@ -26,16 +26,17 @@
         <lombok.version>1.18.34</lombok.version>
         <mybatis-plus.version>3.5.7</mybatis-plus.version>
     </properties>
-    
+
     <modules>
         <module>forge-dependencies</module>
         <module>forge-starter-parent</module>
         <module>forge-lowcode-api</module>
+        <module>forge-task-api</module>
         <module>forge-lowcode-formula</module>
         <module>forge-lowcode-runtime</module>
         <module>forge-plugin-parent</module>
     </modules>
-    
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -47,8 +48,8 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    
-    
+
+
     <build>
         <plugins>
             <plugin>

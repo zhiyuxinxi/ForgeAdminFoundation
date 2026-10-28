@@ -17,7 +17,7 @@ public final class LowcodeComponentCatalog {
             "month", "year", "time", "timerange", "switch", "select", "radio", "radioButton", "checkbox",
             "transfer", "dictSelect", "cascader", "treeSelect", "customSelect", "regionTreeSelect",
             "orgTreeSelect", "orgSelect", "departmentSelect", "departmentTreeSelect", "deptSelect",
-            "deptTreeSelect", "elTreeSelect", "orgName", "deptName", "userSelect", "userPicker", "userName",
+            "deptTreeSelect", "elTreeSelect", "orgName", "deptName", "userSelect", "userPicker", "userName", "postSelect",
             "fileUpload", "imageUpload", "upload", "objectReference", "recordSelector", "text"
     );
 

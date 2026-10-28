@@ -54,7 +54,7 @@ class BusinessFlowStatusUpdatesTest {
         callback.setTenantId(7L);
         callback.setProcessInstanceId("process");
         callback.setResult("APPROVED");
-        when(links.selectByProcessInstanceId(7L, "process")).thenReturn(link);
+        when(links.selectByProcessInstanceIdForUpdate(7L, "process")).thenReturn(link);
         when(configs.selectPublishedByObjectCodeOrConfigKey(7L, "order")).thenReturn(config);
         when(data.selectById("order-config", 19L)).thenReturn(Map.of("id", 19L));
     }
@@ -87,7 +87,7 @@ class BusinessFlowStatusUpdatesTest {
         reset(data, links);
         link.setEndTime(null);
         link.setResult(null);
-        when(links.selectByProcessInstanceId(7L, "process")).thenReturn(link);
+        when(links.selectByProcessInstanceIdForUpdate(7L, "process")).thenReturn(link);
         binding("ADAPTER", "other");
         service.handleFlowCallback(callback);
         verify(data, never()).updateInternalFieldsById(anyString(), anyLong(), anyMap());

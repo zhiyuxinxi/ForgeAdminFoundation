@@ -54,6 +54,7 @@ public class BusinessFieldSchemaService {
             Map.entry("IMAGE", new FieldDefaults("varchar", "imageUpload", 512, 2, "eq", 140)),
             Map.entry("PHONE", new FieldDefaults("varchar", "input", 32, 2, "like", 140)),
             Map.entry("USER", new FieldDefaults("bigint", "userSelect", null, null, "eq", 140)),
+            Map.entry("POST", new FieldDefaults("bigint", "postSelect", null, null, "eq", 140)),
             Map.entry("DEPT", new FieldDefaults("bigint", "orgTreeSelect", null, null, "eq", 140)),
             Map.entry("REGION", new FieldDefaults("varchar", "regionTreeSelect", 32, 2, "eq", 160)),
             Map.entry("REFERENCE", new FieldDefaults("bigint", "objectReference", null, null, "eq", 160)),

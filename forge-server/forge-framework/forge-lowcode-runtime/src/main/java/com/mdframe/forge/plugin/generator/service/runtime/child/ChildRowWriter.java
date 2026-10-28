@@ -79,6 +79,7 @@ public final class ChildRowWriter {
                 continue;
             }
             ownership.deleteForReplacement(relation, relationValue);
+            childrenChanged = true;
             for (Map<String, Object> row : normalizeChildRows(childrenPayload.get(relation.modelCode()))) {
                 Map<String, Object> childData = filterChildWriteData(row, relation);
                 if (!hasWritableChildData(childData)) {

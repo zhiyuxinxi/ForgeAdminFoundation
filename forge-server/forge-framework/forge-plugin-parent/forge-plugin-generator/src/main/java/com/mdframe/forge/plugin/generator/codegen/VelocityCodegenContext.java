@@ -1,6 +1,8 @@
 package com.mdframe.forge.plugin.generator.codegen;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityFields;
+import com.mdframe.forge.plugin.generator.service.lowcode.RuntimeCrudConfigAdapter;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTable;
 import com.mdframe.forge.plugin.generator.domain.entity.GenTableColumn;
@@ -30,6 +32,7 @@ final class VelocityCodegenContext {
         configureActionPermissions(model, ctx);
         configureIdentity(model, ctx, annotationFlags);
         configureSchemas(model, relations, ctx);
+        configureReferences(model, ctx);
         OutputPaths paths = configureOutputPaths(model, ctx);
         AiCrudConfig codegenConfig = model.config();
         boolean includeBackend = paths.includeBackend();
@@ -54,6 +57,17 @@ final class VelocityCodegenContext {
 
     record OutputPaths(boolean includeBackend, boolean includeFrontend, String backendBasePath,
                        String mapperXmlBasePath, String frontendBasePath, String frontendApiBasePath) {}
+
+    private void configureReferences(Model model, VelocityContext context) throws Exception {
+        AiCrudConfig config = model.config();
+        boolean enabled = !new RuntimeIdentityFields(objectMapper).read(RuntimeCrudConfigAdapter.fromDesign(config)).isEmpty();
+        context.put("hasIdentityReferences", enabled);
+        if (enabled) {
+            context.put("identityModelLiteral", objectMapper.writeValueAsString(config.getModelSchema()));
+            context.put("identityEditLiteral", objectMapper.writeValueAsString(config.getEditSchema()));
+            context.put("identityObjectLiteral", objectMapper.writeValueAsString(config.getObjectCode()));
+        }
+    }
 
     private void configureActionPermissions(Model model, VelocityContext ctx) throws Exception {
         AiCrudConfig codegenConfig = model.config();

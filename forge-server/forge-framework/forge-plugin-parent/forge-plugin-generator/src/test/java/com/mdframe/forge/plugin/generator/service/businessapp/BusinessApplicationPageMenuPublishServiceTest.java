@@ -150,7 +150,8 @@ class BusinessApplicationPageMenuPublishServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<BusinessApplicationPageMenuDTO>> captor = ArgumentCaptor.forClass(List.class);
         verify(adapter).syncApplicationPageMenus(eq("hr_apply"), captor.capture());
-        assertEquals(List.of("pc", "h5", "pc", "h5"), captor.getValue().stream()
+        // 菜单按客户端分组生成（client-major 外循环）：pc 根+页，再 h5 根+页
+        assertEquals(List.of("pc", "pc", "h5", "h5"), captor.getValue().stream()
                 .map(BusinessApplicationPageMenuDTO::getClientCode).toList());
     }
 

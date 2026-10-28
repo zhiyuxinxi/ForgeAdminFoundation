@@ -14,6 +14,12 @@ import ${packageName}.${moduleName}.entity.${tree.className};
 #end
 #end
 import com.mdframe.forge.starter.core.domain.PageQuery;
+#if(${hasIdentityReferences})
+import com.mdframe.forge.starter.core.identity.TenantOrganization;
+import com.mdframe.forge.starter.core.identity.TenantMember;
+import com.mdframe.forge.starter.core.identity.TenantPost;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
+#end
 
 import java.util.List;
 #if(${isMasterDetailLayout})
@@ -22,11 +28,18 @@ import java.util.Map;
 
 /**
  * ${functionName}Service接口
- * 
+ *
  * @author ${author}
  * @date ${datetime}
  */
 public interface I${className}Service extends IService<${className}> {
+
+#if(${hasIdentityReferences})
+    List<TenantOrganization> referenceOrganizations(String field, String operation, Long parentId, Long afterOrgId, int limit);
+    List<TenantMember> referenceMembers(String field, String operation, Long directOrgId, String keyword, Long afterUserId, int limit);
+    List<TenantPost> referencePosts(String field, String operation, Long directOrgId, boolean tenantWide, String keyword, Long afterPostId, int limit);
+    RuntimeIdentityReferenceService.PostScope referencePostScope(String field, String operation);
+#end
 
     /**
      * 分页查询${functionName}列表

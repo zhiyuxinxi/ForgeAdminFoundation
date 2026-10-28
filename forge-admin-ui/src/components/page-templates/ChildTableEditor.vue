@@ -8,11 +8,8 @@
         :tab="child.tabTitle || child.relationName || child.modelName || child.modelCode || child.tableName"
       >
         <div class="child-table-panel">
-          <div class="child-table-head">
-            <div class="child-table-title">
-              {{ child.tabTitle || child.relationName || child.modelName || child.modelCode || localizeLabel('子表明细') }}
-            </div>
-            <n-space v-if="!props.readonly || visibleToolbarActions(child).length" size="small">
+          <div v-if="!props.readonly || visibleToolbarActions(child).length" class="child-table-head">
+            <n-space size="small">
               <n-button v-if="hasRecordSelector(child) && !props.readonly" size="small" secondary @click="openRecordSelector(child)">
                 {{ resolveSelectorButtonText(child) }}
               </n-button>
@@ -879,14 +876,8 @@ defineExpose({
 .child-table-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
-}
-
-.child-table-title {
-  color: #0f172a;
-  font-size: 14px;
-  font-weight: 600;
 }
 
 .child-table-scroll {

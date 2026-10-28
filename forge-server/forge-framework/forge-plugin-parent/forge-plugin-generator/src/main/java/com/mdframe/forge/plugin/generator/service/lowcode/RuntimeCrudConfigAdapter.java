@@ -1,17 +1,22 @@
 package com.mdframe.forge.plugin.generator.service.lowcode;
 
 import com.mdframe.forge.lowcode.api.config.RuntimeCrudConfigSource;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mdframe.forge.lowcode.runtime.service.task.RuntimeTaskLinkFields;
 
 import com.mdframe.forge.lowcode.api.config.LowcodeRuntimeConfig;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.service.AiCrudConfigService;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.i18n.UiMessages;
+import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 /** Design-side adapter. It resolves admission and snapshots before copying runtime values. */
+@Component
 public final class RuntimeCrudConfigAdapter implements RuntimeCrudConfigSource {
+    private static final ObjectMapper TASK_OPTIONS = new ObjectMapper();
     private final AiCrudConfigService configService;
 
     public RuntimeCrudConfigAdapter(AiCrudConfigService configService) {
@@ -46,9 +51,24 @@ public final class RuntimeCrudConfigAdapter implements RuntimeCrudConfigSource {
                 && !isAuthorizedDesignPreviewRequest()) {
             throw new BusinessException(UiMessages.translate("低代码应用尚未发布: ") + configKey);
         }
-        return isAuthorizedDesignPreviewRequest()
-                ? config
-                : configService.resolvePublishedRuntimeConfig(config);
+        if (isAuthorizedDesignPreviewRequest()) {
+            assertTaskPreviewReadOnly(config);
+            return config;
+        }
+        return configService.resolvePublishedRuntimeConfig(config);
+    }
+
+    private void assertTaskPreviewReadOnly(AiCrudConfig draft) {
+        if (draft.getPublishedVersion() == null || draft.getPublishedVersion() <= 0
+                || !(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes request)
+                || "GET".equals(request.getRequest().getMethod()) || "HEAD".equals(request.getRequest().getMethod())) {
+            return;
+        }
+        AiCrudConfig published = configService.resolvePublishedRuntimeConfig(draft);
+        if (published != null && RuntimeTaskLinkFields.hasBindings(fromDesign(published), TASK_OPTIONS)) {
+            throw new BusinessException(409, UiMessages.label("关联任务的业务记录请通过已发布入口修改，不能使用设计预览写入",
+                    "Use the published entry to edit task-linked records; design preview writes are not allowed"));
+        }
     }
 
     private boolean isAuthorizedDesignPreviewRequest() {

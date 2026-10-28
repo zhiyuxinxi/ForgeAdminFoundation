@@ -2,7 +2,6 @@ package com.mdframe.forge.plugin.ai.knowledge.service;
 
 import com.mdframe.forge.plugin.ai.knowledge.chunker.dto.ChunkResult;
 import com.mdframe.forge.plugin.ai.knowledge.domain.*;
-import com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeChunkMapper;
 import com.mdframe.forge.plugin.ai.knowledge.mapper.AiKnowledgeDocumentMapper;
 import com.mdframe.forge.plugin.ai.knowledge.vectorstore.VectorStoreFactory;
 import com.mdframe.forge.plugin.ai.knowledge.vectorstore.VectorStoreService;
@@ -15,37 +14,52 @@ import com.mdframe.forge.plugin.ai.provider.support.AiSecretCrypto;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.core.i18n.UiMessages;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 
 /** Owns the consistency boundary between persisted chunks and the document vector index. */
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class DocumentVectorIndexer {
     private final AiKnowledgeDocumentMapper documentMapper;
-    private final AiKnowledgeChunkMapper chunkMapper;
     private final AiModelMapper modelMapper;
     private final AiProviderMapper providerMapper;
     private final AiModelAdapterRegistry modelAdapterRegistry;
     private final AiSecretCrypto aiSecretCrypto;
     private final VectorStoreFactory vectorStoreFactory;
     private final AiStoreInstanceService storeInstanceService;
+    private final DocumentIndexPublisher indexPublisher;
 
     /**
      * 向量化并存储
      */
-    public void replaceChunks(Long documentId, AiKnowledge knowledge, List<ChunkResult> chunks) {
-        if (chunks.isEmpty()) {
-            deleteVectors(knowledge, chunkMapper.selectByDocumentId(documentId));
-            chunkMapper.deleteByDocumentId(documentId);
-            return;
+    public boolean replaceChunks(Long documentId, AiKnowledge knowledge, List<ChunkResult> chunks, String attempt) {
+        if (attempt == null || attempt.isBlank()) {
+            throw new IllegalArgumentException("Processing attempt is required");
         }
+        List<String> vectorIds = chunks.stream()
+                .map(chunk -> "doc_" + documentId + "_" + attempt + "_chunk_" + chunk.getIndex()).toList();
+        if (!chunks.isEmpty()) {
+            writeAttemptVectors(documentId, knowledge, chunks, vectorIds);
+        }
+        // A failed/unknown database commit must never trigger deletion of potentially published vectors.
+        DocumentIndexPublisher.Publication publication = indexPublisher.publish(documentId, attempt, chunks, vectorIds);
+        List<String> obsolete = publication.published()
+                ? publication.supersededChunks().stream().map(AiKnowledgeChunk::getVectorId).toList() : vectorIds;
+        try {
+            deleteVectorIds(knowledge, obsolete);
+        } catch (RuntimeException failure) {
+            // Superseded chunks remain as tombstones; retrieval only trusts the newly committed live chunk IDs.
+            log.warn("Document index cleanup incomplete: documentId={}, attempt={}", documentId, attempt, failure);
+        }
+        return publication.published();
+    }
 
+    private void writeAttemptVectors(Long documentId, AiKnowledge knowledge,
+                                     List<ChunkResult> chunks, List<String> vectorIds) {
         // 来源标识：URL来源存 source_url，否则回退文档名（库表导入将来存表/行标识）
         AiKnowledgeDocument document = documentMapper.selectById(documentId);
         String sourceId = document != null && document.getSourceUrl() != null && !document.getSourceUrl().isBlank()
@@ -108,13 +122,7 @@ public class DocumentVectorIndexer {
         createReq.setForceRecreate(false);
         vectorStore.createCollectionIfAbsent(createReq);
 
-        // 清理失败处理留下的同文档输出，重试不能积累重复分块或残留向量。
-        deleteVectors(knowledge, chunkMapper.selectByDocumentId(documentId));
-        chunkMapper.deleteByDocumentId(documentId);
-
-        // 保存分块到数据库
-        List<String> vectorIds = new ArrayList<>();
-        List<List<Float>> vectorList = new ArrayList<>();
+        // Remote output has attempt-specific IDs. It is not searchable until local publication commits.
         List<Long> docIds = new ArrayList<>();
         List<Integer> chunkIndices = new ArrayList<>();
         List<String> sourceIds = new ArrayList<>();
@@ -123,23 +131,6 @@ public class DocumentVectorIndexer {
 
         for (int i = 0; i < chunks.size(); i++) {
             ChunkResult chunk = chunks.get(i);
-            AiKnowledgeChunk entity = new AiKnowledgeChunk();
-            entity.setKnowledgeId(knowledge.getId());
-            entity.setDocumentId(documentId);
-            entity.setChunkIndex(chunk.getIndex());
-            entity.setContent(chunk.getContent());
-            entity.setTitle(chunk.getTitle());
-            entity.setTokenCount(chunk.getTokenCount());
-            entity.setRefCount(1);
-            entity.setContentHash(hashContent(chunk.getContent()));
-            entity.setRetrievalCount(0);
-
-            String vectorId = "doc_" + documentId + "_chunk_" + chunk.getIndex();
-            entity.setVectorId(vectorId);
-            chunkMapper.insert(entity);
-
-            vectorIds.add(vectorId);
-            vectorList.add(vectors.get(i));
             docIds.add(documentId);
             chunkIndices.add(chunk.getIndex());
             sourceIds.add(sourceId);
@@ -152,7 +143,7 @@ public class DocumentVectorIndexer {
         VectorStoreService.InsertRequest insertReq = new VectorStoreService.InsertRequest();
         insertReq.setCollectionName(collectionName);
         insertReq.setIds(vectorIds);
-        insertReq.setVectors(vectorList);
+        insertReq.setVectors(vectors);
         insertReq.setContents(texts);
         insertReq.setDocumentIds(docIds);
         insertReq.setChunkIndices(chunkIndices);
@@ -164,13 +155,17 @@ public class DocumentVectorIndexer {
     }
 
     public void deleteVectors(AiKnowledge knowledge, List<AiKnowledgeChunk> chunks) {
-        if (chunks.isEmpty() || knowledge == null || knowledge.getVectorStoreInstanceId() == null) {
+        deleteVectorIds(knowledge, chunks.stream().map(AiKnowledgeChunk::getVectorId).toList());
+    }
+
+    private void deleteVectorIds(AiKnowledge knowledge, List<String> vectorIds) {
+        if (vectorIds.isEmpty() || knowledge == null || knowledge.getVectorStoreInstanceId() == null) {
             return;
         }
         AiStoreInstance store = getStoreInstance(knowledge.getVectorStoreInstanceId());
         VectorStoreService.DeleteRequest request = new VectorStoreService.DeleteRequest();
         request.setCollectionName("knowledge_" + knowledge.getId());
-        request.setIds(chunks.stream().map(AiKnowledgeChunk::getVectorId).toList());
+        request.setIds(vectorIds);
         request.setConfigJson(store.getConfigJson());
         vectorStoreFactory.getService(store).delete(request);
     }
@@ -179,12 +174,4 @@ public class DocumentVectorIndexer {
         return storeInstanceService.getById(storeInstanceId);
     }
 
-    private String hashContent(String content) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(content.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("SHA-256 unavailable", failure);
-        }
-    }
 }

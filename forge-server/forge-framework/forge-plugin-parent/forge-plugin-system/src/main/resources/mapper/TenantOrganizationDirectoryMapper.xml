@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mdframe.forge.plugin.system.mapper.TenantOrganizationDirectoryMapper">
+    <resultMap id="organizationMap" type="com.mdframe.forge.starter.core.identity.TenantOrganization">
+        <constructor>
+            <idArg column="id" javaType="java.lang.Long" name="orgId"/>
+            <arg column="parent_id" javaType="java.lang.Long" name="parentId"/>
+            <arg column="org_name" javaType="java.lang.String" name="orgName"/>
+        </constructor>
+    </resultMap>
+
+    <sql id="activeOrganizations">
+        FROM sys_org org
+        INNER JOIN sys_tenant tenant
+            ON tenant.id = org.tenant_id AND tenant.tenant_status = 1 AND tenant.del_flag = 0
+        WHERE org.tenant_id = #{tenantId} AND org.org_status = 1 AND org.del_flag = 0
+    </sql>
+
+    <select id="selectActiveOrganizations" resultMap="organizationMap" useCache="false" flushCache="true">
+        SELECT org.id, org.parent_id, org.org_name
+        <include refid="activeOrganizations"/>
+        <choose>
+            <when test="orgIds != null and !orgIds.isEmpty()">
+                AND org.id IN
+                <foreach collection="orgIds" item="orgId" open="(" separator="," close=")">#{orgId}</foreach>
+            </when>
+            <otherwise>AND 1 = 0</otherwise>
+        </choose>
+        ORDER BY org.id
+    </select>
+
+    <select id="selectActiveChildren" resultMap="organizationMap" useCache="false" flushCache="true">
+        SELECT org.id, org.parent_id, org.org_name
+        <include refid="activeOrganizations"/>
+        AND org.parent_id = #{parentId}
+        <if test="parentId != null and parentId != 0">
+            AND EXISTS (
+                SELECT 1 FROM sys_org parent
+                WHERE parent.id = #{parentId} AND parent.tenant_id = #{tenantId}
+                    AND parent.org_status = 1 AND parent.del_flag = 0
+            )
+        </if>
+        <if test="afterOrgId != null">AND org.id &gt; #{afterOrgId}</if>
+        ORDER BY org.id
+        LIMIT #{limit}
+    </select>
+</mapper>

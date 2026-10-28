@@ -41,10 +41,8 @@
 
 <script setup lang="ts">
 import { localizeMetadata as translateUiMetadata } from '@/locales/metadata'
-
-import { localizeLabel as translateUiText } from '@/locales'
-
-import { NButton } from 'naive-ui'
+import { formatUiText as translateUiText } from '@/locales'
+import { NButton, useMessage } from 'naive-ui'
 import { computed, h, ref } from 'vue'
 import SystemTableCell from '@/components/common/SystemTableCell.vue'
 import DictTag from '@/components/DictTag.vue'
@@ -54,7 +52,7 @@ import { toBooleanDictOptions, toNumberDictOptions } from '@/utils/dict-options'
 
 defineOptions({ name: 'SystemClient' })
 
-const message = window.$message
+const message = useMessage()
 const crudRef = ref()
 const onlineModalVisible = ref(false)
 const onlineUsers = ref([])
@@ -72,7 +70,7 @@ const authTypeOptions = computed(() => dict.value.sys_client_login_auth_type || 
 const captchaTypeOptions = computed(() => dict.value.sys_client_captcha_type || [])
 
 // 搜索配置
-const searchSchema = computed(() => [
+const searchSchema = computed(() => translateUiMetadata([
   {
     field: 'clientCode',
     label: '客户端编码',
@@ -98,10 +96,10 @@ const searchSchema = computed(() => [
       options: statusOptions.value,
     },
   },
-])
+]))
 
 // 表格列配置
-const tableColumns = computed(() => [
+const tableColumns = computed(() => translateUiMetadata([
   {
     prop: 'clientName',
     label: '客户端',
@@ -111,7 +109,7 @@ const tableColumns = computed(() => [
       subtitle: row.clientCode,
       interactive: true,
       avatar: true,
-      tooltip: `查看客户端：${row.clientName || row.clientCode || '-'}`,
+      tooltip: translateUiText('查看客户端：{0}', [row.clientName || row.clientCode || '-']),
       onActivate: () => crudRef.value?.showDetail(row),
     }),
   },
@@ -127,13 +125,13 @@ const tableColumns = computed(() => [
     render: (row) => {
       const timeout = row.tokenTimeout
       if (timeout >= 86400) {
-        return `${(timeout / 86400).toFixed(0)} 天`
+        return translateUiText('{0} 天', [(timeout / 86400).toFixed(0)])
       }
       else if (timeout >= 3600) {
-        return `${(timeout / 3600).toFixed(0)} 小时`
+        return translateUiText('{0} 小时', [(timeout / 3600).toFixed(0)])
       }
       else {
-        return `${timeout} 秒`
+        return translateUiText('{0} 秒', [timeout])
       }
     },
   },
@@ -179,10 +177,10 @@ const tableColumns = computed(() => [
       { label: '删除', key: 'delete', type: 'error', onClick: row => crudRef.value?.handleDelete(row), visible: row => row.id > 4 },
     ],
   },
-])
+]))
 
 // 编辑表单配置
-const editSchema = computed(() => [
+const editSchema = computed(() => translateUiMetadata([
   {
     type: 'divider',
     label: '基础信息',
@@ -332,7 +330,7 @@ const editSchema = computed(() => [
       rows: 3,
     },
   },
-])
+]))
 
 // 在线用户表格列
 const onlineTableColumns = [

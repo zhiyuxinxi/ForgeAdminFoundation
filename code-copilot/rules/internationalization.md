@@ -18,6 +18,7 @@ The reusable code foundation is maintained in `maintainer/forge-admin-foundation
 - Report：使用 `forge-report-ui` 的现有 vue-i18n 与显示适配器，覆盖设计器、登录、公共配置与 Naive UI；图表数据和持久化组件标识保持原值。
 - Every request path, including fetch, streaming, upload and download, carries `Accept-Language`. Server responses and asynchronous export jobs bind the request locale; do not rely on a mutable process-wide locale.
 - Java：复用公共 locale/message 实现；校验、鉴权、异常处理与导入导出均沿真实消费者接线。保持错误码与 HTTP 状态不变，参数值不翻译。
+- 业务消息使用 `forge-business-core/src/main/resources/forge/i18n/business/messages.properties` 与 `messages_en.properties`，显式错误调用 `UiMessages.message("business.<module>.<key>", ...)`。现有 DTO 中文校验文本经公共异常处理器的 `UiMessages.translate` 处理时，须以 `business.display.<module>.<key>` 成对登记中文原文和英文译文；普通 `business.*` 词条不自动成为中文文本别名。核心词条优先，未知文本与业务数据保持原值。先核项目实际 `UiMessages` 已支持业务显示别名，缺能力时同步公共底座，不能在业务模块另写异常处理器或把业务词条塞进核心资源。
 
 ## 数据库与生成器 / Database and generators
 

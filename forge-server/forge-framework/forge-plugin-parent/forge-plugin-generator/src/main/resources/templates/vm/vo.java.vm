@@ -1,0 +1,50 @@
+package ${packageName}.${moduleName}.vo;
+
+import cn.hutool.core.bean.BeanUtil;
+import ${packageName}.${moduleName}.entity.${className};
+import lombok.Data;
+import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.util.List;
+#if(${hasDesensitize})
+import com.mdframe.forge.starter.crypto.desensitize.annotation.Desensitize;
+import com.mdframe.forge.starter.crypto.desensitize.strategy.DesensitizeType;
+#end
+
+/** ${functionName} HTTP response projection; persistence ownership stays in the entity. */
+@Data
+public class ${className}VO implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+#foreach($column in $allColumns)
+#if($fieldContract.readable($column))
+#if($column.desensitizeType && $column.desensitizeType != "" && $column.desensitizeType != "NONE")
+    @Desensitize(type = DesensitizeType.${column.desensitizeType})
+#end
+    private $column.javaType $column.javaField;
+#if($column.dictType && $column.dictType != "")
+    private String ${column.javaField}Name;
+#end
+#end
+#end
+#if(${hasEntityTreeFields})
+    private List<${className}VO> ${entityTreeChildrenField};
+    private Boolean isLeaf;
+#end
+
+    public static ${className}VO fromEntity(${className} source) {
+        if (source == null) {
+            return null;
+        }
+        ${className}VO result = BeanUtil.toBean(source, ${className}VO.class);
+#if(${hasEntityTreeFields})
+        if (source.get${entityTreeChildrenField.substring(0,1).toUpperCase()}${entityTreeChildrenField.substring(1)}() != null) {
+            result.set${entityTreeChildrenField.substring(0,1).toUpperCase()}${entityTreeChildrenField.substring(1)}(
+                    source.get${entityTreeChildrenField.substring(0,1).toUpperCase()}${entityTreeChildrenField.substring(1)}().stream()
+                            .map(${className}VO::fromEntity).toList());
+        }
+#end
+        return result;
+    }
+}

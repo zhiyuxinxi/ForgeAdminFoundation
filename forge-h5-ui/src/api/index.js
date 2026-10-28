@@ -39,7 +39,7 @@ export default {
   changePassword: data => request({
     url: '/auth/changePassword',
     method: 'post',
-    params: {
+    data: {
       oldPassword: data?.oldPassword,
       newPassword: data?.newPassword,
     },

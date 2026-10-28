@@ -17,16 +17,16 @@ import com.mdframe.forge.starter.file.core.FileManager;
 import com.mdframe.forge.starter.file.storage.FileStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Sinks;
 
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 文档处理服务。
@@ -45,26 +45,25 @@ public class DocumentProcessService {
     private final FileManager fileManager;
     private final DocumentVectorIndexer vectorIndexer;
     private final DocumentProcessDispatcher processDispatcher;
+    private final DocumentProcessState processState;
 
-    /**
-     * SSE 事件汇：documentId → Sink
-     */
-    private final ConcurrentHashMap<Long, Sinks.Many<DocumentProcessEvent>> progressSinks = new ConcurrentHashMap<>();
+    @Value("${forge.ai.knowledge.processing.timeout-seconds:1800}")
+    private int processingTimeoutSeconds = 1800;
+
+    @PostConstruct
+    void validateProcessingTimeout() {
+        if (processingTimeoutSeconds < 1 || processingTimeoutSeconds > 86400) {
+            throw new IllegalArgumentException("Document processing timeout must be between 1 and 86400 seconds");
+        }
+    }
+
+    private final DocumentProgressPublisher progressPublisher = new DocumentProgressPublisher();
 
     /**
      * 订阅文档处理进度（SSE）
      */
     public Flux<ServerSentEvent<DocumentProcessEvent>> subscribeProgress(Long documentId) {
-        Sinks.Many<DocumentProcessEvent> sink = Sinks.many().multicast().onBackpressureBuffer();
-        progressSinks.put(documentId, sink);
-
-        return sink.asFlux()
-                .map(event -> ServerSentEvent.<DocumentProcessEvent>builder()
-                        .id(String.valueOf(System.nanoTime()))
-                        .event("progress")
-                        .data(event)
-                        .build())
-                .doFinally(signalType -> progressSinks.remove(documentId));
+        return progressPublisher.subscribe(documentId);
     }
 
     /**
@@ -116,13 +115,14 @@ public class DocumentProcessService {
         }
 
         // 立即异步处理
-        processDocumentAsync(document.getId(), knowledge);
+        requestProcessing(document.getId(), knowledge, "pending");
         return document;
     }
 
     /**
      * 确认并处理文档（两步上传第二步）
      */
+    @Transactional(rollbackFor = Exception.class)
     public void confirmAndProcess(Long documentId) {
         AiKnowledgeDocument document = documentMapper.selectById(documentId);
         if (document == null) {
@@ -135,12 +135,13 @@ public class DocumentProcessService {
         if (knowledge == null) {
             throw new BusinessException("知识库不存在");
         }
-        processDocumentAsync(documentId, knowledge);
+        requestProcessing(documentId, knowledge, "pending");
     }
 
     /**
      * 重新处理失败文档
      */
+    @Transactional(rollbackFor = Exception.class)
     public void reprocessDocument(Long documentId) {
         AiKnowledgeDocument document = documentMapper.selectById(documentId);
         if (document == null) {
@@ -153,10 +154,7 @@ public class DocumentProcessService {
         if (knowledge == null) {
             throw new BusinessException("知识库不存在");
         }
-        // 重置状态为待处理并清空错误信息
-        if (documentMapper.queueFailedDocument(documentId) == 1) {
-            processDocumentAsync(documentId, knowledge);
-        }
+        requestProcessing(documentId, knowledge, "failed");
     }
 
     /**
@@ -185,14 +183,16 @@ public class DocumentProcessService {
     /**
      * 异步处理文档
      */
-    private void processDocumentAsync(Long documentId, AiKnowledge knowledge) {
-        processDispatcher.dispatch(() -> {
-            try {
-                processDocument(documentId, knowledge);
-            } catch (Exception e) {
-                log.error("[文档处理] 异步处理失败: documentId={}", documentId, e);
-                documentMapper.updateProcessStatus(documentId, "failed", e.getMessage(), null);
-                emitProgress(documentId, "", "failed", 0, "处理失败: " + e.getMessage(), "failed");
+    private void requestProcessing(Long documentId, AiKnowledge knowledge, String expectedStatus) {
+        String attempt = UUID.randomUUID().toString();
+        if (documentMapper.requestProcessing(documentId, expectedStatus, attempt, processingTimeoutSeconds) != 1) {
+            throw new BusinessException("文档不在待处理状态");
+        }
+        processDispatcher.dispatch(() -> processDocument(documentId, knowledge, attempt), () -> {
+            String message = UiMessages.label("文档处理队列已满或正在停止，请稍后重试",
+                    "Document processing is full or stopping. Please retry later.");
+            if (processState.reject(documentId, attempt, message)) {
+                emitProgress(documentId, "", "failed", 0, message, "failed");
             }
         });
     }
@@ -200,13 +200,13 @@ public class DocumentProcessService {
     /**
      * 同步处理文档（核心流水线）
      */
-    private void processDocument(Long documentId, AiKnowledge knowledge) {
+    private void processDocument(Long documentId, AiKnowledge knowledge, String attempt) {
         AiKnowledgeDocument document = documentMapper.selectById(documentId);
         if (document == null) return;
 
         try {
             // 1. 更新状态为处理中
-            if (documentMapper.claimPendingDocument(documentId) != 1) {
+            if (documentMapper.claimPendingDocument(documentId, attempt, processingTimeoutSeconds) != 1) {
                 return;
             }
             emitProgress(documentId, document.getDocName(), "parsing", 10, "开始解析文档", "processing");
@@ -231,17 +231,15 @@ public class DocumentProcessService {
                     "分块完成，共" + chunks.size() + "个分块", "processing");
 
             // 4. 向量化 + 入库
-            vectorIndexer.replaceChunks(documentId, knowledge, chunks);
-            emitProgress(documentId, document.getDocName(), "embedding", 90, "向量化入库完成", "processing");
-
-            // 5. 更新文档状态
-            documentMapper.updateProcessStatus(documentId, "success", null, chunks.size());
-            emitProgress(documentId, document.getDocName(), "complete", 100, "处理完成", "success");
+            if (vectorIndexer.replaceChunks(documentId, knowledge, chunks, attempt)) {
+                emitProgress(documentId, document.getDocName(), "complete", 100, "处理完成", "success");
+            }
 
         } catch (Exception e) {
             log.error("[文档处理] 处理失败: documentId={}", documentId, e);
-            documentMapper.updateProcessStatus(documentId, "failed", e.getMessage(), null);
-            emitProgress(documentId, document.getDocName(), "failed", 0, "处理失败: " + e.getMessage(), "failed");
+            if (documentMapper.finishAttempt(documentId, attempt, "processing", "failed", e.getMessage(), null) == 1) {
+                emitProgress(documentId, document.getDocName(), "failed", 0, "处理失败: " + e.getMessage(), "failed");
+            }
         }
     }
 
@@ -316,10 +314,7 @@ public class DocumentProcessService {
     }
 
     private void emitProgress(Long documentId, String docName, String stage, int progress, String message, String status) {
-        Sinks.Many<DocumentProcessEvent> sink = progressSinks.get(documentId);
-        if (sink != null) {
-            sink.tryEmitNext(DocumentProcessEvent.of(documentId, docName, stage, progress, message, status));
-        }
+        progressPublisher.emit(DocumentProcessEvent.of(documentId, docName, stage, progress, message, status));
     }
 
     /**

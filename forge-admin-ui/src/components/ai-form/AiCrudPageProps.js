@@ -16,6 +16,15 @@ export const aiCrudPageProps = {
   },
 
   /**
+   * 初始搜索条件；点击重置后恢复该值。
+   * @type {object}
+   */
+  defaultSearchParams: {
+    type: Object,
+    default: () => ({}),
+  },
+
+  /**
    * 是否显示搜索表单
    * @type {boolean}
    */
@@ -94,6 +103,16 @@ export const aiCrudPageProps = {
    * @type {boolean}
    */
   hideSelection: {
+    type: Boolean,
+    default: false,
+  },
+
+  /**
+   * 是否在默认行操作中显示查看入口。
+   * 仅在配置详情接口且具备对应权限时显示。
+   * @type {boolean}
+   */
+  showDetailAction: {
     type: Boolean,
     default: false,
   },
@@ -303,12 +322,12 @@ export const aiCrudPageProps = {
   },
 
   /**
-   * 编辑表单行间距
+   * 编辑表单行间距（UI 规范：表单网格 gap 16px）
    * @type {number}
    */
   editYGap: {
     type: Number,
-    default: 8,
+    default: 16,
   },
 
   /**
@@ -406,6 +425,14 @@ export const aiCrudPageProps = {
     type: Boolean,
     default: false,
   },
+  /**
+   * 新增/编辑弹窗主提交按钮文案。
+   * @type {string}
+   */
+  formConfirmLabel: {
+    type: String,
+    default: '确定',
+  },
 
   /**
    * 弹窗类型：'modal' | 'drawer'
@@ -457,12 +484,6 @@ export const aiCrudPageProps = {
     default: false,
   },
 
-  /** 内置动作权限：add/detail/edit/delete/batchDelete/import/export，未配置保持兼容。 */
-  actionPermissions: {
-    type: Object,
-    default: () => ({}),
-  },
-
   /**
    * 是否隐藏新增按钮
    * @type {boolean}
@@ -488,6 +509,16 @@ export const aiCrudPageProps = {
   hideBatchDelete: {
     type: Boolean,
     default: false,
+  },
+
+  /**
+   * 内置动作（新增/编辑/删除/批量删除/导入/导出）的权限码映射，向后兼容。
+   * 未配置的键不做权限门控（保持原行为）；配置后仅当当前用户持有该权限码（或 admin/tenantAdmin）时显示。
+   * @type {{ add?: string, detail?: string, edit?: string, delete?: string, batchDelete?: string, import?: string, export?: string }}
+   */
+  actionPermissions: {
+    type: Object,
+    default: () => ({}),
   },
 
   /**
@@ -567,6 +598,18 @@ export const aiCrudPageProps = {
   businessObjectCode: {
     type: String,
     default: '',
+  },
+
+  /** 详情弹窗基础数据页签文案。 */
+  detailBusinessTabLabel: {
+    type: String,
+    default: '业务数据',
+  },
+
+  /** 详情弹窗流程页签文案。 */
+  detailFlowTabLabel: {
+    type: String,
+    default: '流程进度',
   },
 
   /**

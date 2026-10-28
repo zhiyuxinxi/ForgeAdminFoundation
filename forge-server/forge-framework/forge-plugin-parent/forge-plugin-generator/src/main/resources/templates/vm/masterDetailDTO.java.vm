@@ -1,6 +1,8 @@
 package ${packageName}.${moduleName}.dto;
 
 import lombok.Data;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 
 import java.io.Serializable;
 import java.util.LinkedHashMap;
@@ -21,6 +23,8 @@ public class ${className}MasterDetailDTO implements Serializable {
     /**
      * 主表数据
      */
+    @Valid
+    @NotNull
     private ${className}DTO main;
 
     /**

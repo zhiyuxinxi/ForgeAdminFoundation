@@ -1,5 +1,8 @@
 <template>
   <div class="ai-crud-page-wrapper">
+    <n-alert v-if="taskActionsError" type="error" :bordered="false">
+      {{ taskActionsError }}
+    </n-alert>
     <ListPageGridDesigner
       v-if="shouldRenderRuntimeGrid"
       class="runtime-list-grid"
@@ -44,6 +47,7 @@ import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } fr
 import { useRoute, useRouter } from 'vue-router'
 import { crudConfigRender } from '@/api/ai'
 import { businessDocumentRuntimeBatch } from '@/api/business-app'
+import { businessTaskActions } from '@/api/business-task'
 import catalog from '@/catalog'
 import AiCrudPage from '@/components/ai-form/AiCrudPage.vue'
 import { createOfflineSchemaHash } from '@/components/ai-form/offline-form-runtime'
@@ -86,6 +90,8 @@ const runtimeCrudRef = ref(null)
 const lastInitialActionKey = ref('')
 const runtimeDetailRecord = ref({})
 const runtimeDetailLoading = ref(false)
+const taskActions = ref([])
+const taskActionsError = ref('')
 const embeddedRuntime = computed(() => Boolean(props.runtimeConfig?.configKey))
 const runtimeOpenMode = computed(() => String(route.query?.runtimeOpenMode || '').toUpperCase())
 const formOnlyRuntime = computed(() => runtimeOpenMode.value === 'CREATE_FORM')
@@ -1103,7 +1109,7 @@ const crudProps = computed(() => {
     enableCustomQuery: options.enableCustomQuery !== false,
     customQueryConfigKey: cfg.configKey,
     toolbarActions: normalizeRuntimePageActions(options.toolbarActions || [], 'toolbar'),
-    runtimeActions: normalizeRuntimePageActions(options.runtimeActions || [], 'row'),
+    runtimeActions: [...normalizeRuntimePageActions(options.runtimeActions || [], 'row'), ...taskActions.value],
     businessObjectCode: resolveBusinessObjectCode(cfg),
     publicParams: treeTable
       ? { ...configuredPublicParams, ...defaultSortParams, loadMode: treeLoadMode }
@@ -1165,6 +1171,8 @@ function resolveRuntimeFormOpenMode(options = {}, cfg = {}) {
 
 function buildFormRuntimeContext() {
   return {
+    identityReferenceConfigKey: embeddedRuntime.value ? null : (renderConfig.value?.configKey || resolveRouteConfigKey()),
+    identityReferenceApiBase: embeddedRuntime.value ? props.runtimeConfig?.identityReferenceApiBase : null,
     currentUser: {
       userId: userStore.userId,
       username: userStore.username,
@@ -1829,6 +1837,8 @@ async function loadConfig() {
   loading.value = true
   errorMsg.value = ''
   configLoaded.value = false
+  taskActions.value = []
+  taskActionsError.value = ''
 
   try {
     const cfg = embeddedRuntime.value
@@ -1837,6 +1847,23 @@ async function loadConfig() {
     if (!cfg || typeof cfg !== 'object')
       throw new Error(localizeLabel('低代码运行配置为空'))
     renderConfig.value = cfg
+    if (!embeddedRuntime.value && !designPreview.value && cfg.options?.publicTaskBindings?.length) {
+      try {
+        const bindings = await businessTaskActions(configKey)
+        taskActions.value = bindings.map(binding => ({
+          ...binding,
+          key: `publicTask:${binding.bindingKey}`,
+          actionType: 'PUBLIC_TASK',
+          position: 'row',
+          label: binding.title,
+          configKey,
+          objectCode: resolveBusinessObjectCode(cfg),
+        }))
+      }
+      catch (error) {
+        taskActionsError.value = error.message || localizeLabel('任务入口加载失败', { 'en-US': 'Unable to load task actions' })
+      }
+    }
     // 动态页面的 Tab/浏览器标题以发布菜单名为准，避免再次点击 Tab 时回退成主模型名。
     syncRuntimeTitle()
     await preloadDicts(cfg)

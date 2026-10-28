@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,7 +51,7 @@ class BusinessProcessMapperContractTest {
     }
 
     @Test
-    @DisplayName("object process summary is tenant scoped and extracts the real start node")
+    @DisplayName("object process summary is tenant scoped and supplies the draft for start-node extraction")
     void objectProcessSummaryIsTenantScoped() throws IOException, NoSuchFieldException {
         String query = statement(resource("mapper/BusinessProcessMapper.xml"),
                 "select", "selectBySubjectObjectCode");
@@ -59,9 +61,15 @@ class BusinessProcessMapperContractTest {
         assertTrue(query.contains("p.tenant_id = #{tenantId}"));
         assertTrue(query.contains("p.subject_object_code = #{objectCode}"));
         assertTrue(query.contains("p.del_flag = 0"));
-        assertTrue(query.contains("JSON_TABLE"));
-        assertTrue(query.contains("LEFT(node.node_type, 6) = 'START_'"));
+        // 起止节点提取已从 SQL（JSON_TABLE）下沉到服务层：Mapper 只回传 draft_schema_json
+        assertTrue(query.contains("p.draft_schema_json AS draftSchemaJson"));
         assertTrue(query.contains("Active_Application_And_Subject"));
+        // 服务层从 draftSchemaJson 提取第一个 START_ 开头的节点类型填充 startNodeType
+        String serviceSource = readSource(
+                "service/businessprocess/BusinessProcessService.java");
+        assertTrue(serviceSource.contains("extractStartNodeType(BusinessObjectProcessVO vo)"));
+        assertTrue(serviceSource.contains("type.startsWith(\"START_\")"));
+        assertTrue(serviceSource.contains("vo::setStartNodeType"));
     }
 
     @Test
@@ -215,6 +223,18 @@ class BusinessProcessMapperContractTest {
             assertNotNull(input, "找不到 Mapper XML: " + path);
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
+    }
+
+    private String readSource(String relativePath) throws IOException {
+        Path moduleRoot = Path.of("").toAbsolutePath();
+        Path source = moduleRoot.resolve("src/main/java/com/mdframe/forge/plugin/generator").resolve(relativePath);
+        if (!Files.exists(source)) {
+            source = moduleRoot.resolve(
+                    "forge-framework/forge-plugin-parent/forge-plugin-generator/src/main/java/com/mdframe/forge/plugin/generator")
+                    .resolve(relativePath);
+        }
+        assertTrue(Files.exists(source), "找不到源码: " + relativePath);
+        return Files.readString(source);
     }
 
     private String statement(String xml, String tag, String id) {

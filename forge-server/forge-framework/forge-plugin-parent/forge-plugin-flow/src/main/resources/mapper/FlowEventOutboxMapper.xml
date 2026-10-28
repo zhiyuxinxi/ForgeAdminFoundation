@@ -27,4 +27,11 @@
         FROM sys_flow_event_outbox
         WHERE tenant_id = #{tenantId} AND event_id = #{eventId} AND delivery_status = 'RECORDED'
     </select>
+    <select id="selectTerminal" resultMap="outboxEntry">
+        SELECT event_id, tenant_id, process_instance_id, event_type, process_def_key,
+               destination_type, destination, payload, created_at
+        FROM sys_flow_event_outbox
+        WHERE tenant_id = #{tenantId} AND process_instance_id = #{processInstanceId}
+          AND event_type = #{eventType}
+    </select>
 </mapper>

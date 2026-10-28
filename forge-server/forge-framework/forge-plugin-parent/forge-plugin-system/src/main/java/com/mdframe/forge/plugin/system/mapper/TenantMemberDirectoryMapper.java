@@ -23,4 +23,10 @@ public interface TenantMemberDirectoryMapper {
                                                @Param("keyword") String keyword,
                                                @Param("afterUserId") Long afterUserId,
                                                @Param("limit") int limit);
+
+    @InterceptorIgnore(tenantLine = "true")
+    List<TenantMember> selectActiveMembersByPost(@Param("tenantId") Long tenantId,
+                                                @Param("postId") Long postId,
+                                                @Param("afterUserId") Long afterUserId,
+                                                @Param("limit") int limit);
 }

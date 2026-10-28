@@ -7,7 +7,7 @@ const requestMocks = vi.hoisted(() => ({
   get: vi.fn(),
 }))
 
-vi.mock('@/utils', () => ({ request: requestMocks }))
+vi.mock('@/utils/http', () => ({ request: requestMocks }))
 
 afterEach(() => setLocale('zh-CN'))
 

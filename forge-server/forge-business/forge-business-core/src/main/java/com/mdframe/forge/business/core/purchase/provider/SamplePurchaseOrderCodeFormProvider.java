@@ -4,10 +4,10 @@ import com.mdframe.forge.business.core.purchase.dto.SamplePurchaseOrderTaskSaveD
 import com.mdframe.forge.business.core.purchase.service.SamplePurchaseOrderService;
 import com.mdframe.forge.business.core.purchase.support.SamplePurchaseOrderFlowDefinition;
 import com.mdframe.forge.business.core.purchase.vo.SamplePurchaseOrderVO;
-import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormContextQueryDTO;
-import com.mdframe.forge.plugin.generator.dto.businessapp.BusinessTaskFormSaveDTO;
-import com.mdframe.forge.plugin.generator.service.businessapp.BusinessCodeFormProvider;
-import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessTaskFormContextVO;
+import com.mdframe.forge.lowcode.api.form.BusinessCodeFormProvider;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormContextQueryDTO;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormContextVO;
+import com.mdframe.forge.lowcode.api.form.BusinessTaskFormSaveDTO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

@@ -40,3 +40,16 @@ describe('system organization tree scrolling', () => {
     },
   )
 })
+
+
+describe('public credential input limits', () => {
+  it('accepts the backend username and password lengths in login and maintenance forms', () => {
+    const login = readSource('../../login/index.vue')
+    const user = readSource('../user.vue')
+    expect(login).toMatch(/id="username"[\s\S]*?:maxlength="50"/)
+    expect(login).toMatch(/id="password"[\s\S]*?:maxlength="64"/)
+    expect(user).toMatch(/field: 'username'[\s\S]*?maxlength: 50/)
+    expect(user).toMatch(/field: 'password'[\s\S]*?maxlength: 64/)
+    expect(user).toMatch(/:placeholder="localizeLabel\('请输入新密码'\)"[\s]*:maxlength="64"/)
+  })
+})

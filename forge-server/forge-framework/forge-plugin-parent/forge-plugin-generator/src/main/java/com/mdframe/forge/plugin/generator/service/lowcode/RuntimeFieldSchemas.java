@@ -163,9 +163,12 @@ final class RuntimeFieldSchemas {
             render.put("type", "orgName");
             render.put("targetField", targetField);
             item.put("render", render);
-        } else if ("userName".equals(renderType)) {
+        } else if ("userName".equals(renderType) || "postName".equals(renderType)) {
             Map<String, Object> render = new LinkedHashMap<>();
-            render.put("type", "userName");
+            render.put("type", renderType);
+            if ("postName".equals(renderType) && field.getBasicProps() != null) {
+                targetField = StringUtils.defaultIfBlank(text(field.getBasicProps().get("labelValueField")), targetField);
+            }
             render.put("targetField", targetField);
             item.put("render", render);
         } else if ("regionName".equals(renderType)) {

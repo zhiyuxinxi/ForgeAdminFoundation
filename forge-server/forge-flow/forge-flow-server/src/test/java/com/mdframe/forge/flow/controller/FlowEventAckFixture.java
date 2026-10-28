@@ -23,15 +23,15 @@ import com.mdframe.forge.starter.flow.event.FlowEventDeliveryProperties;
 import com.mdframe.forge.starter.flow.mapper.FlowEventDeliveryMapper;
 import org.mybatis.spring.SqlSessionTemplate;
 import org.springframework.aop.framework.ProxyFactory;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
 import org.springframework.transaction.interceptor.TransactionInterceptor;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,14 +61,16 @@ final class FlowEventAckFixture implements AutoCloseable {
     boolean permission = true;
 
     FlowEventAckFixture() throws Exception {
-        String sql = Files.readString(Path.of("forge-server/db/migration/"
-                + "V1.0.2026100911__flow_event_delivery_confirmation.sql"));
+        String sql;
+        try (InputStream input = new ClassPathResource(
+                "db/migration/V1.0.2026100911__flow_event_delivery_confirmation.sql").getInputStream()) {
+            sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
         jdbc.execute(sql.substring(0, sql.indexOf(';')).replace(" ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", ""));
         var factory = new MybatisSqlSessionFactoryBean();
         factory.setDataSource(source);
         factory.setConfiguration(new MybatisConfiguration());
-        factory.setMapperLocations(new FileSystemResource("forge-server/forge-framework/forge-plugin-parent/"
-                + "forge-plugin-flow/src/main/resources/mapper/FlowEventDeliveryMapper.xml"));
+        factory.setMapperLocations(new ClassPathResource("mapper/FlowEventDeliveryMapper.xml"));
         mapper = new SqlSessionTemplate(factory.getObject()).getMapper(FlowEventDeliveryMapper.class);
         properties.setEnabled(true);
         var binding = new FlowEventDeliveryProperties.Consumer();

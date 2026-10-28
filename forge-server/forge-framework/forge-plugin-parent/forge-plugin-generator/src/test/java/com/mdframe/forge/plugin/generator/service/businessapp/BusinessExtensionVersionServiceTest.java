@@ -17,9 +17,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @DisplayName("BusinessExtensionVersionService")
 class BusinessExtensionVersionServiceTest {
+    private final BusinessApplicationChangeTracker changes = mock(BusinessApplicationChangeTracker.class);
 
     @Test
     @DisplayName("saving content appends a version and preserves the enabled runtime version")
@@ -51,7 +54,7 @@ class BusinessExtensionVersionServiceTest {
         });
         BusinessExtensionVersionService service = new BusinessExtensionVersionService(
                 extensionMapper, new PermissiveLockService(extensionMapper), new ObjectMapper(),
-                new BusinessExtensionStateMachine(), null);
+                new BusinessExtensionStateMachine(), changes);
         setBaseMapper(service, versionMapper);
         BusinessExtensionVersionDTO dto = new BusinessExtensionVersionDTO();
         dto.setContent("return { changed: true }");
@@ -64,6 +67,7 @@ class BusinessExtensionVersionServiceTest {
         assertEquals(BusinessExtensionStatus.DRAFT, nextStatus.get());
         assertEquals(3, extension.getEnabledVersion());
         assertEquals(4, inserted.get().getVersionNo());
+        verify(changes).markApplicationChanged(extension.getApplicationId());
     }
 
     @Test
@@ -96,7 +100,7 @@ class BusinessExtensionVersionServiceTest {
         });
         BusinessExtensionVersionService service = new BusinessExtensionVersionService(
                 extensionMapper, new PermissiveLockService(extensionMapper), new ObjectMapper(),
-                new BusinessExtensionStateMachine(), null);
+                new BusinessExtensionStateMachine(), changes);
         setBaseMapper(service, versionMapper);
 
         Integer rollbackVersion = service.rollback(extension.getId(), 1, "lock-token");
@@ -106,12 +110,14 @@ class BusinessExtensionVersionServiceTest {
         assertEquals(4, inserted.get().getVersionNo());
         assertNotEquals(source.getId(), inserted.get().getId());
         assertEquals(source.getContent(), inserted.get().getContent());
+        verify(changes).markApplicationChanged(extension.getApplicationId());
     }
 
     private AiBusinessExtension enabledExtension() {
         AiBusinessExtension extension = new AiBusinessExtension();
         extension.setId(9L);
         extension.setTenantId(1L);
+        extension.setApplicationId(22L);
         extension.setExtensionCode("client_rule");
         extension.setExtensionType("CLIENT_JS");
         extension.setStatus(BusinessExtensionStatus.ENABLED);

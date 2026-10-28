@@ -1,5 +1,12 @@
 // Public rendering and validation messages; business values are preserved.
 export default {
+  "查看客户端：{0}": "View client: {0}",
+  "{0} 天": "{0} days",
+  "{0} 小时": "{0} hours",
+  "{0} 秒": "{0} seconds",
+  "用户头像": "User avatar",
+  "操作失败，请稍后重试或联系管理员": "The operation failed. Try again later or contact an administrator.",
+  "未维护部门或岗位的人员不可选择，请先完善人员档案。": "Users without the required department or position cannot be selected. Complete their profiles first.",
   '业务数据源授权': 'Business datasource grants',
   '仅可授权启用且可写的业务数据源，撤销后立即停止路由。': 'Grant only enabled, writable business datasources. Revocation stops routing immediately.',
   '租户业务数据源未授权或不可写': 'The tenant business datasource is not granted or writable',

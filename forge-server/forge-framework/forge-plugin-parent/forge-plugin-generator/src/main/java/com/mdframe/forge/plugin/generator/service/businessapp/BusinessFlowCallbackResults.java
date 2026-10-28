@@ -107,14 +107,17 @@ final class BusinessFlowCallbackResults {
 
     AiBusinessFlowInstanceLink findCallbackLink(Long tenantId, BusinessFlowCallbackDTO dto) {
         if (StringUtils.isNotBlank(dto.getProcessInstanceId())) {
-            AiBusinessFlowInstanceLink link = flowInstanceLinkMapper.selectByProcessInstanceId(
+            // An explicit instance identity must never fall back to another round of the document.
+            return flowInstanceLinkMapper.selectByProcessInstanceIdForUpdate(
                     tenantId, dto.getProcessInstanceId());
-            if (link != null) {
-                return link;
-            }
         }
         if (StringUtils.isNotBlank(dto.getBusinessKey())) {
-            return flowInstanceLinkMapper.selectLatestByBusinessKey(tenantId, dto.getBusinessKey());
+            AiBusinessFlowInstanceLink link = flowInstanceLinkMapper.selectLatestByBusinessKeyForUpdate(
+                    tenantId, dto.getBusinessKey());
+            if (link != null && flowInstanceLinkMapper.countByBusinessKey(tenantId, dto.getBusinessKey()) > 1) {
+                throw new BusinessException(UiMessages.message("flow.callback.instance.required"));
+            }
+            return link;
         }
         return null;
     }

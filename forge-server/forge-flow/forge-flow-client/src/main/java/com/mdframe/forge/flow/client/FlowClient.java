@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mdframe.forge.starter.core.domain.FlowStartOutcome;
+import com.mdframe.forge.starter.core.i18n.UiMessages;
+import com.mdframe.forge.starter.core.domain.FlowStartRecoverySnapshot;
 import lombok.Setter;
 import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
@@ -193,11 +195,21 @@ public class FlowClient {
 
     /** Query the exact original round after an uncertain start or a failed local association write. */
     public FlowResult<FlowStartOutcome> getProcessStartStatus(String businessKey, String startRequestId) {
+        return getStartSnapshot("status", businessKey, startRequestId, new TypeReference<>() { });
+    }
+
+    /** Retrieve the original terminal event for an exact round without replaying external actions. */
+    public FlowResult<FlowStartRecoverySnapshot> getProcessStartRecovery(String businessKey, String startRequestId) {
+        return getStartSnapshot("recovery", businessKey, startRequestId, new TypeReference<>() { });
+    }
+
+    private <T> FlowResult<T> getStartSnapshot(String operation, String businessKey, String startRequestId,
+                                              TypeReference<FlowResult<T>> resultType) {
         if (businessKey == null || businessKey.isBlank() || startRequestId == null || startRequestId.isBlank()) {
             throw new FlowClientException("FLOW_START_QUERY_IDENTITY_REQUIRED");
         }
         var uri = UriComponentsBuilder.fromHttpUrl(flowServiceUrl)
-                .pathSegment("api", "flow", "instance", "status", "{businessKey}")
+                .pathSegment("api", "flow", "instance", operation, "{businessKey}")
                 .queryParam("startRequestId", "{startRequestId}")
                 .encode().buildAndExpand(businessKey, startRequestId).toUri();
         try {
@@ -205,7 +217,7 @@ public class FlowClient {
             if (response.getBody() == null || response.getBody().isBlank()) {
                 throw new FlowClientException("FLOW_START_QUERY_RESPONSE_MISSING");
             }
-            return objectMapper.readValue(response.getBody(), new TypeReference<FlowResult<FlowStartOutcome>>() { });
+            return objectMapper.readValue(response.getBody(), resultType);
         } catch (FlowClientException exception) {
             throw exception;
         } catch (Exception exception) {
@@ -371,6 +383,14 @@ public class FlowClient {
         addQueryParamIfText(builder, "taskId", taskId);
         addQueryParamIfText(builder, "taskDefKey", taskDefKey);
         return get(builder.toUriString(), new TypeReference<FlowResult<Map<String, Object>>>() {});
+    }
+
+    /**
+     * 以当前登录用户身份获取本人抄送关联的流程表单信息。
+     */
+    public FlowResult<Map<String, Object>> getCcFormInfo(String ccId) {
+        String url = flowServiceUrl + "/api/flow/cc/form/" + ccId;
+        return get(url, new TypeReference<FlowResult<Map<String, Object>>>() {});
     }
 
     /**
@@ -563,7 +583,7 @@ public class FlowClient {
             try {
                 effectiveToken = tokenProvider.getToken();
             } catch (FlowTokenAcquisitionException exception) {
-                throw new FlowClientException("获取流程调用身份失败", exception);
+                throw new FlowClientException(UiMessages.translate("获取流程调用身份失败"), exception);
             } catch (Exception e) {
                 // TokenProvider 获取失败时降级为静态 token
                 effectiveToken = token;
@@ -584,13 +604,13 @@ public class FlowClient {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
             String body = response.getBody();
             if (body == null || body.isBlank()) {
-                throw new FlowClientException("调用流程服务返回空响应体 [GET " + url + "]");
+                throw new FlowClientException(UiMessages.translate("调用流程服务返回空响应体 [GET ") + url + "]");
             }
             return objectMapper.readValue(body, typeReference);
         } catch (FlowClientException e) {
             throw e;
         } catch (Exception e) {
-            throw new FlowClientException("调用流程服务失败 [GET " + url + "]: " + e.getMessage(), e);
+            throw new FlowClientException(UiMessages.translate("调用流程服务失败 [GET ") + url + "]: " + e.getMessage(), e);
         }
     }
 
@@ -601,14 +621,15 @@ public class FlowClient {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {
-                throw new FlowClientException("调用流程服务返回空响应体 [POST " + url + "]" +
-                        "（HTTP " + response.getStatusCode().value() + "）请检查服务端日志");
+                throw new FlowClientException(UiMessages.translate("调用流程服务返回空响应体 [POST ") + url + "]" +
+                        UiMessages.translate("（HTTP ") + response.getStatusCode().value()
+                        + UiMessages.translate("）请检查服务端日志"));
             }
             return objectMapper.readValue(responseBody, typeReference);
         } catch (FlowClientException e) {
             throw e;
         } catch (Exception e) {
-            throw new FlowClientException("调用流程服务失败 [POST " + url + "]: " + e.getMessage(), e);
+            throw new FlowClientException(UiMessages.translate("调用流程服务失败 [POST ") + url + "]: " + e.getMessage(), e);
         }
     }
 
@@ -619,14 +640,15 @@ public class FlowClient {
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
             String responseBody = response.getBody();
             if (responseBody == null || responseBody.isBlank()) {
-                throw new FlowClientException("调用流程服务返回空响应体 [PUT " + url + "]" +
-                        "（HTTP " + response.getStatusCode().value() + "）请检查服务端日志");
+                throw new FlowClientException(UiMessages.translate("调用流程服务返回空响应体 [PUT ") + url + "]" +
+                        UiMessages.translate("（HTTP ") + response.getStatusCode().value()
+                        + UiMessages.translate("）请检查服务端日志"));
             }
             return objectMapper.readValue(responseBody, typeReference);
         } catch (FlowClientException e) {
             throw e;
         } catch (Exception e) {
-            throw new FlowClientException("调用流程服务失败 [PUT " + url + "]: " + e.getMessage(), e);
+            throw new FlowClientException(UiMessages.translate("调用流程服务失败 [PUT ") + url + "]: " + e.getMessage(), e);
         }
     }
 }

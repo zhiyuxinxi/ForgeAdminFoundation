@@ -79,12 +79,14 @@ class FlowActionExecutionAdapterTest {
     @Test
     void shouldStartThroughStableCapabilityBusinessKeyPath() {
         SecureActionDescriptor descriptor = descriptor("START");
+        var attempt = mock(FlowActionExecutionLogService.ExecutionAttempt.class);
+        when(attempt.startRequestId()).thenReturn("flow-action-100");
         when(flowService.startDocumentFlowForCapability(any())).thenReturn(runtime("流程已发起"));
         doAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Function<FlowActionExecutionLogService.ExecutionAttempt, Map<String, Object>> action
                     = invocation.getArgument(4);
-            return action.apply(null);
+            return action.apply(attempt);
         }).when(logService).executeWithAttempt(eq(descriptor), any(), anyMap(), eq("req-1"), any());
 
         try (var ignored = ExecutionIdentityContextHolder.open(identity())) {
@@ -99,6 +101,7 @@ class FlowActionExecutionAdapterTest {
         verify(flowService).startDocumentFlowForCapability(captor.capture());
         assertThat(captor.getValue().getObjectCode()).isEqualTo("order");
         assertThat(captor.getValue().getRecordId()).isEqualTo(1001L);
+        assertThat(captor.getValue().getStartRequestId()).isEqualTo("flow-action-100");
         assertThat(captor.getValue().getVariables()).isEmpty();
     }
 

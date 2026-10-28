@@ -21,6 +21,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("FormulaExecutionEngine LOOKUP")
@@ -113,7 +114,9 @@ class FormulaExecutionEngineLookupTest {
 
         assertFalse(result.isSuccess());
         assertTrue(result.hasError("ownerName"));
-        assertEquals("NOT_ASSIGNED", result.getResult("ownerName"));
+        // 引擎失败契约：失败字段不写 result（null），回退值只出现在 trace 步骤 output
+        assertNull(result.getResult("ownerName"));
+        assertEquals("NOT_ASSIGNED", result.getTrace().getSteps().get(0).getOutput());
         assertFalse(result.getTrace().getSteps().get(0).isSuccess());
         assertEquals("customer_owner", result.getTrace().getSteps().get(0).getMetadata().get("relationCode"));
     }

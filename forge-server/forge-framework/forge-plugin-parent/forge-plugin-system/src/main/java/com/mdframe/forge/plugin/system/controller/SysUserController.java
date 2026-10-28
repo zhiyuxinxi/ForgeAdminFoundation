@@ -7,6 +7,7 @@ import com.mdframe.forge.plugin.system.dto.BatchUserRoleBindDTO;
 import com.mdframe.forge.plugin.system.dto.BatchUserTenantBindDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserDTO;
 import com.mdframe.forge.plugin.system.dto.SysUserQuery;
+import com.mdframe.forge.plugin.system.dto.ResetUserPasswordDTO;
 import com.mdframe.forge.plugin.system.dto.UserOrgBindDTO;
 import com.mdframe.forge.plugin.system.dto.UserOrgRoleBindDTO;
 import com.mdframe.forge.plugin.system.dto.UserPostBindDTO;
@@ -31,6 +32,7 @@ import com.mdframe.forge.starter.excel.model.ImportErrorRecord;
 import com.mdframe.forge.starter.excel.model.ImportResult;
 import com.mdframe.forge.starter.excel.service.ExcelImportService;
 import com.mdframe.forge.starter.log.context.OperationAuditContext;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -356,10 +358,11 @@ public class SysUserController {
      */
     @OperationLog(module = "用户管理", type = OperationType.UPDATE, desc = "重置用户密码", saveRequestParams = false)
     @PostMapping("/resetPwd")
-    public RespInfo<Void> resetPwd(@RequestParam Long id, @RequestParam String password) {
+    public RespInfo<Void> resetPwd(@Valid @RequestBody ResetUserPasswordDTO request) {
+        Long id = request.getId();
         Map<String, Object> beforeData = buildUserAuditData(id);
         OperationAuditContext.setBeforeData(beforeData);
-        boolean result = userService.resetPassword(id, password);
+        boolean result = userService.resetPassword(id, request.getPassword());
         if (result) {
             Map<String, Object> afterData = buildUserAuditData(id);
             afterData.put("passwordChanged", true);

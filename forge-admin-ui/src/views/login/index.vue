@@ -121,7 +121,7 @@
                   autofocus
                   class="modern-input"
                   :placeholder="localizeLabel('请输入用户名')"
-                  :maxlength="20"
+                  :maxlength="50"
                   size="large"
                 >
                   <template #prefix>
@@ -142,7 +142,7 @@
                   type="password"
                   show-password-on="click"
                   :placeholder="localizeLabel('请输入密码')"
-                  :maxlength="20"
+                  :maxlength="64"
                   size="large"
                   @keydown.enter="handleLogin()"
                 >

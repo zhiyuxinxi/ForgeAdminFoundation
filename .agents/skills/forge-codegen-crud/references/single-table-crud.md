@@ -15,7 +15,7 @@ Before generating files, identify:
 Follow the existing plugin package layout:
 
 ```text
-forge/forge-framework/forge-plugin-parent/forge-plugin-<module>/
+forge-server/forge-framework/forge-plugin-parent/forge-plugin-<module>/
 ├── src/main/java/com/mdframe/forge/plugin/<module>/
 │   ├── controller/<Business>Controller.java
 │   ├── domain/entity/<Business>.java
@@ -195,6 +195,12 @@ const editSchema = computed(() => [
 ```
 
 If a numeric DB field uses dictionary values stored as strings, convert options through a local computed helper so submitted values match backend types.
+
+Date fields use AiFormItem's formatted value and the field's `valueFormat`; preserve ordinary numbers, identifiers, nested objects and child rows on submit. Never infer timestamps from a number's digit count in a page or API adapter. AiCrudPage owns the common save lifecycle: an authentication failure, including a resolved `silentAuthError` result, must retain the editor/draft and must not emit success. Custom submit hooks must preserve this outcome contract rather than implementing another save lifecycle.
+
+Keep asynchronous ownership in the shared CRUD lifecycle: only the current query may update rows, totals, loading and result events; only the current record/open request may populate an editor. Failed or missing detail must not open or submit a stale record. Save busy protection starts before asynchronous validation and submit hooks, and cancellation or failure must allow a later retry. Reuse these behaviors rather than copying a request controller into each generated page.
+
+Child toolbar commands declare `relationKey` and existing `actionConfig.inputSchema` or `formSchema`/`defaultValues`. When selecting a record from a different child relation, use `actionConfig.recordSelector` with `relationKey` and a real `labelField` (optional display label/placeholder/emptyMessage). AiCrudPage owns record selection, AiForm validation, permission checks and failure retention. Do not add business action codes, inventory fields or customer names to the shared component or extend the legacy compatibility map for new modules.
 
 ## Import and Export
 

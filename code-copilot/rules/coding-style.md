@@ -38,7 +38,12 @@ alwaysApply: true
 - **过滤边界**以当前 ORM 配置及 Mapper SQL 为准，不受拦截的表、异步任务和跨服务调用必须显式保持授权语义，禁止笼统声称所有 SELECT 均受保护。
 - **排查**字典为空时核对当前租户、种子所属租户及实际查询，不通过把所有业务数据改成 `1` 修复。
 
-### 6.2 其他 SQL 规范
+### 6.2 查询运行兼容
+- SQL必须兼容当前数据库及实际MyBatis、JSqlParser、租户/数据权限/分页插件链；XML格式合法、Java编译或数据库直接执行都不证明插件可解析和改写。
+- 修改查询时，用真实参数产生BoundSql，验证实际动态分支、列表/分页和结果语义。当前解析链存在限制时，NULL安全比较使用`(a = b OR (a IS NULL AND b IS NULL))`等价写法；不盲用`<=>`，也不将版本限制扩大为所有SQL永久禁令。锁语句与分页count按实际插件核对。
+- 保留NULL、租户、逻辑删除、去重和排序语义；不得通过关闭拦截器或移除过滤修复解析失败。
+
+### 6.3 其他 SQL 规范
 - 所有业务表必须包含基础字段：`id`, `tenant_id`, `create_by`, `create_time`, `create_dept`, `update_by`, `update_time`
 - 使用 `utf8mb4` 字符集，`InnoDB` 引擎
 - 为高频查询字段创建索引，组合索引遵循最左前缀原则
@@ -116,6 +121,10 @@ alwaysApply: true
 | 异常与降级 | 只降级明确可恢复步骤；授权、校验和必要持久化失败向上传播。保留原始失败证据，降级日志脱敏、有限且可定位。 |
 | 资源生命周期 | 流、连接、临时文件、锁与线程资源明确创建者和释放者；成功、异常及取消路径均有必要释放，不清理其他任务或调用方拥有的资源。 |
 
+进度订阅由同一owner登记和释放；同一对象多个客户端不能互相覆盖，旧连接退出只能注销自己的订阅。即时SSE不替代持久任务状态，也不自动具备跨实例广播能力。
+
+需要设计器维护时，先明确设计器元数据与代码持久化映射、业务校验、权限、扩展的所有权。`BusinessObjectDesignerService.saveDesigner`保存草稿；正式应用由`BusinessApplicationRuntimeService`按`lastPublishVersion`消费发布快照，业务不能手写发布状态或把草稿当正式配置。代码表单按实际需要实现`forge-lowcode-api`的`BusinessCodeFormProvider`，它不替代普通CRUD或发布服务。用真实保存→发布→后端运行消费证明草稿隔离和再次发布/生成时扩展保留，记录对象/配置/版本；不承诺任意Java反向转换，不为普通CRUD强制接入设计器。
+
 ### 8.5 设计、编码、检查与修复的实际执行
 1. 设计在已有 spec 中明确上述职责、依赖和实际涉及的关键边界，不新增平行合同或治理文件。
 2. 编码与生成按职责落地，修改旧代码不能以“历史如此”继续扩张巨类；结构整改不能削弱接口、权限、事务及失败语义。
@@ -148,3 +157,30 @@ alwaysApply: true
 - 普通多选删除可复用已有单删接口与前端公共逐项处理，逐项保留成功/失败及失败原因，不要求每个实体新增 `removeBatch`。确需后端批量端点时才约定 ID 上限、逐项校验、整批原子或部分成功语义；不得循环忽略单删失败后返回全成功，既定整批事务也不能偷偷降为部分提交。
 - 字典、组织/成员、附件、序列、审计及错误处理复用 8.6 的真实公共 owner；业务只叠加用途、引用和状态规则。保留既有附件、子表、签字、导入导出能力，不复制身份表查询或为台账再建一套公共服务。
 - 定向验证对应实际改动：正常分页/过滤与 CRUD、无权限/跨租户/越界详情和删除、被引用/受限状态删除、零行写入及多选部分失败（采用逐项处理时）。接口缺失、静态检查、编译和实际行为验证分别报告；不把本节扩大成无关全模块重测或新治理机制。
+
+
+### 8.8 异步、调度、外部调用和附件的实际入口
+只在需求涉及该能力时应用；本节不要求普通CRUD额外建设异步或任务系统。
+
+- **容器停机：**Java 启动脚本经 shell 展开参数时必须用 `exec java`，让停止信号到达 JVM。容器停止宽限期须覆盖应用任务排空及资源关闭时间；公共 Compose 默认 60 秒，实际调整应用等待配置时同步核对。验证实际进程和停止退出结果，不能以应用内 shutdown 单测或启动成功代替容器停机证明。
+- **短时异步：**使用应用中已配置的受管理执行器。新增执行器确有必要时明确线程/队列上限与拒绝处理、停机等待及任务失败状态；禁止每个请求或业务Service自行new线程池，禁止把内存队列宣称为重启可恢复。数据库提交后才执行依赖该写入的任务；回滚不得派发。拒绝发生在afterCommit时数据库已提交，必须留下可重试失败或明确反馈，不能假定回滚撤销了任务记录。任务取消/超时区分未开始、运行中与结果未知，不伪造成功。
+- **上下文：**`forge-starter-tenant`的`com.mdframe.forge.starter.tenant.datasource.TenantBusinessDataSourceTaskDecorator.decorate(Runnable)`捕获租户、数据源和`ExecutionIdentity`并在finally恢复；它不传播Locale。异步导出/通知另捕获`LocaleContextHolder.getLocaleContext()`并在finally恢复旧值。持久调度不能复制在线用户凭据；由既有执行身份与任务所属租户恢复授权。
+- **提交后的失败回写：**afterCommit仍可能绑定已提交事务的资源，持久化失败状态应经独立代理的REQUIRES_NEW等明确事务边界，不依赖同类自调用或原事务继续提交。入队和重试用持久请求/批次标识及预期状态进行CAS，拒绝、超时或旧完成回调只能影响自己的批次；等待用户确认与已请求处理须可区分。停机先等待/处理尚未开始的任务，再销毁数据源等依赖；运行中或远端结果未知不能直接当作安全取消并重复副作用。
+- **持久调度：**复用`forge-plugin-job`注册/调度/日志与`forge-starter-job`注解。现成Handler入口为`com.mdframe.forge.plugin.job.executor.IJobExecutor.execute(String param)`，使用`@JobHandler`注册后通过现有任务管理绑定；Bean直连采用`@ScheduledJob`。业务拥有幂等键、分批游标、成功/失败与重试规则，异常向调度器传播；不能另写sleep轮询或直接维护Quartz表。审批待办仍使用FlowClient/BPMN，不混成普通定时任务。
+- **外部HTTP：**复用`forge-starter-outbound`的`com.mdframe.forge.starter.outbound.client.SecureOutboundClient.execute(OutboundRequest)`；请求提供真实scene、URL、方法及有限的connect/read/write/call timeout，沿现有白名单与目标校验。需取消时使用`execute(request, Consumer<Runnable> cancellation)`，null回调表示调用已结束并解除注册。读取`OutboundResponse`的实际状态，不把HTTP失败包装成功，不关闭平台借出的客户端。非幂等写入超时视为可能已执行，按对方幂等键/查询协议恢复，不盲重试、不泄露凭据与响应敏感内容。
+- **流程未知结果：**使用现有`FlowClient`带startRequestId/previousProcessInstanceId的启动合同和`getProcessStartStatus(businessKey, startRequestId)`查询；`FlowStartOutcomeUnknownException`不能当作确定失败重开实例。本地业务链接补偿仍由已有拥有者处理，普通模块不复制流程恢复器。
+- **附件：**`forge-starter-file`的`FileManager`拥有上传/下载/访问链接与删除；元数据来自真实fileId。关联前通过`FileMetadataPersistence.checkPermission(fileId, userId)`核当前读取权限，修改/删除使用`checkWritePermission`及对应公共入口，不能从public可读推导可写。`getMetadata/getFileMetadata`只是取元数据，不能单独当授权证明。业务拥有必填、类型/数量与引用规则，删业务引用不自动删共享物理文件。
+- **导入导出：**复用`ExcelImportService.importData(file, configKey, DTO.class)`与`DynamicExportEngine.export(response, configKey, queryParams)`及现有字典/Excel元数据。持久化前对成功解析DTO执行与新增相同的实际校验；成功解析不等于数据库导入成功，原子导入任一行失败需回滚，部分导入须有明确逐项结果。异步导出沿上述租户、语言、失败与资源释放合同，不能绕分页上限查全表替代专用导出。
+
+本轮只验证实际涉及的拒绝/回滚、上下文隔离、超时/失败、权限与字段边界，不为本节自动添加全量回归。知识库容量/拒绝/停机与重启恢复的源码和运行状态见当前专项交接；规范本身不证明机制已修复或运行端已更新。
+
+## 运行合同与跨层正确性
+
+以下要求只应用于本次改变的路径，不是每次必跑清单：
+- 先核实际import/export、公开签名、依赖版本和配置消费者。历史例子只作线索，不编造接口或复制模块私有实现。
+- 前后端共同核对ID、金额/精度、日期/时区、null/未传/空值、分页和错误包络；合法语法或两端各自单测不能替代真实接线。
+- 权限、校验、事务、缓存与异步通过实际入口/代理生效。相关多写/状态变化检查回滚、受影响行数、并发和幂等；超时保持结果未知，不盲目重放副作用。
+- 异步回填/筛选/切换/卸载按请求与对象归属更新，旧结果不覆盖新页面；提交失败保留输入并恢复可操作状态。按实际需求取消或忽略过期请求，不强造通用请求框架。
+- 文件、连接、监听器、队列和批量操作明确上限及成功失败释放路径；不以小样本推断无界操作安全可用。
+- 可接受降级须有业务依据，必要写入或权限失败不得返回成功。错误返回与日志关联且脱敏，HTTP状态和业务结果按当前客户端合同共同解释。
+- 具体有效验证按自动化测试标准选择，测试期望来自需求/稳定合同，不复制实现假设或mock掉被验证机制。

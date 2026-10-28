@@ -29,5 +29,7 @@ class FormulaValueMaskerTest {
         assertTrue(masked.contains("138****5678"));
         assertTrue(masked.contains("1101011990******1234"));
         assertTrue(masked.contains("622202****0123"));
+        assertEquals("1101011990******123X", masker.mask("11010119900101123X"));
+        assertEquals("1101011990******123x", masker.mask("11010119900101123x"));
     }
 }

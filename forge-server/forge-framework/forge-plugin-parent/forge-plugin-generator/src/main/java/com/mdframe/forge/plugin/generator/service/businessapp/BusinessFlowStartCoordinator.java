@@ -16,6 +16,7 @@ import com.mdframe.forge.plugin.generator.vo.businessapp.BusinessFlowRuntimeVO;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowRuntimeMetadata.BusinessRuntimeContext;
 import com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowRuntimeMetadata.BindingLookupResult;
 import com.mdframe.forge.starter.core.exception.BusinessException;
+import com.mdframe.forge.starter.core.domain.FlowEventMessage;
 import com.mdframe.forge.starter.core.i18n.UiMessages;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,9 +30,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 import static com.mdframe.forge.plugin.generator.service.businessapp.BusinessFlowRuntimeMetadata.*;
@@ -50,7 +49,8 @@ final class BusinessFlowStartCoordinator {
     private final DynamicCrudService dynamicCrudService;
     private final BusinessFlowStatusUpdates statusUpdates;
     private final ObjectProvider<RedissonClient> redissonClientProvider;
-    private final Map<String, ReentrantLock> localFlowStartLocks = new ConcurrentHashMap<>();
+    private final BusinessFlowStartRecovery startRecovery;
+    private final LocalFlowStartLocks localFlowStartLocks = new LocalFlowStartLocks();
     private final FlowBindingConfiguration bindingConfiguration = new FlowBindingConfiguration();
 
     BusinessFlowRuntimeVO start(StartRequest request, FlowClient flowClient) {
@@ -72,6 +72,9 @@ final class BusinessFlowStartCoordinator {
         if (flowClient == null) {
             throw new BusinessException("流程服务未配置，无法发起主流程");
         }
+        if (dto.getPreviousProcessInstanceId() != null && StringUtils.isBlank(dto.getStartRequestId())) {
+            throw new BusinessException(UiMessages.message("flow.start.request.required"));
+        }
 
         FlowStartContext startContext = resolveFlowStartContext(tenantId, dto.getObjectCode(), allowDraftRuntime);
         String objectCode = startContext.objectCode();
@@ -87,7 +90,7 @@ final class BusinessFlowStartCoordinator {
                     resolveActiveOrgId(), checkPermission, stableBusinessKey);
             throw new BusinessException(
                     404,
-                    "记录不存在或无权限访问，请使用当前委托用户可见的已保存业务记录 ID");
+                    UiMessages.translate("记录不存在或无权限访问，请使用当前委托用户可见的已保存业务记录 ID"));
         }
 
         String businessKey = objectCode + ":" + dto.getRecordId();
@@ -109,11 +112,16 @@ final class BusinessFlowStartCoordinator {
         String objectCode = context.objectCode();
         String configKey = context.configKey();
         String requestedObjectCode = context.requestedObjectCode();
+        Long userId = starterUserId != null ? starterUserId : resolveUserId();
+        BusinessFlowStartRequestIdentity identity = BusinessFlowStartRequestIdentity.from(
+                tenantId, businessKey, userId, dto, stableBusinessKey);
+        BusinessFlowRuntimeVO replay = findExplicitReplay(request, context, businessKey, identity, flowClient);
+        if (replay != null) return replay;
         if (documentConfig != null) {
             documentRuntimeService.validateStartAllowed(objectCode, dto.getRecordId(), checkPermission);
         }
         AiBusinessFlowInstanceLink runningLink = flowInstanceLinkMapper.selectRunningByBusinessKey(tenantId, businessKey);
-        if (runningLink != null) {
+        if (runningLink != null && dto.getStartRequestId() == null) {
             return BusinessFlowStatusReader.toRuntimeVO(runningLink, "当前单据已有流转中的流程");
         }
 
@@ -156,7 +164,7 @@ final class BusinessFlowStartCoordinator {
         flowVariables.putIfAbsent("configKey", configKey);
         flowVariables.putIfAbsent("recordId", dto.getRecordId());
         flowVariables.putIfAbsent("businessKey", businessKey);
-        String flowBusinessKey = stableBusinessKey
+        String flowBusinessKey = stableBusinessKey || dto.getStartRequestId() != null
                 ? businessKey : resolveFlowBusinessKeyForStart(tenantId, businessKey);
         flowVariables.putIfAbsent("documentBusinessKey", businessKey);
         flowVariables.putIfAbsent("recordBusinessKey", businessKey);
@@ -166,18 +174,40 @@ final class BusinessFlowStartCoordinator {
                 StringUtils.defaultIfBlank(dto.getTitle(), buildFlowTitle(bindingConfig, recordData, objectCode)),
                 recordData,
                 objectCode);
-        Long userId = starterUserId != null ? starterUserId : resolveUserId();
         String userName = StringUtils.defaultIfBlank(starterUserName, resolveUsername());
-        FlowResult<String> result = stableBusinessKey
-                ? flowClient.startProcessForDelegatedUser(
-                        flowModelKey, flowBusinessKey, objectCode, title, flowVariables)
-                : flowClient.startProcess(
-                        flowModelKey, flowBusinessKey, title, flowVariables,
-                        userId == null ? null : String.valueOf(userId), userName, null, null);
+        FlowResult<String> result;
+        if (dto.getStartRequestId() != null) {
+            result = stableBusinessKey
+                    ? flowClient.startProcessForDelegatedUser(flowModelKey, flowBusinessKey, objectCode,
+                            title, flowVariables, dto.getStartRequestId(), dto.getPreviousProcessInstanceId())
+                    : flowClient.startProcess(flowModelKey, flowBusinessKey, objectCode, title, flowVariables,
+                            userId == null ? null : String.valueOf(userId), userName, null, null,
+                            dto.getStartRequestId(), dto.getPreviousProcessInstanceId());
+        } else {
+            result = stableBusinessKey
+                    ? flowClient.startProcessForDelegatedUser(
+                            flowModelKey, flowBusinessKey, objectCode, title, flowVariables)
+                    : flowClient.startProcess(
+                            flowModelKey, flowBusinessKey, title, flowVariables,
+                            userId == null ? null : String.valueOf(userId), userName, null, null);
+        }
         if (result == null || !result.isSuccess() || StringUtils.isBlank(result.getData())) {
             throw new BusinessException(UiMessages.translate("流程发起失败: ") + (result == null ? "无返回结果" : result.getMsg()));
         }
+        if (dto.getStartRequestId() != null) {
+            AiBusinessFlowInstanceLink existing = flowInstanceLinkMapper.selectByProcessInstanceIdForUpdate(
+                    tenantId, result.getData());
+            if (existing != null) {
+                if (!businessKey.equals(existing.getBusinessKey())) {
+                    throw new BusinessException(UiMessages.message("flow.start.instance.mismatch"));
+                }
+                startRecovery.reconcileExisting(tenantId, businessKey, existing, dto, flowClient);
+                return BusinessFlowStatusReader.toRuntimeVO(existing, "流程已发起");
+            }
+        }
 
+        FlowEventMessage terminalEvent = dto.getStartRequestId() == null ? null
+                : startRecovery.prepare(tenantId, businessKey, result.getData(), dto, flowClient);
         AiBusinessFlowInstanceLink link = new AiBusinessFlowInstanceLink();
         link.setTenantId(tenantId);
         link.setObjectCode(objectCode);
@@ -187,6 +217,7 @@ final class BusinessFlowStartCoordinator {
         link.setProcessInstanceId(result.getData());
         link.setFlowStatus("RUNNING");
         link.setStartUserId(userId);
+        if (identity != null) identity.bind(link);
         link.setStartTime(LocalDateTime.now());
         link.setVariablesSnapshot(JSON.toJSONString(flowVariables));
         flowInstanceLinkMapper.insert(link);
@@ -197,7 +228,24 @@ final class BusinessFlowStartCoordinator {
             statusUpdates.update(documentConfig, runtimeConfig, bindingConfig, dto.getRecordId(), "IN_PROCESS");
         }
         statusUpdates.syncManaged(statusRuntimeConfig, dto.getRecordId(), dto.getVariables(), "IN_PROCESS");
+        startRecovery.apply(link, terminalEvent);
         return BusinessFlowStatusReader.toRuntimeVO(link, "流程已发起");
+    }
+
+    private BusinessFlowRuntimeVO findExplicitReplay(StartRequest request, FlowStartContext context,
+                                                     String businessKey, BusinessFlowStartRequestIdentity identity,
+                                                     FlowClient flowClient) {
+        if (identity == null) return null;
+        AiBusinessFlowInstanceLink existing = flowInstanceLinkMapper.selectByStartRequestForUpdate(
+                request.tenantId(), businessKey, identity.requestId());
+        if (existing == null) return null;
+        identity.requireMatch(existing);
+        if (context.documentConfig() != null) {
+            documentRuntimeService.validateStartReplayAllowed(context.objectCode(), request.dto().getRecordId(),
+                    request.checkPermission());
+        }
+        startRecovery.reconcileExisting(request.tenantId(), businessKey, existing, request.dto(), flowClient);
+        return BusinessFlowStatusReader.toRuntimeVO(existing, "流程已发起");
     }
 
     private BusinessFlowRuntimeVO executeWithFlowStartLock(Long tenantId,
@@ -239,9 +287,10 @@ final class BusinessFlowStartCoordinator {
             }
         }
 
-        ReentrantLock localLock = localFlowStartLocks.computeIfAbsent(lockKey, key -> new ReentrantLock());
         try {
-            if (!localLock.tryLock(FLOW_START_LOCK_WAIT_SECONDS, TimeUnit.SECONDS)) {
+            LocalFlowStartLocks.Handle localLock = localFlowStartLocks.tryAcquire(
+                    lockKey, FLOW_START_LOCK_WAIT_SECONDS, TimeUnit.SECONDS);
+            if (localLock == null) {
                 throw new BusinessException("流程正在发起，请勿重复提交");
             }
             return new FlowStartLockHandle(lockKey, null, localLock);
@@ -268,12 +317,9 @@ final class BusinessFlowStartCoordinator {
             return;
         }
 
-        ReentrantLock localLock = lockHandle.localLock();
-        if (localLock != null && localLock.isHeldByCurrentThread()) {
-            localLock.unlock();
-            if (!localLock.isLocked() && !localLock.hasQueuedThreads()) {
-                localFlowStartLocks.remove(lockHandle.lockKey(), localLock);
-            }
+        LocalFlowStartLocks.Handle localLock = lockHandle.localLock();
+        if (localLock != null) {
+            localLock.close();
         }
     }
 
@@ -437,7 +483,7 @@ final class BusinessFlowStartCoordinator {
 
     private record FlowStartLockHandle(String lockKey,
                                        RLock redissonLock,
-                                       ReentrantLock localLock) {
+                                       LocalFlowStartLocks.Handle localLock) {
     }
 
 }

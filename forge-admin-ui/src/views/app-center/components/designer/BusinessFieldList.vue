@@ -155,6 +155,7 @@ function fieldTypeLabel(value) {
     FILE: '附件',
     IMAGE: '图片',
     USER: '人员',
+    POST: '岗位',
     DEPT: '部门',
     REGION: '地区',
     REFERENCE: '引用对象',

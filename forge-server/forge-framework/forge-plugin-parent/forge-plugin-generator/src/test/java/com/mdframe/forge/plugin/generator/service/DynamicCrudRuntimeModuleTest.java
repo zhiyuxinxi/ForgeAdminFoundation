@@ -2,6 +2,8 @@ package com.mdframe.forge.plugin.generator.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.lowcode.api.config.LowcodeRuntimeConfig;
+import com.mdframe.forge.lowcode.api.datasource.RuntimeDataSourceAccess;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.plugin.generator.domain.formula.AggregateDataProvider;
 import com.mdframe.forge.plugin.generator.mapper.GenDatasourceMapper;
@@ -12,6 +14,8 @@ import com.mdframe.forge.plugin.generator.service.lowcode.GeneratorRuntimeDataSo
 import com.mdframe.forge.plugin.generator.service.lowcode.LowcodePolicyService;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContextHolder;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceResolver;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeJdbcTemplateProvider;
+import com.mdframe.forge.plugin.generator.service.lowcode.runtime.RuntimeWriteTransactions;
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import com.mdframe.forge.starter.datascope.context.DataScopeContext;
 import com.mdframe.forge.starter.datascope.service.IDataScopeService;
@@ -20,6 +24,7 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
@@ -224,6 +229,10 @@ class DynamicCrudRuntimeModuleTest {
             context.registerBean("transactionManager", DataSourceTransactionManager.class,
                     () -> new DataSourceTransactionManager(source));
             context.registerBean(ObjectMapper.class, () -> mapper);
+            context.registerBean(RuntimeIdentityReferenceService.class, () -> mock(RuntimeIdentityReferenceService.class));
+            context.registerBean(RuntimeWriteTransactions.class, () -> new RuntimeWriteTransactions(
+                    new RuntimeJdbcTemplateProvider(jdbc, new NamedParameterJdbcTemplate(source),
+                            mock(RuntimeDataSourceAccess.class))));
             context.registerBean(AggregateDataProvider.class, () -> (relation, record) -> List.of());
             context.registerBean(FormulaLookupResolver.class, () -> mock(FormulaLookupResolver.class));
             context.registerBean(FormulaCrossObjectResolver.class, () -> mock(FormulaCrossObjectResolver.class));

@@ -308,6 +308,7 @@ import api from '@/api'
 import { useAuthStore } from '@/store'
 import { ensureLogin } from '@/utils/auth-guard'
 import { toast } from '@/utils/notify'
+import { buildRoutePayload, unpackRoutePayload } from '@/utils/route-payload'
 import {
   actionInputSchema,
   actionVisible,
@@ -422,13 +423,17 @@ const searchSummary = computed(() => activeSearchCount.value ? L("已设置 {0} 
 
 onLoad(async query => {
   Object.assign(routeQuery, query || {})
-  configKey.value = String(query?.configKey || query?.config || resolveConfigKey(query?.path) || '').trim()
-  title.value = String(query?.title || L("低代码应用"))
-  subtitle.value = String(query?.subtitle || L("移动端运行页"))
-  const requestedMode = String(query?.mode || '').toLowerCase()
+  // 单次传输协议：解包 versioned base64url payload（只解包一次）；缺失/非法时安全降级，
+  // 无 q 的既有深链走 legacy 只读严格校验。configKey/title/subtitle/mode/recordId 均来自
+  // 校验后的字段，杜绝注入。
+  const params = unpackRoutePayload(query || {})
+  configKey.value = String(params.configKey || resolveConfigKey(params.path) || '').trim()
+  title.value = params.title || '低代码应用'
+  subtitle.value = params.subtitle || '移动端运行页'
+  const requestedMode = String(params.mode || '').toLowerCase()
   mode.value = requestedMode === 'create' ? 'create' : requestedMode === 'detail' ? 'detail' : requestedMode === 'edit' ? 'edit' : 'list'
-  currentId.value = String(query?.recordId || query?.id || '')
-  const ok = await ensureLogin({ redirect: `/pages/lowcode-runtime?${queryString(query)}` })
+  currentId.value = params.recordId || ''
+  const ok = await ensureLogin({ redirect: `/pages/lowcode-runtime?q=${buildRoutePayload(params)}` })
   if (ok) await loadRuntime()
 })
 
@@ -1069,7 +1074,6 @@ function promptActionInput(input) {
 }
 function unwrapQueryResult(response) { const value = response?.data; return value?.data !== undefined ? value.data : value }
 function resolveConfigKey(path = '') { const match = String(path || '').match(/(?:crud-page|crud)\/([^/?]+)/); return match?.[1] || '' }
-function queryString(query = {}) { return Object.entries(query).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&') }
 function bottomActionKey(action) { return `${action.type}:${action.actionCode || action.label || ''}` }
 function flowHistoryKey(item, index) { return item.id || item.taskId || `${item.activityName || item.taskName || 'node'}:${index}` }
 </script>

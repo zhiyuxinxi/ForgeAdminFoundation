@@ -1,15 +1,29 @@
 package ${packageName}.${moduleName}.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.dev33.satoken.annotation.SaCheckPermission;
+#if(${hasIdentityReferences})
+import cn.dev33.satoken.annotation.SaMode;
+import com.mdframe.forge.starter.core.identity.TenantOrganization;
+import com.mdframe.forge.starter.core.identity.TenantMember;
+import com.mdframe.forge.starter.core.identity.TenantPost;
+import com.mdframe.forge.lowcode.runtime.service.identity.RuntimeIdentityReferenceService;
+#end
+import org.springframework.validation.annotation.Validated;
 import ${packageName}.${moduleName}.dto.${className}DTO;
 #if(${isMasterDetailLayout})
 import ${packageName}.${moduleName}.dto.${className}MasterDetailDTO;
 #end
 import ${packageName}.${moduleName}.dto.${className}Query;
 import ${packageName}.${moduleName}.entity.${className};
+import ${packageName}.${moduleName}.vo.${className}VO;
+#foreach($child in $masterDetailChildren)
+import ${packageName}.${moduleName}.entity.${child.className};
+import ${packageName}.${moduleName}.vo.${child.className}VO;
+#end
 #if(${hasTreeConfig})
 #if(${tree.separateSource})
-import ${packageName}.${moduleName}.entity.${tree.className};
+import ${packageName}.${moduleName}.vo.${tree.className}VO;
 #end
 #end
 import ${packageName}.${moduleName}.service.I${className}Service;
@@ -41,6 +55,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 #if(${isMasterDetailLayout})
 import java.util.Map;
+import java.util.LinkedHashMap;
 #end
 
 /**
@@ -65,75 +80,138 @@ public class ${className}Controller {
     private final DynamicExportEngine excelExportEngine;
     private final ExcelImportService excelImportService;
 
+#if(${hasIdentityReferences})
+    @GetMapping("/references/{field}/organizations")
+    @SaCheckPermission(value = {"${moduleName}:${businessName}:add", "${moduleName}:${businessName}:edit"}, mode = SaMode.OR)
+    public RespInfo<List<TenantOrganization>> referenceOrganizations(@PathVariable String field, @RequestParam String operation,
+            @RequestParam(required = false) Long parentId, @RequestParam(required = false) Long afterOrgId,
+            @RequestParam(defaultValue = "200") int limit) {
+        return RespInfo.success(${classname}Service.referenceOrganizations(field, operation, parentId, afterOrgId, limit));
+    }
+
+    @GetMapping("/references/{field}/members")
+    @SaCheckPermission(value = {"${moduleName}:${businessName}:add", "${moduleName}:${businessName}:edit"}, mode = SaMode.OR)
+    public RespInfo<List<TenantMember>> referenceMembers(@PathVariable String field, @RequestParam String operation,
+            @RequestParam Long directOrgId, @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long afterUserId, @RequestParam(defaultValue = "20") int limit) {
+        return RespInfo.success(${classname}Service.referenceMembers(field, operation, directOrgId, keyword, afterUserId, limit));
+    }
+
+    @GetMapping("/references/{field}/posts")
+    @SaCheckPermission(value = {"${moduleName}:${businessName}:add", "${moduleName}:${businessName}:edit"}, mode = SaMode.OR)
+    public RespInfo<List<TenantPost>> referencePosts(@PathVariable String field, @RequestParam String operation,
+            @RequestParam(required = false) Long directOrgId, @RequestParam(defaultValue = "false") boolean tenantWide,
+            @RequestParam(required = false) String keyword, @RequestParam(required = false) Long afterPostId,
+            @RequestParam(defaultValue = "20") int limit) {
+        return RespInfo.success(${classname}Service.referencePosts(field, operation, directOrgId, tenantWide, keyword, afterPostId, limit));
+    }
+
+    @GetMapping("/references/{field}/post-scope")
+    @SaCheckPermission(value = {"${moduleName}:${businessName}:add", "${moduleName}:${businessName}:edit"}, mode = SaMode.OR)
+    public RespInfo<RuntimeIdentityReferenceService.PostScope> referencePostScope(@PathVariable String field, @RequestParam String operation) {
+        return RespInfo.success(${classname}Service.referencePostScope(field, operation));
+    }
+#end
+
     @GetMapping("/page")
+    @SaCheckPermission("${moduleName}:${businessName}:list")
     @OperationLog(module = "${functionName}管理", type = OperationType.QUERY, desc = "分页查询${functionName}列表")
-    public RespInfo<Page<${className}>> page(PageQuery pageQuery, ${className}Query query) {
-        return RespInfo.success(${classname}Service.select${className}Page(pageQuery, query));
+    public RespInfo<Page<${className}VO>> page(PageQuery pageQuery, ${className}Query query) {
+        Page<${className}> source = ${classname}Service.select${className}Page(pageQuery, query);
+        Page<${className}VO> result = new Page<>(source.getCurrent(), source.getSize(), source.getTotal());
+        result.setRecords(source.getRecords().stream().map(${className}VO::fromEntity).toList());
+        return RespInfo.success(result);
     }
 
     @GetMapping("/list")
+    @SaCheckPermission("${moduleName}:${businessName}:list")
     @OperationLog(module = "${functionName}管理", type = OperationType.QUERY, desc = "查询${functionName}列表")
-    public RespInfo<List<${className}>> list(${className}Query query) {
-        return RespInfo.success(${classname}Service.select${className}List(query));
+    public RespInfo<List<${className}VO>> list(${className}Query query) {
+        return RespInfo.success(${classname}Service.select${className}List(query).stream()
+                .map(${className}VO::fromEntity).toList());
     }
 
 #if(${hasTreeConfig})
     @GetMapping("/tree")
+    @SaCheckPermission("${moduleName}:${businessName}:list")
     @OperationLog(module = "${functionName}管理", type = OperationType.QUERY, desc = "查询${functionName}树形数据")
-    public RespInfo<List<${tree.className}>> tree(
+    public RespInfo<List<${tree.className}VO>> tree(
             @RequestParam(required = false) String loadMode,
             @RequestParam(required = false) String parentValue) {
-        return RespInfo.success(${classname}Service.select${tree.className}Tree(loadMode, parentValue));
+        return RespInfo.success(${classname}Service.select${tree.className}Tree(loadMode, parentValue).stream()
+                .map(${tree.className}VO::fromEntity).toList());
     }
 
 #end
     @PostMapping("/getById")
+    @SaCheckPermission("${moduleName}:${businessName}:query")
     @OperationLog(module = "${functionName}管理", type = OperationType.QUERY, desc = "查询${functionName}详情")
 #if(${isMasterDetailLayout})
     public RespInfo<Map<String, Object>> getById(@RequestParam ${pkColumn.javaType} ${pkColumn.javaField}) {
 #else
-    public RespInfo<${className}> getById(@RequestParam ${pkColumn.javaType} ${pkColumn.javaField}) {
+    public RespInfo<${className}VO> getById(@RequestParam ${pkColumn.javaType} ${pkColumn.javaField}) {
 #end
-        return RespInfo.success(${classname}Service.select${className}ById(${pkColumn.javaField}));
+#if(${isMasterDetailLayout})
+        Map<String, Object> source = ${classname}Service.select${className}ById(${pkColumn.javaField});
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("main", ${className}VO.fromEntity((${className}) source.get("main")));
+        Map<?, ?> sourceChildren = (Map<?, ?>) source.get("children");
+        Map<String, Object> children = new LinkedHashMap<>();
+#foreach($child in $masterDetailChildren)
+        Object ${child.variableName}Rows = sourceChildren.get("${child.childKey}");
+        children.put("${child.childKey}", ${child.variableName}Rows instanceof List<?> rows
+                ? rows.stream().map(row -> ${child.className}VO.fromEntity((${child.className}) row)).toList()
+                : List.of());
+#end
+        result.put("children", children);
+        return RespInfo.success(result);
+#else
+        return RespInfo.success(${className}VO.fromEntity(${classname}Service.select${className}ById(${pkColumn.javaField})));
+#end
     }
 
     @PostMapping("/add")
+    @SaCheckPermission("${moduleName}:${businessName}:add")
     @OperationLog(module = "${functionName}管理", type = OperationType.ADD, desc = "新增${functionName}")
 #if(${isMasterDetailLayout})
-    public RespInfo<Void> add(@RequestBody ${className}MasterDetailDTO dto) {
+    public RespInfo<Void> add(@Validated(${className}DTO.Create.class) @RequestBody ${className}MasterDetailDTO dto) {
 #else
-    public RespInfo<Void> add(@RequestBody ${className}DTO dto) {
+    public RespInfo<Void> add(@Validated(${className}DTO.Create.class) @RequestBody ${className}DTO dto) {
 #end
         return ${classname}Service.insert${className}(dto)
-                ? RespInfo.success() : RespInfo.error("新增失败");
+                ? RespInfo.success() : RespInfo.error(UiMessages.message("operation.failed"));
     }
 
     @PostMapping("/edit")
+    @SaCheckPermission("${moduleName}:${businessName}:edit")
     @OperationLog(module = "${functionName}管理", type = OperationType.UPDATE, desc = "修改${functionName}")
 #if(${isMasterDetailLayout})
-    public RespInfo<Void> edit(@RequestBody ${className}MasterDetailDTO dto) {
+    public RespInfo<Void> edit(@Validated(${className}DTO.Update.class) @RequestBody ${className}MasterDetailDTO dto) {
 #else
-    public RespInfo<Void> edit(@RequestBody ${className}DTO dto) {
+    public RespInfo<Void> edit(@Validated(${className}DTO.Update.class) @RequestBody ${className}DTO dto) {
 #end
         return ${classname}Service.update${className}(dto)
-                ? RespInfo.success() : RespInfo.error("修改失败");
+                ? RespInfo.success() : RespInfo.error(UiMessages.message("operation.failed"));
     }
 
     @PostMapping("/remove/{${pkColumn.javaField}}")
+    @SaCheckPermission("${moduleName}:${businessName}:remove")
     @OperationLog(module = "${functionName}管理", type = OperationType.DELETE, desc = "删除${functionName}")
     public RespInfo<Void> remove(@PathVariable ${pkColumn.javaType} ${pkColumn.javaField}) {
         return ${classname}Service.delete${className}ById(${pkColumn.javaField})
-                ? RespInfo.success() : RespInfo.error("删除失败");
+                ? RespInfo.success() : RespInfo.error(UiMessages.message("operation.failed"));
     }
 
     @PostMapping("/removeBatch")
+    @SaCheckPermission("${moduleName}:${businessName}:remove")
     @OperationLog(module = "${functionName}管理", type = OperationType.DELETE, desc = "批量删除${functionName}")
     public RespInfo<Void> removeBatch(@RequestBody ${pkColumn.javaType}[] ${pkColumn.javaField}s) {
         return ${classname}Service.delete${className}ByIds(${pkColumn.javaField}s)
-                ? RespInfo.success() : RespInfo.error("批量删除失败");
+                ? RespInfo.success() : RespInfo.error(UiMessages.message("operation.failed"));
     }
 
     @PostMapping("/import")
+    @SaCheckPermission("${moduleName}:${businessName}:add")
     @OperationLog(module = "${functionName}管理", type = OperationType.IMPORT, desc = "导入${functionName}")
     public RespInfo<ImportResult<${className}DTO>> importExcel(@RequestParam("file") MultipartFile file) {
         ImportResult<${className}DTO> result = excelImportService.importData(
@@ -151,6 +229,7 @@ public class ${className}Controller {
     }
 
     @PostMapping("/export")
+    @SaCheckPermission("${moduleName}:${businessName}:query")
     @OperationLog(module = "${functionName}管理", type = OperationType.EXPORT, desc = "导出${functionName}")
     public void exportExcel(@RequestBody(required = false) java.util.Map<String, Object> queryParams,
                             HttpServletResponse response) {
@@ -158,6 +237,7 @@ public class ${className}Controller {
     }
 
     @GetMapping("/import-template")
+    @SaCheckPermission("${moduleName}:${businessName}:add")
     public void downloadImportTemplate(HttpServletResponse response) throws IOException {
         byte[] template = excelImportService.downloadTemplate(EXCEL_CONFIG_KEY);
         String fileName = URLEncoder.encode(UiMessages.message("codegen.importTemplateFilename",

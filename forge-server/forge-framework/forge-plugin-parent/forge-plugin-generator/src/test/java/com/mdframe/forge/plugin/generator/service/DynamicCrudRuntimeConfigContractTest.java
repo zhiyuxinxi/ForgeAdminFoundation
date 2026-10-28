@@ -3,6 +3,7 @@ package com.mdframe.forge.plugin.generator.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mdframe.forge.plugin.generator.domain.entity.AiCrudConfig;
 import com.mdframe.forge.lowcode.api.config.LowcodeRuntimeConfig;
+import com.mdframe.forge.lowcode.api.config.RuntimeCrudConfigSource;
 import com.mdframe.forge.plugin.generator.service.lowcode.RuntimeCrudConfigAdapter;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContext;
 import com.mdframe.forge.plugin.generator.service.lowcode.runtime.LowcodeRuntimeDataSourceContextHolder;
@@ -12,6 +13,8 @@ import com.mdframe.forge.plugin.generator.service.crypto.LowcodeEncryptConfigPar
 import com.mdframe.forge.starter.core.exception.BusinessException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ClassPathBeanDefinitionScanner;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -44,6 +47,30 @@ class DynamicCrudRuntimeConfigContractTest {
     void clearRequest() {
         RequestContextHolder.resetRequestAttributes();
     }
+
+    @Test
+    void publicConfigSourceIsDiscoveredAndInjectedWithPublishedSnapshot() {
+        AiCrudConfig design = config("PUBLISHED");
+        AiCrudConfig published = config("PUBLISHED");
+        published.setTableName("published_table");
+        when(configs.getByConfigKey("suite_entry")).thenReturn(design);
+        when(configs.resolvePublishedRuntimeConfig(design)).thenReturn(published);
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.getBeanFactory().registerSingleton("aiCrudConfigService", configs);
+            var scanner = new ClassPathBeanDefinitionScanner(context);
+            scanner.addExcludeFilter((metadata, factory) -> !metadata.getClassMetadata().getClassName()
+                    .equals(RuntimeCrudConfigAdapter.class.getName()));
+            scanner.scan(RuntimeCrudConfigAdapter.class.getPackageName());
+            context.registerBean(ConfigSourceConsumer.class);
+            context.refresh();
+            RuntimeCrudConfigSource source = context.getBean(RuntimeCrudConfigSource.class);
+            assertSame(source, context.getBean(ConfigSourceConsumer.class).source());
+            assertEquals("published_table", source.load("suite_entry").getTableName());
+            verify(configs).resolvePublishedRuntimeConfig(design);
+        }
+    }
+
+    private record ConfigSourceConsumer(RuntimeCrudConfigSource source) { }
 
     @Test
     void publishedEntryKeepsOneReadAndTheSelectedSnapshot() {
@@ -98,16 +125,21 @@ class DynamicCrudRuntimeConfigContractTest {
     @Test
     void runtimeValuesCopyEveryFieldWithoutParsingOrSharingMutation() throws ReflectiveOperationException {
         AiCrudConfig source = config("PUBLISHED");
-        for (var field : LowcodeRuntimeConfig.class.getDeclaredFields()) {
+        var persistedFields = java.util.Arrays.stream(LowcodeRuntimeConfig.class.getDeclaredFields())
+                .filter(field -> !field.getName().equals("referencePermissionModule")).toList();
+        for (var field : persistedFields) {
             String suffix = Character.toUpperCase(field.getName().charAt(0)) + field.getName().substring(1);
             Object value = field.getType() == Long.class ? 37L : "  { raw-invalid-" + field.getName() + " }  ";
             AiCrudConfig.class.getMethod("set" + suffix, field.getType()).invoke(source, value);
         }
         LowcodeRuntimeConfig first = RuntimeCrudConfigAdapter.fromDesign(source);
         LowcodeRuntimeConfig second = RuntimeCrudConfigAdapter.fromDesign(source);
-        assertEquals(31, LowcodeRuntimeConfig.class.getDeclaredFields().length);
+        assertEquals(31, persistedFields.size());
+        assertEquals(32, LowcodeRuntimeConfig.class.getDeclaredFields().length);
+        assertNull(first.getReferencePermissionModule());
+        assertThrows(NoSuchMethodException.class, () -> AiCrudConfig.class.getMethod("setReferencePermissionModule", String.class));
         assertNotSame(first, second);
-        for (var field : LowcodeRuntimeConfig.class.getDeclaredFields()) {
+        for (var field : persistedFields) {
             String suffix = Character.toUpperCase(field.getName().charAt(0)) + field.getName().substring(1);
             assertEquals(AiCrudConfig.class.getMethod("get" + suffix).invoke(source),
                     LowcodeRuntimeConfig.class.getMethod("get" + suffix).invoke(first), field.getName());
@@ -115,8 +147,19 @@ class DynamicCrudRuntimeConfigContractTest {
         first.setTableName("effective_runtime_table");
         assertEquals(source.getTableName(), second.getTableName());
         assertNotEquals(first.getTableName(), source.getTableName());
-        assertTrue(LowcodeRuntimeConfig.class.getProtectionDomain().getCodeSource().getLocation()
-                .toString().endsWith("forge-lowcode-api-runtime-config.jar"));
+        String runtimeLocation = LowcodeRuntimeConfig.class.getProtectionDomain().getCodeSource().getLocation().toString();
+        assertTrue(runtimeLocation.endsWith("forge-lowcode-api-runtime-config.jar")
+                || runtimeLocation.endsWith("/forge-lowcode-api/target/classes/"), runtimeLocation);
+    }
+
+    @Test
+    void generatedPermissionModuleCannotBeSuppliedOrExposedByRequestJson() throws Exception {
+        ObjectMapper json = new ObjectMapper();
+        LowcodeRuntimeConfig runtime = json.readValue("{\"referencePermissionModule\":\"system:org\"}", LowcodeRuntimeConfig.class);
+        assertNull(runtime.getReferencePermissionModule());
+        runtime.setReferencePermissionModule("quality:record");
+        assertFalse(json.writeValueAsString(runtime).contains("referencePermissionModule"));
+        assertEquals("quality:record", runtime.getReferencePermissionModule());
     }
 
     @Test

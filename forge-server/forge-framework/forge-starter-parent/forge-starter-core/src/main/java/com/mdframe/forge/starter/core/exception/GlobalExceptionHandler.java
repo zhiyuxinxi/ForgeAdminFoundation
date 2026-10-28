@@ -7,6 +7,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -19,6 +20,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 
+import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.sql.SQLException;
 import java.util.Locale;
@@ -105,6 +107,18 @@ public class GlobalExceptionHandler {
         }
         return RespInfo.error(e.getCode(), e.getMessage());
     }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, IOException.class})
+    public RespInfo<?> handleUnreadableRequest(Exception e, HttpServletRequest request) {
+        String traceId = request.getHeader("traceId");
+        log.error("请求参数读取异常: URI={}, TraceId={}", request.getRequestURI(), traceId, e);
+        RespInfo<?> response = RespInfo.error(500, UiMessages.label(
+                "请求参数格式有误，请检查后重试",
+                "The request format is invalid. Check it and try again"));
+        response.setTraceId(traceId);
+        return response;
+    }
+
 
     /**
      * 处理参数校验异常 (@Validated @Valid)

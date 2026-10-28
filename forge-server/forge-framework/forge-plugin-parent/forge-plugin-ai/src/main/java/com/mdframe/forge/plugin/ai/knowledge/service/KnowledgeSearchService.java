@@ -101,7 +101,7 @@ public class KnowledgeSearchService {
         if (vectorResults.isEmpty()) {
             return List.of();
         }
-        return searchableResults(knowledge.getId(), vectorResults);
+        return resolveSearchResults(knowledge.getId(), vectorResults);
     }
 
     /**
@@ -138,7 +138,7 @@ public class KnowledgeSearchService {
         searchReq.setConfigJson(configJson);
 
         List<VectorStoreService.SearchResult> vectorResults = vectorStore.hybridSearch(searchReq);
-        return searchableResults(knowledge.getId(), vectorResults);
+        return resolveSearchResults(knowledge.getId(), vectorResults);
     }
 
     /**
@@ -262,7 +262,8 @@ public class KnowledgeSearchService {
         return reranked;
     }
 
-    private List<KnowledgeSearchResult> searchableResults(Long knowledgeId,
+    /** Resolve index hits against current tenant-visible, successful document chunks. */
+    public List<KnowledgeSearchResult> resolveSearchResults(Long knowledgeId,
                                                          List<VectorStoreService.SearchResult> hits) {
         if (hits.isEmpty()) {
             return List.of();
