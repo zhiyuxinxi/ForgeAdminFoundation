@@ -6,7 +6,9 @@ import java.lang.annotation.*;
  * 自动发起流程注解 —— 方法级别
  * <p>
  * 标注在业务方法上，方法执行成功后由切面自动通过 {@link com.mdframe.forge.flow.client.FlowClient}
- * 发起流程，无需手动调用。
+ * 发起流程，无需手动调用。活动事务中在提交后发起，回滚不派发。
+ * 远端结果未知时仅查询原请求轮次；未确认结果会向调用方传播，不自动重发。
+ * 若提交后失败，本地业务事务已提交；重试必须保留原请求身份及业务内容。
  *
  * <h3>SpEL 上下文变量</h3>
  * <ul>
@@ -40,6 +42,15 @@ public @interface FlowStart {
 
     /** 业务唯一标识 SpEL（必填），如 {@code "'leave:' + #leave.id"} */
     String businessKeySpEl();
+
+    /**
+     * 本轮稳定请求 ID 的 SpEL；调用方持久化该 ID 并在重试时复用。
+     * 留空时按模型、业务 Key 和前驱实例生成可重现身份，不生成随机重试轮次。
+     */
+    String startRequestIdSpEl() default "";
+
+    /** Explicit predecessor for a rejected/canceled round; never inferred from the latest process. */
+    String previousProcessInstanceIdSpEl() default "";
 
     /** 流程标题 SpEL，如 {@code "#leave.name + ' 的请假申请'"} */
     String titleSpEl() default "";

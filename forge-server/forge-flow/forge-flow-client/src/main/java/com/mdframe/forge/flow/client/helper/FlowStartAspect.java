@@ -1,7 +1,7 @@
 package com.mdframe.forge.flow.client.helper;
 
 import com.mdframe.forge.flow.client.FlowClient;
-import com.mdframe.forge.flow.client.FlowResult;
+import com.mdframe.forge.flow.client.FlowClientException;
 import com.mdframe.forge.flow.client.annotation.FlowBind;
 import com.mdframe.forge.flow.client.annotation.FlowStart;
 import lombok.RequiredArgsConstructor;
@@ -16,8 +16,12 @@ import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.util.StringUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.Parameter;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -50,7 +54,11 @@ public class FlowStartAspect {
         } catch (Throwable ex) {
             if (!flowStart.skipOnError()) {
                 log.warn("[FlowStart] 业务方法异常，尝试发起流程: {}", ex.getMessage());
-                tryStart(pjp, flowStart, null);
+                try {
+                    tryStart(pjp, flowStart, null);
+                } catch (RuntimeException startFailure) {
+                    ex.addSuppressed(startFailure);
+                }
             }
             throw ex;
         }
@@ -59,66 +67,53 @@ public class FlowStartAspect {
     }
 
     private void tryStart(ProceedingJoinPoint pjp, FlowStart flowStart, Object result) {
-        try {
-            // 解析 modelKey
-            String modelKey = flowStart.modelKey();
-            if (!StringUtils.hasText(modelKey)) {
-                FlowBind bind = resolveFlowBind(pjp);
-                if (bind != null) {
-                    modelKey = bind.modelKey();
-                }
-            }
-            if (!StringUtils.hasText(modelKey)) {
-                log.warn("[FlowStart] 未找到 modelKey（@FlowStart 未指定且类上无 @FlowBind），跳过");
-                return;
-            }
-
-            // 解析业务类型
-            String businessType = "";
-            FlowBind bind = resolveFlowBind(pjp);
-            if (bind != null) {
-                businessType = bind.businessType();
-            }
-
-            EvaluationContext ctx = buildSpelContext(pjp, result);
-
-            String businessKey = eval(flowStart.businessKeySpEl(), ctx, String.class);
-            String title       = eval(flowStart.titleSpEl(),       ctx, String.class);
-            String userId      = eval(flowStart.userIdSpEl(),      ctx, String.class);
-            String userName    = eval(flowStart.userNameSpEl(),    ctx, String.class);
-            String deptId      = eval(flowStart.deptIdSpEl(),      ctx, String.class);
-            String deptName    = eval(flowStart.deptNameSpEl(),    ctx, String.class);
-
-            Map<String, Object> variables = new HashMap<>();
-            if (StringUtils.hasText(flowStart.variablesSpEl())) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> extra = eval(flowStart.variablesSpEl(), ctx, Map.class);
-                if (extra != null) {
-                    variables.putAll(extra);
-                }
-            }
-
-            if (!StringUtils.hasText(businessKey)) {
-                log.warn("[FlowStart] businessKeySpEl 计算为空，跳过流程发起");
-                return;
-            }
-
-            FlowResult<String> res = flowClient.startProcess(
-                    modelKey, businessKey, businessType,
-                    title, variables,
-                    userId, userName, deptId, deptName);
-
-            if (res.isSuccess()) {
-                log.info("[FlowStart] 流程发起成功 modelKey={} businessKey={} instanceId={}",
-                        modelKey, businessKey, res.getData());
-            } else {
-                log.error("[FlowStart] 流程发起失败 modelKey={} businessKey={} msg={}",
-                        modelKey, businessKey, res.getMsg());
-            }
-
-        } catch (Exception e) {
-            log.error("[FlowStart] 自动发起流程异常: {}", e.getMessage(), e);
+        FlowBind bind = resolveFlowBind(pjp);
+        String modelKey = StringUtils.hasText(flowStart.modelKey()) ? flowStart.modelKey()
+                : bind == null ? null : bind.modelKey();
+        EvaluationContext ctx = buildSpelContext(pjp, result);
+        String businessKey = eval(flowStart.businessKeySpEl(), ctx, String.class);
+        if (!StringUtils.hasText(modelKey) || !StringUtils.hasText(businessKey)) {
+            throw new FlowClientException("FLOW_START_IDENTITY_REQUIRED");
         }
+        String previousId = eval(flowStart.previousProcessInstanceIdSpEl(), ctx, String.class);
+        if (StringUtils.hasText(flowStart.previousProcessInstanceIdSpEl()) && !StringUtils.hasText(previousId)) {
+            throw new FlowClientException("FLOW_START_PREVIOUS_INSTANCE_REQUIRED");
+        }
+        String requestId = eval(flowStart.startRequestIdSpEl(), ctx, String.class);
+        if (!StringUtils.hasText(requestId)) {
+            if (StringUtils.hasText(flowStart.startRequestIdSpEl())) {
+                throw new FlowClientException("FLOW_START_REQUEST_ID_REQUIRED");
+            }
+            requestId = UUID.nameUUIDFromBytes((modelKey + "\n" + businessKey + "\n"
+                    + (previousId == null ? "" : previousId)).getBytes(StandardCharsets.UTF_8)).toString();
+        }
+        FlowStartInvocation request = new FlowStartInvocation(modelKey, businessKey, bind == null ? "" : bind.businessType(),
+                eval(flowStart.titleSpEl(), ctx, String.class), readVariables(flowStart, ctx),
+                eval(flowStart.userIdSpEl(), ctx, String.class), eval(flowStart.userNameSpEl(), ctx, String.class),
+                eval(flowStart.deptIdSpEl(), ctx, String.class), eval(flowStart.deptNameSpEl(), ctx, String.class),
+                requestId, previousId);
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    request.execute(flowClient);
+                }
+            });
+        } else {
+            request.execute(flowClient);
+        }
+    }
+
+    private Map<String, Object> readVariables(FlowStart flowStart, EvaluationContext ctx) {
+        Map<String, Object> variables = new HashMap<>();
+        if (StringUtils.hasText(flowStart.variablesSpEl())) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> extra = eval(flowStart.variablesSpEl(), ctx, Map.class);
+            if (extra != null) {
+                variables.putAll(extra);
+            }
+        }
+        return variables;
     }
 
     private FlowBind resolveFlowBind(ProceedingJoinPoint pjp) {
