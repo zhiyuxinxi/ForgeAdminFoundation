@@ -1,99 +1,57 @@
-# 项目概述
+# Forge Admin Foundation · PC 管理端
 
-Fusion AI Design 是一个基于 Vue3 + Vite + Naive UI 的现代化后台管理框架，旨在帮助开发者快速构建功能丰富、界面美观的管理系统。
+本目录是 [ForgeAdminFoundation](../README.md) 的 PC 管理端，基于 Vue 3、Naive UI、Pinia 与 Vite。它提供系统管理、应用设计、低代码运行界面、流程与 AI 等模块入口，需连接对应后端服务使用。
 
-## 核心特性
+上游来源与本发行版加工内容见[来源与改造说明](../docs/upstream-and-changes.md)。本目录旧说明中的 Fusion AI Design 名称和示例仓库地址不再作为本项目入口。
 
-### 🎯 现代化技术栈
+## 开始开发
 
-- **Vue3** - 最新的Vue版本，支持Composition API
-- **Vite** - 极速的构建工具，开发体验优秀
-- **Pinia** - Vue官方推荐的状态管理方案
-- **Naive UI** - 高质量的Vue3组件库
-- **Unocss** - 原子化CSS引擎，极致的样式性能
-
-### 🎨 优雅设计
-
-- 简洁美观的界面设计
-- 支持多种布局模式（顶部菜单、侧边栏等）
-- 主题定制功能，轻松切换颜色风格
-- 响应式设计，适配各种设备屏幕
-
-### 🔧 智能组件
-
-- 丰富的AI表单组件，通过JSON配置快速生成表单
-- 完整的CRUD页面组件，集成搜索、表格、新增、编辑、删除等功能
-- 支持动态表单、联动字段、远程搜索等高级功能
-- 配置化开发，减少重复代码
-
-### 🛡️ 安全可靠
-
-- 完善的权限控制系统，基于角色的访问控制
-- 数据加密传输，支持RSA/AES/DES加密
-- 无感刷新机制，保障用户登录态安全
-- 请求拦截器，统一处理认证和错误
-
-### 📱 响应式布局
-
-- 支持多种布局模式切换
-- 移动端友好，适配不同屏幕尺寸
-- 可配置的侧边栏和顶部菜单
-- 支持折叠菜单，节省空间
-
-## 环境要求
-
-### Node.js 版本
-
-本项目要求使用 Node.js 18.0 或更高版本。推荐使用最新的 LTS 版本以获得最佳性能和安全性。
-
-### 包管理器 (pnpm)
-
-本项目使用 pnpm 作为包管理器，而不是 npm 或 yarn。选择 pnpm 的原因包括：
-
-1. **磁盘空间优化** - pnpm 使用硬链接和符号链接来共享依赖，大大减少了磁盘空间占用
-2. **安装速度更快** - 通过内容可寻址存储，避免重复下载相同依赖
-3. **依赖安全性** - 严格的依赖隔离，防止非法访问未声明的依赖
-4. **网络效率** - 并行下载和缓存机制，提升安装速度
-5. **一致性保证** - 确保在不同环境中依赖的一致性
+先完成[本地开发指南](../docs/getting-started.md)中的工具、数据库和后端配置。在仓库根目录进入本模块：
 
 ```bash
-# 安装 pnpm（如果尚未安装）
-npm install -g pnpm
-
-# 验证安装
-pnpm --version
+cd forge-admin-ui
+pnpm install --frozen-lockfile
+pnpm dev --host 127.0.0.1
 ```
 
-## 适用场景
+默认访问 **http://127.0.0.1:3000/**。当前模块使用 Vite 8，Node 18 不适用于该依赖组合；版本选择见[环境要求](../docs/getting-started.md#环境要求)。安装命令没有在本轮文档整理中实际执行。
 
-- 企业级后台管理系统
-- 数据管理平台
-- 内容管理系统
-- 电商平台管理后台
-- 任何需要复杂表单和数据展示的Web应用
+## 配置与后端
 
-## 设计理念
+[.env.development](.env.development)定义开发配置；本地覆盖可使用未提交的 `.env.development.local`。
 
-Fusion AI Design 秉承"简单即正义"的设计理念，致力于为开发者提供一个开箱即用、易于扩展的后台管理框架。我们相信好的框架应该让开发者专注于业务逻辑，而不是重复的基础工作。
+| 配置 | 用途 | 默认值 |
+| --- | --- | --- |
+| `VITE_HTTP_PORT` | 开发服务器端口 | `3000` |
+| `VITE_REQUEST_PREFIX` | 前端接口前缀 | `/dev-api` |
+| `VITE_HTTP_PROXY_TARGET` | 管理服务 | `http://127.0.0.1:8580/` |
+| `VITE_FLOW_PROXY_TARGET` | 流程和工作台相关接口 | `http://127.0.0.1:8081/` |
+| `VITE_APP_ID` / `VITE_USER_CLIENT` | 登录客户端标识 | `pc` / `pc` |
+| `VITE_H5_BASE_URL` | H5 入口 | `http://localhost:3009` |
 
-## 快速开始
+代理规则见[vite.config.js](vite.config.js)。报表入口还有单独的 SSO/目标地址配置，需要对应服务和客户端身份，不能只修改网址就认定登录已打通。
 
-```bash
-# 克隆项目
-git clone https://github.com/your-repo/fusion-design.git
+`VITE_*` 值会进入浏览器产物，不要放入服务器密码或模型密钥。公开演示账号及客户端种子待核事项统一见[数据库说明](../forge-server/db/README.md)和[版本状态](../docs/release-status.md)。
 
-# 进入项目目录
-cd fusion-design
+## 开发与构建命令
 
-# 安装依赖
-pnpm install
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm dev` | 开发服务 |
+| `pnpm build` | 构建静态资源；输出位置由 Vite 配置及环境变量决定 |
+| `pnpm preview` | 预览已经构建的产物 |
+| `pnpm test` | 执行现有前端测试；可按实际改动选用相关测试文件 |
 
-# 启动开发服务器
-pnpm dev
-```
+`build:stage` 会进一步调用部署脚本，首次本地开发无需使用；配置中的部署目标不是公共托管服务。这里的命令说明不表示它们已经在当前机器运行成功。
 
-访问 `http://localhost:3000` 即可看到项目运行效果。
+## 阅读源码
 
-## 贡献
+| 路径 | 内容 |
+| --- | --- |
+| [src/views](src/views/) | 业务与管理页面 |
+| [src/views/app-center](src/views/app-center/) | 应用设计及业务运行入口 |
+| [src/components/ai-form](src/components/ai-form/) | 表单、表格、CRUD、详情等公共组件 |
+| [src/components/lowcode-builder](src/components/lowcode-builder/) | 低代码设计/运行相关组件 |
+| [src/locales](src/locales/) | 公共语言资源与显示处理 |
 
-欢迎提交Issue和Pull Request来帮助我们改进项目。在贡献代码之前，请确保阅读我们的贡献指南。
+组件、主题、字典、附件和标签页开发请看[前端文档导航](docs/README.md)。相关缺陷反馈到[本仓库 Issues](https://github.com/zhiyuxinxi/ForgeAdminFoundation/issues)，贡献方式见[贡献指南](../CONTRIBUTING.md)。

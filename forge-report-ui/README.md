@@ -1,183 +1,50 @@
-<p align="center">
-  <img src="readme/logo.png" alt="Forge AI" width="120" />
-</p>
+# Forge Admin Foundation · 报表与可视化设计器
 
-<h1 align="center">Forge AI</h1>
+本目录是 [ForgeAdminFoundation](../README.md) 的报表/可视化前端，包含项目、画布、图表、主题、数据接入和 AI 辅助相关界面。工程保留 GoView 的 [MIT 许可证](LICENSE)与版权声明；本发行版的来源与加工说明见[上游来源](../docs/upstream-and-changes.md)。
 
-<h4 align="center">
-  AI 驱动的数据可视化低代码开发平台
-</h4>
+## 使用前提
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vue.js" />
-  <img src="https://img.shields.io/badge/Vite-7-646CFF?logo=vite" />
-  <img src="https://img.shields.io/badge/TypeScript-5-blue?logo=typescript" />
-  <img src="https://img.shields.io/badge/NaiveUI-2.42-18a058?logo=naiveui" />
-  <img src="https://img.shields.io/badge/ECharts-6-AA344D?logo=apacheecharts" />
-  <img src="https://img.shields.io/badge/Pinia-3-ffd859" />
-</p>
+该前端连接独立的 `forge-report-server`，默认端口 **8581**。需要配置该服务的数据库、Redis、登录身份及按需启用的模型服务。相关配置在 `forge-server/forge-report-server/src/main/resources/application-dev.example.yml`，SQL 位于该服务的 [sql 目录](../forge-server/forge-report-server/sql/)。
 
----
+管理服务初始化完成不能自动证明报表库和 SSO 已准备完成。首次部署应审阅对应 SQL 与服务配置，不要把不同数据库的初始化脚本混合导入生产库。
 
-## ✨ 核心特性
+## 启动开发服务
 
-<table>
-  <tr>
-    <td width="33%"><strong>🤖 AI 智能生成</strong></td>
-    <td width="33%"><strong>🧩 组件素材库</strong></td>
-    <td width="33%"><strong>🎨 主题定制</strong></td>
-  </tr>
-  <tr>
-    <td>接入 AI 大模型，一句话描述即可自动生成数据大屏页面。支持多供应商灵活配置，AI 对话式交互完成组件编排与数据配置。</td>
-    <td>内置 50+ 图表组件，涵盖柱状图、折线图、饼图、雷达图、热力图、地图等。所有组件支持拖拽编排、自由缩放与图层管理。</td>
-    <td>内置多套深/亮色主题，支持自定义主题色、全局滤镜、背景图片/颜色、画布尺寸与适配方式。</td>
-  </tr>
-  <tr>
-    <td><strong>📊 数据接入</strong></td>
-    <td><strong>⚡ 事件交互</strong></td>
-    <td><strong>🚀 一键发布</strong></td>
-  </tr>
-  <tr>
-    <td>支持静态数据、动态 HTTP 请求、数据池三种数据模式。内置数据映射、过滤器、在线编辑器，轻松对接后端 API。</td>
-    <td>支持组件交互事件（单击/双击/鼠标进入/移出）、高级生命周期事件（渲染前/后）、自定义 JavaScript 代码编辑器。</td>
-    <td>编辑完成即可发布上线，自动生成预览链接，支持截图分享。发布前自动保存，杜绝数据丢失。</td>
-  </tr>
-</table>
-
----
-
-## 📸 界面预览
-
-| 页面 | 截图 |
-|------|------|
-| **登录页** | ![登录页](readme/login-page.png) |
-| **项目列表** | ![项目列表](readme/project-home.png) |
-| **画布编辑器** | ![画布编辑器](readme/canvas-editor.png) |
-| **AI 供应商配置** | ![AI供应商配置](readme/AI供应商配置.png) |
-
-<details>
-<summary>更多截图</summary>
-
-**画布编辑**
-![画布](readme/画布.png)
-
-**登录页**
-![登录页](readme/登录页.png)
-
-**项目列表**
-![项目列表](readme/项目列表.png)
-
-</details>
-
----
-
-## 🛠 技术栈
-
-| 类别 | 技术 | 版本 |
-|------|------|------|
-| 框架 | Vue 3 | 3.5.x |
-| 构建 | Vite | 7.x |
-| 语言 | TypeScript | 5.x |
-| UI 组件库 | Naive UI | 2.42.x |
-| 状态管理 | Pinia | 3.x |
-| 样式引擎 | UnoCSS | 66.x |
-| 图表库 | ECharts / VChart | 6.x / 1.x |
-| 代码编辑器 | Monaco Editor | - |
-| 流程设计器 | BPMN.js | 17.x |
-| HTTP | Axios | 1.11.x |
-
----
-
-## 🚀 快速开始
-
-### 环境要求
-
-- **Node.js** >= 18.20
-- **pnpm** >= 8
-
-### 安装与运行
+在仓库根目录执行：
 
 ```bash
-# 克隆项目
-git clone <repo-url>
 cd forge-report-ui
-
-# 安装依赖
-pnpm install
-
-# 启动开发服务器 (默认 localhost:5173)
-pnpm dev
-
-# 生产构建
-pnpm build
-
-# Lint 检查
-pnpm lint:fix
+pnpm install --frozen-lockfile
+pnpm dev --host 127.0.0.1
 ```
 
-### 环境变量
+默认访问 **http://127.0.0.1:3021/forge-report**。命令未在本次文档整理中实际执行。
 
-```bash
-# 复制环境变量模板
-cp .env.example .env.local
+| 配置/版本 | 当前源码依据 |
+| --- | --- |
+| 开发端口 | [vite.config.ts](vite.config.ts)中的 `3021` |
+| 站点基础路径 | `/forge-report` |
+| API 代理 | `/forge-report-api` → `http://localhost:8581` |
+| Vite | [package.json](package.json)当前为 `4.3.6` |
+| TypeScript | 当前声明 `4.6.3` |
+| 包管理器 | 参考根工程声明，保留本模块 [pnpm-lock.yaml](pnpm-lock.yaml) |
 
-# 编辑 .env.local 配置后端 API 地址
-```
+当前公开目录没有旧 README 所说的 `.env.example`；开发代理地址直接配置在 Vite 配置中。不要照旧说明复制不存在的模板，也不要沿用旧演示密码。登录身份、客户端及单点登录目标需按实际初始化结果配置。
 
-> 默认登录凭证：`admin` / `123456`
+## 功能与代码入口
 
----
+| 目录 | 内容 |
+| --- | --- |
+| [src/views](src/views/) | 项目、画布、预览和相关界面 |
+| [src/packages](src/packages/) | 图表与组件定义 |
+| [src/components](src/components/) | 公共组件 |
+| [src/api](src/api/) | 服务调用 |
+| [src/store](src/store/) | 状态管理 |
 
-## 📦 项目结构
+配置画布时可使用组件、主题、数据和事件等能力；AI 相关功能需要自行配置模型供应商。是否可以成功保存、预览和访问具体项目，要同时验证报表服务、权限和真实数据连接。
 
-```
-forge-report-ui/
-├── src/
-│   ├── api/              # API 接口定义
-│   ├── components/       # 公共组件（AI 面板、文件上传、表单设计器等）
-│   ├── composables/      # 组合式 API（useDict、usePermission 等）
-│   ├── layouts/          # 布局组件
-│   ├── router/           # 路由配置（动态路由 + 权限过滤）
-│   ├── stores/           # Pinia Store（画布、图层、历史、AI 等）
-│   ├── utils/            # 工具函数（请求、加解密、文件处理）
-│   ├── views/            # 页面视图
-│   │   ├── chart/        # 可视化工作台（核心编辑器）
-│   │   ├── edit/         # JSON 源码编辑器
-│   │   ├── login/        # 登录页
-│   │   ├── preview/      # 预览页
-│   │   └── project/      # 项目管理
-│   ├── packages/         # 图表组件注册与配置
-│   ├── plugins/          # 插件（图标、NaiveUI 注册）
-│   ├── hooks/            # 全局 Hooks
-│   ├── enums/            # 枚举常量
-│   └── settings/         # 全局设置（动画、主题、设计参数）
-├── readme/               # README 图片资源
-├── index.html            # 入口 HTML
-├── vite.config.ts        # Vite 配置
-└── package.json
-```
+`pnpm build` 用于生成静态资源；`build:stage` 会进一步调用部署脚本，首次本地开发无需使用。开发服务、构建与实际发布访问是不同阶段。
 
----
+## 版本与反馈
 
-## 🧩 内置组件
-
-| 分类 | 组件 |
-|------|------|
-| 图表 | 柱状图、横向柱状图、折线图、面积图、饼图、环形图、雷达图、散点图、热力图、漏斗图、水球图、中国地图 |
-| 信息 | 文字、渐变文字、词云、图片、视频、嵌套网页 |
-| 表格 | 滚动排名列表、滚动表格 |
-| 装饰 | 边框 01~13、装饰 01~05、数字翻牌、时钟、倒计时、数字计数 |
-
----
-
-## 🌐 浏览器支持
-
-现代浏览器（Chrome / Edge / Firefox / Safari）。不支持 IE。
-
----
-
-## 📄 License
-
-MIT
-
----
+本轮没有执行安装、登录、画布保存或发布验收，也没有将原有截图作为当前公开版本的验收依据。已知限制见[版本状态](../docs/release-status.md)，问题提交到 [Foundation Issues](https://github.com/zhiyuxinxi/ForgeAdminFoundation/issues)。

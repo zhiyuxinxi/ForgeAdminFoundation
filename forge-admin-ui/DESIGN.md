@@ -2,7 +2,7 @@
 
 本文件定义 `forge-admin-ui` 的界面设计原则、公共页面组件和高频交互约束。它服务于长期维护：新页面、新组件和改版都应先遵循这里的视觉与交互规则，再补充具体业务逻辑。
 
-项目级开发约束以仓库根目录 `AGENTS.md` 为准；目录、命名、接口、字典和编码细则见 [Forge Admin前端开发与组件规范.md](./Forge%20Admin%E5%89%8D%E7%AB%AF%E5%BC%80%E5%8F%91%E4%B8%8E%E7%BB%84%E4%BB%B6%E8%A7%84%E8%8C%83.md)。
+公开版本协作说明见根目录 [CONTRIBUTING.md](../CONTRIBUTING.md)，阅读入口见 [前端文档导航](docs/README.md)；目录、命名、接口、字典和编码细则见 [Forge Admin前端开发与组件规范.md](./Forge%20Admin%E5%89%8D%E7%AB%AF%E5%BC%80%E5%8F%91%E4%B8%8E%E7%BB%84%E4%BB%B6%E8%A7%84%E8%8C%83.md)。
 
 ## 1. 设计目标
 
